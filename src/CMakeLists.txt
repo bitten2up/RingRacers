@@ -255,7 +255,8 @@ endif()
 
 target_link_libraries(SRB2SDL2 PRIVATE ZLIB::ZLIB)
 target_link_libraries(SRB2SDL2 PRIVATE PNG::PNG)
-target_link_libraries(SRB2SDL2 PRIVATE CURL::libcurl)
+#target_link_libraries(SRB2SDL2 PRIVATE CURL::libcurl)
+target_link_libraries(SRB2SDL2 PRIVATE -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lctru)
 target_compile_definitions(SRB2SDL2 PRIVATE -DHAVE_ZLIB -DHAVE_PNG -DHAVE_CURL -D_LARGEFILE64_SOURCE)
 target_sources(SRB2SDL2 PRIVATE apng.c)
 
@@ -403,9 +404,9 @@ endif()
 
 # Compatibility flag with later versions of GCC
 # We should really fix our code to not need this
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-	target_compile_options(SRB2SDL2 PRIVATE -mno-ms-bitfields)
-endif()
+#if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+#target_compile_options(SRB2SDL2 PRIVATE -mno-ms-bitfields)
+#endif()
 
 # Yes we know we use insecure CRT functions...
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")

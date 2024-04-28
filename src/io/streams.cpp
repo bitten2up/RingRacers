@@ -11,9 +11,14 @@
 #include "streams.hpp"
 
 #include <cstdio>
+#include <stdio.h>
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
+
+// wtf 3ds, its included
+_off64_t fseeko64 (FILE *, _off64_t, int);
+_off64_t ftello64 (FILE *);
 
 template class srb2::io::ZlibInputStream<srb2::io::SpanStream>;
 template class srb2::io::ZlibInputStream<srb2::io::VecStream>;

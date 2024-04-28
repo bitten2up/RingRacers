@@ -1695,7 +1695,7 @@ static void K_drawKartItem(void)
 
 	// Quick Eggman numbers
 	if (stplyr->eggmanexplode > 1)
-		V_DrawScaledPatch(fx+17, fy+13-offset, V_HUDTRANS|V_SLIDEIN|fflags, kp_eggnum[std::min(5, G_TicsToSeconds(stplyr->eggmanexplode))]);
+		V_DrawScaledPatch(fx+17, fy+13-offset, V_HUDTRANS|V_SLIDEIN|fflags, kp_eggnum[std::min<INT32>(5, G_TicsToSeconds(stplyr->eggmanexplode))]);
 
 	if (stplyr->itemtype == KITEM_FLAMESHIELD && stplyr->flamelength > 0)
 	{
@@ -2692,7 +2692,7 @@ static void K_drawBossHealthBar(void)
 		;
 	else if (bossinfo.visualbarimpact)
 	{
-		INT32 mag = std::min((bossinfo.visualbarimpact/4) + 1, 8u);
+		INT32 mag = std::min<UINT32>((bossinfo.visualbarimpact/4) + 1, 8u);
 		if (bossinfo.visualbarimpact & 1)
 			starty -= mag;
 		else
@@ -2986,7 +2986,7 @@ static void K_drawRingCounter(boolean gametypeinfoshown)
 
 	if (stplyr->hudrings <= 0 && stplyr->ringvisualwarning > 1)
 	{
-		colorring = true;	
+		colorring = true;
 		if ((leveltime/2 & 1))
 		{
 			ringmap = R_GetTranslationColormap(TC_RAINBOW, SKINCOLOR_CRIMSON, GTC_CACHE);
@@ -3861,7 +3861,7 @@ static void K_DrawNameTagSphereMeter(INT32 x, INT32 y, INT32 width, INT32 sphere
 	// see also K_drawBlueSphereMeter
 	const UINT8 segColors[] = {73, 64, 52, 54, 55, 35, 34, 33, 202, 180, 181, 182, 164, 165, 166, 153, 152};
 
-	spheres = std::clamp(spheres, 0, 40);
+	spheres = std::clamp<INT32>(spheres, 0, 40);
 	int colorIndex = (spheres * sizeof segColors) / (40 + 1);
 
 	int px = r_splitscreen > 1 ? 1 : 2;
@@ -5308,9 +5308,9 @@ static void K_drawInput(void)
 		if (stplyr->tally.state == TALLY_ST_GOTTHRU_SLIDEIN ||
 			stplyr->tally.state == TALLY_ST_GAMEOVER_SLIDEIN)
 		{
-			return Easing_OutQuad(std::min<fixed_t>(stplyr->tally.transition * 2, FRACUNIT), 0, kSlideDown);
+			return static_cast<int>(Easing_OutQuad(std::min<fixed_t>(stplyr->tally.transition * 2, FRACUNIT), 0, kSlideDown));
 		}
-		return kSlideDown;
+		return static_cast<int>(kSlideDown);
 	}();
 	if (slide)
 		flags &= ~(V_SNAPTORIGHT); // don't draw underneath the dialogue box in non-green resolutions
@@ -5347,7 +5347,7 @@ static void K_drawChallengerScreen(void)
 		19,20,19,20,19,20,19,20,19,20, // frame 20-21, 1 tic, 5 alternating: all text vibrates from impact
 		21,22,23,24 // frame 22-25, 1 tic: CHALLENGER turns gold
 	};
-	const UINT8 offset = std::min(52-1u, (3*TICRATE)-mapreset);
+	const UINT8 offset = std::min<UINT32>(52-1u, (3*TICRATE)-mapreset);
 
 	V_DrawFadeScreen(0xFF00, 16); // Fade out
 	V_DrawScaledPatch(0, 0, 0, kp_challenger[anim[offset]]);

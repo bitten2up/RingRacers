@@ -2956,7 +2956,9 @@ static void Got_KickCmd(const UINT8 **p, INT32 playernum)
 
 		if (msg == KICK_MSG_BANNED || msg == KICK_MSG_CUSTOM_BAN || banMinutes)
 		{
+			#ifndef __3DS__ // wtf 3ds
 			SV_BanPlayer(pnum, banMinutes, reason);
+			#endif
 		}
 	}
 

@@ -140,6 +140,12 @@ typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
 #define UNIXBACKTRACE
 #endif
 
+#ifdef __3DS__ // why the fuck do i have to do this shit...
+#include <3ds.h>
+char *  getenv (const char *__string);
+int	putenv (char *__string);
+#endif
+
 // Locations for searching for bios.pk3
 #if defined (__unix__) || defined(__APPLE__) || defined (UNIXCOMMON)
 #define DEFAULTWADLOCATION1 "/usr/local/share/games/RingRacers"
@@ -428,7 +434,7 @@ static void I_ReportSignal(int num, int coredumped)
 }
 
 #ifndef NEWSIGNALHANDLER
-FUNCNORETURN static ATTRNORETURN void signal_handler(INT32 num)
+FUNCNORETURN static ATTRNORETURN void signal_handler(int num)
 {
 	g_in_exiting_signal_handler = true;
 
@@ -1600,6 +1606,17 @@ static void I_Fork(void)
 
 INT32 I_StartupSystem(void)
 {
+#ifdef __3DS__
+	if (PTMSYSM_CheckNew3DS())
+	{
+		osSetSpeedupEnable(true);
+		// enable fast clock + L2 cache on new3ds
+		PTMSYSM_ConfigureNew3DSCPU(3);
+		osSetSpeedupEnable(true);
+	}
+	//gfxInitDefault();
+	//consoleInit(GFX_BOTTOM, NULL);
+#endif
 	SDL_version SDLcompiled;
 	SDL_version SDLlinked;
 	SDL_VERSION(&SDLcompiled)
@@ -1622,7 +1639,7 @@ INT32 I_StartupSystem(void)
 	 SDLcompiled.major, SDLcompiled.minor, SDLcompiled.patch);
 	I_OutputMsg("Linked with SDL version: %d.%d.%d\n",
 	 SDLlinked.major, SDLlinked.minor, SDLlinked.patch);
-	if (SDL_Init(0) < 0)
+	if (SDL_Init(SDL_INIT_TIMER) < 0)
 		I_Error("Dr. Robotnik's Ring Racers: SDL System Error: %s", SDL_GetError()); //Alam: Oh no....
 #ifndef NOMUMBLE
 	I_SetupMumble();
@@ -2274,6 +2291,10 @@ static const char *locateWad(void)
 
 const char *I_LocateWad(void)
 {
+#ifdef __3DS__
+	chdir("sdmc:/3ds/srb2");
+	return "sdmc:/3ds/srb2";
+#endif
 	const char *waddir;
 
 	I_OutputMsg("Looking for WADs in: ");

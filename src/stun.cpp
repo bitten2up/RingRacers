@@ -20,6 +20,7 @@
 #define _CRT_RAND_S
 #elif defined (__APPLE__)
 #include <CommonCrypto/CommonRandom.h>
+#elif defined (__3DS__)
 #else
 #error "Need CSPRNG."
 #endif

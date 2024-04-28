@@ -45,6 +45,11 @@
 #define _USE_MATH_DEFINES // fixes M_PI errors in r_plane.c for Visual Studio
 #include <math.h>
 
+#ifdef __3DS__
+#define M_PI		3.14159265358979323846
+#endif
+
+
 #ifdef GETTEXT
 #include <libintl.h>
 #endif
@@ -679,7 +684,7 @@ extern int
 ///	    	This stops the game from storing backups of the states, sprites, and mobjinfo tables.
 ///	    	Though this info is compressed under normal circumstances, it's still a lot of extra
 ///	    	memory that never gets touched.
-#define ALLOW_RESETDATA
+//#define ALLOW_RESETDATA
 
 /// Experimental tweaks to analog mode. (Needs a lot of work before it's ready for primetime.)
 //#define REDSANALOG

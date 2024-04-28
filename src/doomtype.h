@@ -110,6 +110,21 @@ typedef long ssize_t;
 	#undef strnicmp
 	#define strnicmp(x,y,n) strncasecmp(x,y,n)
 #endif
+#ifdef __3DS__
+	#include <string.h>
+	#include <ctype.h>
+	#include <assert.h>
+
+	char *strlwr(char *);
+	int strcasecmp(const char* s1, const char* s2);
+	int strncasecmp(const char* s1, const char* s2, size_t n);
+	char *strupr(char *n); // from string
+	char *strlwr(char *n); // from string
+	#undef stricmp
+	#define stricmp(x,y) strcasecmp(x,y)
+	#undef strnicmp
+	#define strnicmp(x,y,n) strncasecmp(x,y,n)
+#endif
 
 char *nongnu_strcasestr(const char *in, const char *what);
 #ifndef _GNU_SOURCE
@@ -160,6 +175,11 @@ size_t strlcpy(char *dst, const char *src, size_t siz);
 typedef int32_t boolean;
 #else
 #define boolean BOOL
+#endif
+
+#ifdef __3DS__
+#undef true
+#undef false
 #endif
 
 #ifndef __cplusplus

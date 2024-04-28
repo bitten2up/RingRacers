@@ -18,7 +18,7 @@
 
 #include <tracy/tracy/Tracy.hpp>
 
-#if (defined (__unix__) && !defined (MSDOS)) || defined(__APPLE__) || defined (UNIXCOMMON)
+#if (defined (__unix__) && !defined (MSDOS)) || defined(__APPLE__) || defined (UNIXCOMMON) || defined(__3DS__)
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
@@ -2164,6 +2164,7 @@ void D_SRB2Main(void)
 			}
 		}
 
+#ifndef __3DS__
 		if (M_CheckParm("-skill") && M_IsNextParm())
 		{
 			INT16 newskill = -1;
@@ -2212,6 +2213,7 @@ void D_SRB2Main(void)
 				CV_SetValue(&cv_kartspeed, newskill);
 			}
 		}
+#endif
 
 		if (server && (dedicated || !M_CheckParm("+map")))
 		{
@@ -2279,6 +2281,9 @@ const char *D_Home(void)
 
 #ifdef ANDROID
 	return "/data/data/org.srb2/";
+#endif
+#ifdef __3DS__
+	return "sdmc:/3ds";
 #endif
 
 	if (M_CheckParm("-home") && M_IsNextParm())
