@@ -257,6 +257,10 @@ target_link_libraries(SRB2SDL2 PRIVATE ZLIB::ZLIB)
 target_link_libraries(SRB2SDL2 PRIVATE PNG::PNG)
 #target_link_libraries(SRB2SDL2 PRIVATE CURL::libcurl)
 target_link_libraries(SRB2SDL2 PRIVATE -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lctru)
+if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
+	target_link_libraries(SRB2SDL2 PRIVATE -lexecinfo)
+	target_link_libraries(SRB2SDL2 PRIVATE -lpthread)
+endif()
 target_compile_definitions(SRB2SDL2 PRIVATE -DHAVE_ZLIB -DHAVE_PNG -DHAVE_CURL -D_LARGEFILE64_SOURCE)
 target_sources(SRB2SDL2 PRIVATE apng.c)
 
@@ -404,9 +408,18 @@ endif()
 
 # Compatibility flag with later versions of GCC
 # We should really fix our code to not need this
+<<<<<<< HEAD
 #if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 #target_compile_options(SRB2SDL2 PRIVATE -mno-ms-bitfields)
 #endif()
+=======
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	check_cxx_compiler_flag("-mno-ms-bitfields" HAS_NO_MS_BITFIELDS)
+	if(HAS_NO_MS_BITFIELDS)
+		target_compile_options(SRB2SDL2 PRIVATE -mno-ms-bitfields)
+	endif()
+endif()
+>>>>>>> f60f5a864877b9146b15b64fac73b99a13196863
 
 # Yes we know we use insecure CRT functions...
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
