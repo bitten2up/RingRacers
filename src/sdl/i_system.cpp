@@ -1606,7 +1606,7 @@ static void I_Fork(void)
 
 INT32 I_StartupSystem(void)
 {
-#ifdef __3DS__
+#ifdef __3DS__3
 	if (PTMSYSM_CheckNew3DS())
 	{
 		osSetSpeedupEnable(true);
@@ -1614,8 +1614,8 @@ INT32 I_StartupSystem(void)
 		PTMSYSM_ConfigureNew3DSCPU(3);
 		osSetSpeedupEnable(true);
 	}
-	//gfxInitDefault();
-	//consoleInit(GFX_BOTTOM, NULL);
+	gfxInitDefault();
+	consoleInit(GFX_BOTTOM, NULL);
 #endif
 	SDL_version SDLcompiled;
 	SDL_version SDLlinked;

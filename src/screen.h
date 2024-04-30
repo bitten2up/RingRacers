@@ -56,8 +56,8 @@ struct viddef_t
 
 	UINT8 *buffer; // invisible screens buffer
 	size_t rowbytes; // bytes per scanline of the VIDEO mode
-	INT32 width; // PIXELS per scanline
-	INT32 height;
+	int width; // PIXELS per scanline
+	int height;
 	UINT32 realwidth; // real pixel width of window/screen
 	UINT32 realheight; // real pixel height of window/screen
 	union { // don't need numpages for OpenGL, so we can use it for fullscreen/windowed mode
