@@ -3,9 +3,7 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 26
     defaultConfig {
-        if (buildAsApplication) {
-            applicationId "org.kartkrew.ringracers"
-        }
+        applicationId "org.kartkrew.ringracers"
 
         minSdkVersion 14
         targetSdkVersion 26
