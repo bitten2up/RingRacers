@@ -1,0 +1,70 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 26
+    defaultConfig {
+        if (buildAsApplication) {
+            applicationId "org.kartkrew.ringracers"
+        }
+
+        minSdkVersion 14
+        targetSdkVersion 26
+        versionCode 230
+        versionName "2.3"
+        externalNativeBuild {
+            ndkBuild {
+                arguments "APP_PLATFORM=android-16"
+                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            }
+        }
+        flavorDimensions "assets"
+        productFlavors {
+            gameNoAssets {
+                dimension "assets"
+            }
+            gameFull {
+                dimension "assets"
+            }
+        }
+        applicationVariants.all { variant ->
+            if (variant.getFlavorName() == 'gameNoAssets') {
+                variant.mergeAssetsProvider.get().doLast {
+                    println("Removing game assets from the application package")
+                    delete(fileTree(
+                        dir: outputDir,
+                        includes: [
+                            ]
+                    ))
+                }
+            }
+        }
+        ext {
+            useBuildDate = false
+        }
+
+        // This generates the APK filename
+        def srb2PackageName = "ringracers-android"
+
+        // Game version string
+        srb2PackageName += "-v" + (defaultConfig.versionName).replace(".", "")
+
+        // Build date
+        if (defaultConfig.ext.useBuildDate)
+            srb2PackageName += "-" + (new Date()).format('yyyyMMdd')
+
+        setProperty("archivesBaseName", srb2PackageName)
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "../../CMakeLists.txt"
+
+            // Using one top level build dir for all build related files to reduce clutter.
+            buildStagingDirectory file("${buildDir}/../.externalNativeBuild/${project.name}")
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+}
