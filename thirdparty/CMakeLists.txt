@@ -14,7 +14,7 @@ add_subdirectory(tracy)
 add_subdirectory(SDL2)
 
 add_subdirectory(libpng)
-add_subdirectory(curl)
+#add_subdirectory(curl)
 
 add_subdirectory(libwebm)
 

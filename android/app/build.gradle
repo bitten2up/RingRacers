@@ -9,31 +9,11 @@ android {
         targetSdkVersion 26
         versionCode 230
         versionName "2.3"
+        ndkVersion " 26.1.10909125"
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-16"
                 abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-            }
-        }
-        flavorDimensions "assets"
-        productFlavors {
-            gameNoAssets {
-                dimension "assets"
-            }
-            gameFull {
-                dimension "assets"
-            }
-        }
-        applicationVariants.all { variant ->
-            if (variant.getFlavorName() == 'gameNoAssets') {
-                variant.mergeAssetsProvider.get().doLast {
-                    println("Removing game assets from the application package")
-                    delete(fileTree(
-                        dir: outputDir,
-                        includes: [
-                            ]
-                    ))
-                }
             }
         }
         ext {
@@ -61,8 +41,4 @@ android {
             buildStagingDirectory file("${buildDir}/../.externalNativeBuild/${project.name}")
         }
     }
-}
-
-dependencies {
-    implementation fileTree(include: ['*.jar'], dir: 'libs')
 }
