@@ -11,7 +11,7 @@ add_subdirectory(tcbrindle_span)
 add_subdirectory(stb)
 add_subdirectory(glad)
 add_subdirectory(tracy)
-add_subdirectory(SDL2)
+#add_subdirectory(SDL2)
 
 add_subdirectory(libpng)
 #add_subdirectory(curl)
