@@ -294,269 +294,269 @@ enum actionnum
 
 // IMPORTANT NOTE: If you add/remove from this list of action
 // functions, don't forget to update them in deh_tables.c!
-void A_Explode();
-void A_Pain();
-void A_Fall();
-void A_Look();
-void A_Chase();
-void A_FaceStabChase();
-void A_FaceStabRev();
-void A_FaceStabHurl();
-void A_FaceStabMiss();
-void A_StatueBurst();
-void A_FaceTarget();
-void A_FaceTracer();
-void A_Scream();
-void A_BossDeath();
-void A_RingBox(); // Obtained Ring Box Tails
-void A_BunnyHop(); // have bunny hop tails
-void A_BubbleSpawn(); // Randomly spawn bubbles
-void A_FanBubbleSpawn();
-void A_BubbleRise(); // Bubbles float to surface
-void A_BubbleCheck(); // Don't draw if not underwater
-void A_AwardScore();
-void A_ScoreRise(); // Rise the score logo
-void A_AttractChase(); // Ring Chase
-void A_DropMine(); // Drop Mine from Skim or Jetty-Syn Bomber
-void A_FishJump(); // Fish Jump
-void A_SetSolidSteam();
-void A_UnsetSolidSteam();
-void A_OverlayThink();
-void A_JetChase();
-void A_JetbThink(); // Jetty-Syn Bomber Thinker
-void A_JetgThink(); // Jetty-Syn Gunner Thinker
-void A_JetgShoot(); // Jetty-Syn Shoot Function
-void A_ShootBullet(); // JetgShoot without reactiontime setting
-void A_MinusDigging();
-void A_MinusPopup();
-void A_MinusCheck();
-void A_ChickenCheck();
-void A_MouseThink(); // Mouse Thinker
-void A_DetonChase(); // Deton Chaser
-void A_CapeChase(); // Fake little Super Sonic cape
-void A_RotateSpikeBall(); // Spike ball rotation
-void A_SlingAppear();
-void A_UnidusBall();
-void A_RockSpawn();
-void A_SetFuse();
-void A_CrawlaCommanderThink(); // Crawla Commander
-void A_SmokeTrailer();
-void A_RingExplode();
-void A_OldRingExplode();
-void A_MixUp();
-void A_BossScream();
-void A_Boss2TakeDamage();
-void A_GoopSplat();
-void A_Boss2PogoSFX();
-void A_Boss2PogoTarget();
-void A_EggmanBox();
-void A_TurretFire();
-void A_SuperTurretFire();
-void A_TurretStop();
-void A_JetJawRoam();
-void A_JetJawChomp();
-void A_PointyThink();
-void A_CheckBuddy();
-void A_HoodFire();
-void A_HoodThink();
-void A_HoodFall();
-void A_ArrowBonks();
-void A_SnailerThink();
-void A_SharpChase();
-void A_SharpSpin();
-void A_SharpDecel();
-void A_CrushstaceanWalk();
-void A_CrushstaceanPunch();
-void A_CrushclawAim();
-void A_CrushclawLaunch();
-void A_VultureVtol();
-void A_VultureCheck();
-void A_VultureHover();
-void A_VultureBlast();
-void A_VultureFly();
-void A_SkimChase();
-void A_SkullAttack();
-void A_LobShot();
-void A_FireShot();
-void A_SuperFireShot();
-void A_BossFireShot();
-void A_Boss7FireMissiles();
-void A_FocusTarget();
-void A_Boss4Reverse();
-void A_Boss4SpeedUp();
-void A_Boss4Raise();
-void A_SparkFollow();
-void A_BuzzFly();
-void A_GuardChase();
-void A_EggShield();
-void A_SetReactionTime();
-void A_Boss3TakeDamage();
-void A_Boss3Path();
-void A_Boss3ShockThink();
-void A_LinedefExecute();
-void A_LinedefExecuteFromArg();
-void A_PlaySeeSound();
-void A_PlayAttackSound();
-void A_PlayActiveSound();
-void A_BossZoom(); //Unused
-void A_Boss1Chase();
-void A_Boss2Chase();
-void A_Boss2Pogo();
-void A_SpawnObjectAbsolute();
-void A_SpawnObjectRelative();
-void A_ChangeAngleRelative();
-void A_ChangeAngleAbsolute();
-void A_RollAngle();
-void A_ChangeRollAngleRelative();
-void A_ChangeRollAngleAbsolute();
-void A_PlaySound();
-void A_FindTarget();
-void A_FindTracer();
-void A_SetTics();
-void A_SetRandomTics();
-void A_ChangeColorRelative();
-void A_ChangeColorAbsolute();
-void A_Dye();
-void A_MoveRelative();
-void A_MoveAbsolute();
-void A_Thrust();
-void A_ZThrust();
-void A_SetTargetsTarget();
-void A_SetObjectFlags();
-void A_SetObjectFlags2();
-void A_RandomState();
-void A_RandomStateRange();
-void A_StateRangeByAngle();
-void A_StateRangeByParameter();
-void A_DualAction();
-void A_RemoteAction();
-void A_ToggleFlameJet();
-void A_OrbitNights();
-void A_GhostMe();
-void A_SetObjectState();
-void A_SetObjectTypeState();
-void A_KnockBack();
-void A_PushAway();
-void A_RingDrain();
-void A_SplitShot();
-void A_MissileSplit();
-void A_MultiShot();
-void A_InstaLoop();
-void A_Custom3DRotate();
-void A_SearchForPlayers();
-void A_CheckRandom();
-void A_CheckTargetRings();
-void A_CheckRings();
-void A_CheckTotalRings();
-void A_CheckHealth();
-void A_CheckRange();
-void A_CheckHeight();
-void A_CheckTrueRange();
-void A_CheckThingCount();
-void A_CheckAmbush();
-void A_CheckCustomValue();
-void A_CheckCusValMemo();
-void A_SetCustomValue();
-void A_UseCusValMemo();
-void A_RelayCustomValue();
-void A_CusValAction();
-void A_ForceStop();
-void A_ForceWin();
-void A_SpikeRetract();
-void A_InfoState();
-void A_Repeat();
-void A_SetScale();
-void A_RemoteDamage();
-void A_HomingChase();
-void A_TrapShot();
-void A_VileTarget();
-void A_VileAttack();
-void A_VileFire();
-void A_BrakChase();
-void A_BrakFireShot();
-void A_BrakLobShot();
-void A_NapalmScatter();
-void A_SpawnFreshCopy();
-void A_FlickySpawn();
-void A_FlickyCenter();
-void A_FlickyAim();
-void A_FlickyFly();
-void A_FlickySoar();
-void A_FlickyCoast();
-void A_FlickyHop();
-void A_FlickyFlounder();
-void A_FlickyCheck();
-void A_FlickyHeightCheck();
-void A_FlickyFlutter();
-void A_FlameParticle();
-void A_FadeOverlay();
-void A_Boss5Jump();
-void A_LightBeamReset();
-void A_MineExplode();
-void A_MineRange();
-void A_ConnectToGround();
-void A_SpawnParticleRelative();
-void A_MultiShotDist();
-void A_WhoCaresIfYourSonIsABee();
-void A_ParentTriesToSleep();
-void A_CryingToMomma();
-void A_CheckFlags2();
-void A_DoNPCSkid();
-void A_DoNPCPain();
-void A_PrepareRepeat();
-void A_Boss5ExtraRepeat();
-void A_Boss5Calm();
-void A_Boss5CheckOnGround();
-void A_Boss5CheckFalling();
-void A_Boss5PinchShot();
-void A_Boss5MakeItRain();
-void A_LookForBetter();
-void A_Boss5BombExplode();
-void A_TNTExplode();
-void A_DebrisRandom();
-void A_CanarivoreGas();
-void A_KillSegments();
-void A_SnapperSpawn();
-void A_SnapperThinker();
-void A_SaloonDoorSpawn();
-void A_MinecartSparkThink();
-void A_ModuloToState();
-void A_LavafallRocks();
-void A_LavafallLava();
-void A_FallingLavaCheck();
-void A_FireShrink();
-void A_PterabyteHover();
-void A_RolloutSpawn();
-void A_RolloutRock();
-void A_DragonWing();
-void A_DragonSegment();
-void A_ChangeHeight();
+void A_Explode(mobj_t *actor);
+void A_Pain(mobj_t *actor);
+void A_Fall(mobj_t *actor);
+void A_Look(mobj_t *actor);
+void A_Chase(mobj_t *actor);
+void A_FaceStabChase(mobj_t *actor);
+void A_FaceStabRev(mobj_t *actor);
+void A_FaceStabHurl(mobj_t *actor);
+void A_FaceStabMiss(mobj_t *actor);
+void A_StatueBurst(mobj_t *actor);
+void A_FaceTarget(mobj_t *actor);
+void A_FaceTracer(mobj_t *actor);
+void A_Scream(mobj_t *actor);
+void A_BossDeath(mobj_t *actor);
+void A_RingBox(mobj_t *actor); // Obtained Ring Box Tails
+void A_BunnyHop(mobj_t *actor); // have bunny hop tails
+void A_BubbleSpawn(mobj_t *actor); // Randomly spawn bubbles
+void A_FanBubbleSpawn(mobj_t *actor);
+void A_BubbleRise(mobj_t *actor); // Bubbles float to surface
+void A_BubbleCheck(mobj_t *actor); // Don't draw if not underwater
+void A_AwardScore(mobj_t *actor);
+void A_ScoreRise(mobj_t *actor); // Rise the score logo
+void A_AttractChase(mobj_t *actor); // Ring Chase
+void A_DropMine(mobj_t *actor); // Drop Mine from Skim or Jetty-Syn Bomber
+void A_FishJump(mobj_t *actor); // Fish Jump
+void A_SetSolidSteam(mobj_t *actor);
+void A_UnsetSolidSteam(mobj_t *actor);
+void A_OverlayThink(mobj_t *actor);
+void A_JetChase(mobj_t *actor);
+void A_JetbThink(mobj_t *actor); // Jetty-Syn Bomber Thinker
+void A_JetgThink(mobj_t *actor); // Jetty-Syn Gunner Thinker
+void A_JetgShoot(mobj_t *actor); // Jetty-Syn Shoot Function
+void A_ShootBullet(mobj_t *actor); // JetgShoot without reactiontime setting
+void A_MinusDigging(mobj_t *actor);
+void A_MinusPopup(mobj_t *actor);
+void A_MinusCheck(mobj_t *actor);
+void A_ChickenCheck(mobj_t *actor);
+void A_MouseThink(mobj_t *actor); // Mouse Thinker
+void A_DetonChase(mobj_t *actor); // Deton Chaser
+void A_CapeChase(mobj_t *actor); // Fake little Super Sonic cape
+void A_RotateSpikeBall(mobj_t *actor); // Spike ball rotation
+void A_SlingAppear(mobj_t *actor);
+void A_UnidusBall(mobj_t *actor);
+void A_RockSpawn(mobj_t *actor);
+void A_SetFuse(mobj_t *actor);
+void A_CrawlaCommanderThink(mobj_t *actor); // Crawla Commander
+void A_SmokeTrailer(mobj_t *actor);
+void A_RingExplode(mobj_t *actor);
+void A_OldRingExplode(mobj_t *actor);
+void A_MixUp(mobj_t *actor);
+void A_BossScream(mobj_t *actor);
+void A_Boss2TakeDamage(mobj_t *actor);
+void A_GoopSplat(mobj_t *actor);
+void A_Boss2PogoSFX(mobj_t *actor);
+void A_Boss2PogoTarget(mobj_t *actor);
+void A_EggmanBox(mobj_t *actor);
+void A_TurretFire(mobj_t *actor);
+void A_SuperTurretFire(mobj_t *actor);
+void A_TurretStop(mobj_t *actor);
+void A_JetJawRoam(mobj_t *actor);
+void A_JetJawChomp(mobj_t *actor);
+void A_PointyThink(mobj_t *actor);
+void A_CheckBuddy(mobj_t *actor);
+void A_HoodFire(mobj_t *actor);
+void A_HoodThink(mobj_t *actor);
+void A_HoodFall(mobj_t *actor);
+void A_ArrowBonks(mobj_t *actor);
+void A_SnailerThink(mobj_t *actor);
+void A_SharpChase(mobj_t *actor);
+void A_SharpSpin(mobj_t *actor);
+void A_SharpDecel(mobj_t *actor);
+void A_CrushstaceanWalk(mobj_t *actor);
+void A_CrushstaceanPunch(mobj_t *actor);
+void A_CrushclawAim(mobj_t *actor);
+void A_CrushclawLaunch(mobj_t *actor);
+void A_VultureVtol(mobj_t *actor);
+void A_VultureCheck(mobj_t *actor);
+void A_VultureHover(mobj_t *actor);
+void A_VultureBlast(mobj_t *actor);
+void A_VultureFly(mobj_t *actor);
+void A_SkimChase(mobj_t *actor);
+void A_SkullAttack(mobj_t *actor);
+void A_LobShot(mobj_t *actor);
+void A_FireShot(mobj_t *actor);
+void A_SuperFireShot(mobj_t *actor);
+void A_BossFireShot(mobj_t *actor);
+void A_Boss7FireMissiles(mobj_t *actor);
+void A_FocusTarget(mobj_t *actor);
+void A_Boss4Reverse(mobj_t *actor);
+void A_Boss4SpeedUp(mobj_t *actor);
+void A_Boss4Raise(mobj_t *actor);
+void A_SparkFollow(mobj_t *actor);
+void A_BuzzFly(mobj_t *actor);
+void A_GuardChase(mobj_t *actor);
+void A_EggShield(mobj_t *actor);
+void A_SetReactionTime(mobj_t *actor);
+void A_Boss3TakeDamage(mobj_t *actor);
+void A_Boss3Path(mobj_t *actor);
+void A_Boss3ShockThink(mobj_t *actor);
+void A_LinedefExecute(mobj_t *actor);
+void A_LinedefExecuteFromArg(mobj_t *actor);
+void A_PlaySeeSound(mobj_t *actor);
+void A_PlayAttackSound(mobj_t *actor);
+void A_PlayActiveSound(mobj_t *actor);
+void A_BossZoom(mobj_t *actor); //Unused
+void A_Boss1Chase(mobj_t *actor);
+void A_Boss2Chase(mobj_t *actor);
+void A_Boss2Pogo(mobj_t *actor);
+void A_SpawnObjectAbsolute(mobj_t *actor);
+void A_SpawnObjectRelative(mobj_t *actor);
+void A_ChangeAngleRelative(mobj_t *actor);
+void A_ChangeAngleAbsolute(mobj_t *actor);
+void A_RollAngle(mobj_t *actor);
+void A_ChangeRollAngleRelative(mobj_t *actor);
+void A_ChangeRollAngleAbsolute(mobj_t *actor);
+void A_PlaySound(mobj_t *actor);
+void A_FindTarget(mobj_t *actor);
+void A_FindTracer(mobj_t *actor);
+void A_SetTics(mobj_t *actor);
+void A_SetRandomTics(mobj_t *actor);
+void A_ChangeColorRelative(mobj_t *actor);
+void A_ChangeColorAbsolute(mobj_t *actor);
+void A_Dye(mobj_t *actor);
+void A_MoveRelative(mobj_t *actor);
+void A_MoveAbsolute(mobj_t *actor);
+void A_Thrust(mobj_t *actor);
+void A_ZThrust(mobj_t *actor);
+void A_SetTargetsTarget(mobj_t *actor);
+void A_SetObjectFlags(mobj_t *actor);
+void A_SetObjectFlags2(mobj_t *actor);
+void A_RandomState(mobj_t *actor);
+void A_RandomStateRange(mobj_t *actor);
+void A_StateRangeByAngle(mobj_t *actor);
+void A_StateRangeByParameter(mobj_t *actor);
+void A_DualAction(mobj_t *actor);
+void A_RemoteAction(mobj_t *actor);
+void A_ToggleFlameJet(mobj_t *actor);
+void A_OrbitNights(mobj_t *actor);
+void A_GhostMe(mobj_t *actor);
+void A_SetObjectState(mobj_t *actor);
+void A_SetObjectTypeState(mobj_t *actor);
+void A_KnockBack(mobj_t *actor);
+void A_PushAway(mobj_t *actor);
+void A_RingDrain(mobj_t *actor);
+void A_SplitShot(mobj_t *actor);
+void A_MissileSplit(mobj_t *actor);
+void A_MultiShot(mobj_t *actor);
+void A_InstaLoop(mobj_t *actor);
+void A_Custom3DRotate(mobj_t *actor);
+void A_SearchForPlayers(mobj_t *actor);
+void A_CheckRandom(mobj_t *actor);
+void A_CheckTargetRings(mobj_t *actor);
+void A_CheckRings(mobj_t *actor);
+void A_CheckTotalRings(mobj_t *actor);
+void A_CheckHealth(mobj_t *actor);
+void A_CheckRange(mobj_t *actor);
+void A_CheckHeight(mobj_t *actor);
+void A_CheckTrueRange(mobj_t *actor);
+void A_CheckThingCount(mobj_t *actor);
+void A_CheckAmbush(mobj_t *actor);
+void A_CheckCustomValue(mobj_t *actor);
+void A_CheckCusValMemo(mobj_t *actor);
+void A_SetCustomValue(mobj_t *actor);
+void A_UseCusValMemo(mobj_t *actor);
+void A_RelayCustomValue(mobj_t *actor);
+void A_CusValAction(mobj_t *actor);
+void A_ForceStop(mobj_t *actor);
+void A_ForceWin(mobj_t *actor);
+void A_SpikeRetract(mobj_t *actor);
+void A_InfoState(mobj_t *actor);
+void A_Repeat(mobj_t *actor);
+void A_SetScale(mobj_t *actor);
+void A_RemoteDamage(mobj_t *actor);
+void A_HomingChase(mobj_t *actor);
+void A_TrapShot(mobj_t *actor);
+void A_VileTarget(mobj_t *actor);
+void A_VileAttack(mobj_t *actor);
+void A_VileFire(mobj_t *actor);
+void A_BrakChase(mobj_t *actor);
+void A_BrakFireShot(mobj_t *actor);
+void A_BrakLobShot(mobj_t *actor);
+void A_NapalmScatter(mobj_t *actor);
+void A_SpawnFreshCopy(mobj_t *actor);
+void A_FlickySpawn(mobj_t *actor);
+void A_FlickyCenter(mobj_t *actor);
+void A_FlickyAim(mobj_t *actor);
+void A_FlickyFly(mobj_t *actor);
+void A_FlickySoar(mobj_t *actor);
+void A_FlickyCoast(mobj_t *actor);
+void A_FlickyHop(mobj_t *actor);
+void A_FlickyFlounder(mobj_t *actor);
+void A_FlickyCheck(mobj_t *actor);
+void A_FlickyHeightCheck(mobj_t *actor);
+void A_FlickyFlutter(mobj_t *actor);
+void A_FlameParticle(mobj_t *actor);
+void A_FadeOverlay(mobj_t *actor);
+void A_Boss5Jump(mobj_t *actor);
+void A_LightBeamReset(mobj_t *actor);
+void A_MineExplode(mobj_t *actor);
+void A_MineRange(mobj_t *actor);
+void A_ConnectToGround(mobj_t *actor);
+void A_SpawnParticleRelative(mobj_t *actor);
+void A_MultiShotDist(mobj_t *actor);
+void A_WhoCaresIfYourSonIsABee(mobj_t *actor);
+void A_ParentTriesToSleep(mobj_t *actor);
+void A_CryingToMomma(mobj_t *actor);
+void A_CheckFlags2(mobj_t *actor);
+void A_DoNPCSkid(mobj_t *actor);
+void A_DoNPCPain(mobj_t *actor);
+void A_PrepareRepeat(mobj_t *actor);
+void A_Boss5ExtraRepeat(mobj_t *actor);
+void A_Boss5Calm(mobj_t *actor);
+void A_Boss5CheckOnGround(mobj_t *actor);
+void A_Boss5CheckFalling(mobj_t *actor);
+void A_Boss5PinchShot(mobj_t *actor);
+void A_Boss5MakeItRain(mobj_t *actor);
+void A_LookForBetter(mobj_t *actor);
+void A_Boss5BombExplode(mobj_t *actor);
+void A_TNTExplode(mobj_t *actor);
+void A_DebrisRandom(mobj_t *actor);
+void A_CanarivoreGas(mobj_t *actor);
+void A_KillSegments(mobj_t *actor);
+void A_SnapperSpawn(mobj_t *actor);
+void A_SnapperThinker(mobj_t *actor);
+void A_SaloonDoorSpawn(mobj_t *actor);
+void A_MinecartSparkThink(mobj_t *actor);
+void A_ModuloToState(mobj_t *actor);
+void A_LavafallRocks(mobj_t *actor);
+void A_LavafallLava(mobj_t *actor);
+void A_FallingLavaCheck(mobj_t *actor);
+void A_FireShrink(mobj_t *actor);
+void A_PterabyteHover(mobj_t *actor);
+void A_RolloutSpawn(mobj_t *actor);
+void A_RolloutRock(mobj_t *actor);
+void A_DragonWing(mobj_t *actor);
+void A_DragonSegment(mobj_t *actor);
+void A_ChangeHeight(mobj_t *actor);
 
 //
 // SRB2Kart
 //
-void A_JawzExplode();
-void A_SSMineSearch();
-void A_SSMineExplode();
-void A_SSMineFlash();
-void A_LandMineExplode();
-void A_LandMineExplode();
-void A_BallhogExplode();
-void A_SpecialStageBombExplode();
-void A_LightningFollowPlayer();
-void A_FZBoomFlash();
-void A_FZBoomSmoke();
-void A_RandomShadowFrame();
-void A_MayonakaArrow();
-void A_FlameShieldPaper();
-void A_InvincSparkleRotate();
-void A_SpawnItemDebrisCloud();
-void A_RingShooterFace();
-void A_SpawnSneakerPanel();
-void A_BlendEyePuyoHack();
-void A_MakeSSCandle();
-void A_HologramRandomTranslucency();
-void A_SSChainShatter();
+void A_JawzExplode(mobj_t *actor);
+void A_SSMineSearch(mobj_t *actor);
+void A_SSMineExplode(mobj_t *actor);
+void A_SSMineFlash(mobj_t *actor);
+void A_LandMineExplode(mobj_t *actor);
+void A_LandMineExplode(mobj_t *actor);
+void A_BallhogExplode(mobj_t *actor);
+void A_SpecialStageBombExplode(mobj_t *actor);
+void A_LightningFollowPlayer(mobj_t *acto(mobj_t *actor);
+void A_FZBoomFlash(mobj_t *actor);
+void A_FZBoomSmoke(mobj_t *actor);
+void A_RandomShadowFrame(mobj_t *actor);
+void A_MayonakaArrow(mobj_t *actor);
+void A_FlameShieldPaper(mobj_t *actor);
+void A_InvincSparkleRotate(mobj_t *actor);
+void A_SpawnItemDebrisCloud(mobj_t *actor);
+void A_RingShooterFace(mobj_t *actor);
+void A_SpawnSneakerPanel(mobj_t *actor);
+void A_BlendEyePuyoHack(mobj_t *actor);
+void A_MakeSSCandle(mobj_t *actor);
+void A_HologramRandomTranslucency(mobj_t *actor);
+void A_SSChainShatter(mobj_t *actor);
 
 extern boolean actionsoverridden[NUMACTIONS];
 
@@ -1188,10 +1188,10 @@ typedef enum sprite
 	SPR_PUYC,
 	SPR_PUYD,
 	SPR_PUYE,
-	
+
 	// Aerial Highlands
 	SPR_BCLD,
-	
+
 	// Avant Garden
 	SPR_AGTU,
 	SPR_AGTL,
@@ -1200,7 +1200,7 @@ typedef enum sprite
 	SPR_AGFL,
 	SPR_AGFF,
 	SPR_AGCL,
-	
+
 	// Sky Sanctuary
 	SPR_SSCL,
 
@@ -3844,10 +3844,10 @@ typedef enum state
 	S_BLENDEYE_PUYO_SHOCK,
 	S_BLENDEYE_PUYO_DIE,
 	S_BLENDEYE_PUYO_DUST,
-	
+
 	// Aerial Highlands
 	S_AHZCLOUD,
-	
+
 	// Avant Garden
 	S_AGZBULB_BASE,
 	S_AGZBULB_NEUTRAL,
@@ -3858,7 +3858,7 @@ typedef enum state
 	S_AGFL,
 	S_AGFF,
 	S_AGZCLOUD,
-	
+
 	// Sky Sanctuary
 	S_SSZCLOUD,
 
@@ -4880,11 +4880,11 @@ typedef enum mobj_type
 	MT_BLENDEYE_PUYO,
 	MT_BLENDEYE_PUYO_DUST,
 	MT_BLENDEYE_PUYO_DUST_COFFEE,
-	
+
 	// Aerial Highlands
 	MT_AHZ_CLOUD,
 	MT_AHZ_CLOUDCLUSTER,
-	
+
 	// Avant Garden
 	MT_AGZ_BULB,
 	MT_AGZ_BULB_PART,
@@ -4893,7 +4893,7 @@ typedef enum mobj_type
 	MT_AGZ_AGFF,
 	MT_AGZ_CLOUD,
 	MT_AGZ_CLOUDCLUSTER,
-	
+
 	// Sky Sanctuary
 	MT_SSZ_CLOUD,
 	MT_SSZ_CLOUDCLUSTER,
