@@ -1,5 +1,5 @@
 add_library(curl SHARED IMPORTED)
-set_target_properties(bar PROPERTIES
-	IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/libs/arm64-v8a")
+set_target_properties(curl PROPERTIES
+	IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/libs/arm64-v8a"
 	INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
