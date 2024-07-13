@@ -256,7 +256,7 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES "Darwin")
 endif()
 
 target_link_libraries(SRB2SDL2 PRIVATE -lz)
-target_link_libraries(SRB2SDL2 PRIVATE -lpng)
+target_link_libraries(SRB2SDL2 PRIVATE libpng::libpng)
 target_link_libraries(SRB2SDL2 PRIVATE CURL::curl)
 if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
 	target_link_libraries(SRB2SDL2 PRIVATE -lexecinfo)
