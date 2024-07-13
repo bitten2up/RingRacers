@@ -543,7 +543,7 @@ void A_LandMineExplode(mobj_t *actor);
 void A_LandMineExplode(mobj_t *actor);
 void A_BallhogExplode(mobj_t *actor);
 void A_SpecialStageBombExplode(mobj_t *actor);
-void A_LightningFollowPlayer(mobj_t *acto(mobj_t *actor);
+void A_LightningFollowPlayer(mobj_t *actor);
 void A_FZBoomFlash(mobj_t *actor);
 void A_FZBoomSmoke(mobj_t *actor);
 void A_RandomShadowFrame(mobj_t *actor);
