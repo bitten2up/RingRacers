@@ -13,7 +13,7 @@ add_subdirectory(glad)
 add_subdirectory(tracy)
 add_subdirectory(sdl)
 
-add_subdirectory(libpng)
+#add_subdirectory(libpng)
 #add_subdirectory(curl)
 
 add_subdirectory(libwebm)
