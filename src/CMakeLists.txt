@@ -257,7 +257,7 @@ endif()
 
 target_link_libraries(SRB2SDL2 PRIVATE -lz)
 target_link_libraries(SRB2SDL2 PRIVATE -lpng)
-target_link_libraries(SRB2SDL2 PRIVATE -lcurl)
+target_link_libraries(SRB2SDL2 PRIVATE curl)
 if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
 	target_link_libraries(SRB2SDL2 PRIVATE -lexecinfo)
 	target_link_libraries(SRB2SDL2 PRIVATE -lpthread)
