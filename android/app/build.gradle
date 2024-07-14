@@ -13,7 +13,7 @@ android {
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-16"
-                abiFilters 'arm64-v8a'//, 'armeabi-v7a', 'x86', 'x86_64' // blame curl, i don't feel like setting up cmake for this rn
+                abiFilters 'arm64-v8a'
             }
         }
         ext {
