@@ -14,7 +14,7 @@
 
 #include <vector>
 
-#if defined (__linux__) || defined (__FreeBSD__)
+#if defined (__linux__) || defined (__FreeBSD__) || defined (__ANDROID__)
 #include <sys/random.h>
 #elif defined (_WIN32)
 #define _CRT_RAND_S
