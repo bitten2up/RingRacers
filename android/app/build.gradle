@@ -11,8 +11,7 @@ android {
         versionName "2.3"
         ndkVersion "26.1.10909125"
         externalNativeBuild {
-            ndkBuild {
-                arguments "APP_PLATFORM=android-16"
+            cmake {
                 abiFilters 'arm64-v8a'
             }
         }
