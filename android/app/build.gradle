@@ -5,8 +5,8 @@ android {
     defaultConfig {
         applicationId "org.kartkrew.ringracers"
 
-        minSdkVersion  23
-        targetSdkVersion 26
+        minSdkVersion  28
+        targetSdkVersion 30
         versionCode 230
         versionName "2.3"
         ndkVersion "26.1.10909125"
