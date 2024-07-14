@@ -5,11 +5,11 @@ android {
     defaultConfig {
         applicationId "org.kartkrew.ringracers"
 
-        minSdkVersion 14
+        minSdkVersion  23
         targetSdkVersion 26
         versionCode 230
         versionName "2.3"
-        ndkVersion " 26.1.10909125"
+        ndkVersion "26.1.10909125"
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-16"
