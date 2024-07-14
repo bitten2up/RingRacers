@@ -981,7 +981,7 @@ static void M_PNGText(png_structp png_ptr, png_infop png_info_ptr, PNG_CONST png
 
 static inline void M_PNGImage(png_structp png_ptr, png_infop png_info_ptr, PNG_CONST png_uint_32 height, png_bytep png_buf)
 {
-	png_uint_32 pitch = png_get_rowbytes(png_ptr, static_cast<const png_info*>(png_info_ptr));
+	png_uint_32 pitch = png_get_rowbytes(png_ptr, (png_info_ptr));
 	png_bytepp row_pointers = static_cast<png_bytepp>(png_malloc(png_ptr, height* sizeof (png_bytep)));
 	png_uint_32 y;
 	for (y = 0; y < height; y++)
