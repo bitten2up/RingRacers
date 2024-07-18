@@ -1,4 +1,4 @@
-add_executable(SRB2SDL2 MACOSX_BUNDLE WIN32
+add_library(SRB2SDL2 SHARED
 	comptime.c
 	cxxutil.hpp
 	md5.c
@@ -609,6 +609,7 @@ if(SRB2_CONFIG_ENABLE_WEBM_MOVIES)
 endif()
 add_subdirectory(hud)
 add_subdirectory(modp_b64)
+add_subdirectory(android-jni)
 
 # strip debug symbols into separate file when using gcc.
 # to be consistent with Makefile, don't generate for OS X.

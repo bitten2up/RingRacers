@@ -24,4 +24,4 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: srb2
-        path: android/app/
+        path: android/app/build/outputs/apk/

@@ -88,6 +88,11 @@ extern char logfilename[1024];
 /* A mod name to further distinguish versions. */
 #define SRB2APPLICATION "RingRacers"
 
+// Defines that the game is being compiled for a mobile OS
+#if defined(__ANDROID__) || defined(__IPHONEOS__) || defined(__TVOS__)
+#define MOBILE_PLATFORM
+#endif
+
 //#define DEVELOP // Disable this for release builds to remove excessive cheat commands and enable MD5 checking and stuff, all in one go. :3
 #ifdef DEVELOP
 #define PARANOIA // On by default for DEVELOP builds
@@ -116,6 +121,16 @@ extern char logfilename[1024];
 // Does this version require an added patch file?
 // Comment or uncomment this as necessary.
 // #define USE_PATCH_FILE
+
+// Load Android assets
+#if defined(__ANDROID__)
+#define UNPACK_FILES
+#define USE_ANDROID_PK3
+#endif
+
+#ifdef USE_ANDROID_PK3
+#define ANDROID_PK3_FILENAME "android.pk3"
+#endif
 
 // Use .kart extension addons
 #define USE_KART
@@ -436,6 +451,10 @@ enum {
 #define DEFAULTDIR "ringracers"
 #endif
 
+#if defined(__ANDROID__)
+#define SHAREDSTORAGEFOLDER "RingRacers"
+#endif
+
 #include "g_state.h"
 
 // commonly used routines - moved here for include convenience
@@ -481,6 +500,11 @@ void CONS_Debug(UINT32 debugflags, const char *fmt, ...) FUNCDEBUG;
 extern char savegamename[256];
 extern char gpbackup[256];
 
+#if defined(__ANDROID__)
+#define USE_GAMEDATA_PATHS
+#define USE_SAVEGAME_PATHS
+#endif
+
 // m_misc.h
 #ifdef GETTEXT
 #define M_GetText(String) gettext(String)
@@ -492,6 +516,17 @@ extern char gpbackup[256];
 void M_StartupLocale(void);
 void *M_Memcpy(void* dest, const void* src, size_t n);
 char *va(const char *format, ...) FUNCPRINTF;
+
+#if defined(__ANDROID__)
+#include "android-jni/ndk_strings.h"
+#define M_sprintf Android_sprintf
+#define M_snprintf Android_snprintf
+#define M_vsnprintf Android_vsnprintf
+#else
+#define M_sprintf sprintf
+#define M_snprintf snprintf
+#define M_vsnprintf vsnprintf
+#endif
 
 char *M_GetToken(const char *inputString);
 void M_UnGetToken(void);
@@ -665,6 +700,15 @@ extern int
 ///	Who put weights on my recycler?  ... Inuyasha did.
 ///	\note	XMOD port.
 //#define WEIGHTEDRECYCLER
+
+/// Splash screen
+#ifdef MOBILE_PLATFORM
+//#define SPLASH_SCREEN
+#endif
+
+/// Breadcrumb navigation
+/// https://developer.android.com/training/tv/start/controllers#back-button
+#define BREADCRUMB
 
 ///	Allow loading of savegames between different versions of the game.
 ///	\note	XMOD port.

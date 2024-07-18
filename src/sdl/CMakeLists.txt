@@ -9,6 +9,7 @@ target_sources(SRB2SDL2 PRIVATE
 	i_net.c
 	i_system.cpp
 	i_main.cpp
+	SDL_main/SDL_android_main.c
 	i_video.cpp
 	dosstr.c
 	endtxt.c
@@ -59,7 +60,7 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES Darwin)
 endif()
 
 target_link_libraries(SRB2SDL2
-	PRIVATE
+	PUBLIC
 	$<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
 )
 

@@ -130,6 +130,11 @@ typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
 #include "macosx/mac_resources.h"
 #endif
 
+#if defined(__ANDROID__)
+#include "../android-jni/jni_android.h" // includes jni.h
+#include "../android-jni/ndk_crash_handler.h"
+#endif
+
 #ifndef errno
 #include <errno.h>
 #endif
@@ -2306,6 +2311,46 @@ const char *I_LocateWad(void)
 	}
 	return waddir;
 }
+const char *I_AppStorageLocation(void)
+{
+#if defined(__ANDROID__)
+    return SDL_AndroidGetExternalStoragePath();
+#else
+    return NULL;
+#endif
+}
+
+const char *I_SharedStorageLocation(void)
+{
+#if defined(__ANDROID__)
+    static char *sharedStorage = NULL;
+
+    if (sharedStorage == NULL)
+    {
+        char *dir = JNI_GetStorageDirectory();
+        if (dir)
+        {
+            char *gamePath = SHAREDSTORAGEFOLDER;
+            size_t size = strlen(dir) + strlen(PATHSEP) + strlen(gamePath) + 1;
+            sharedStorage = (char*)malloc(size);
+            snprintf(sharedStorage, size, "%s" PATHSEP "%s", dir, gamePath);
+        }
+    }
+
+    return sharedStorage;
+#else
+    return NULL;
+#endif
+}
+
+const char *I_RemovableStorageLocation(void)
+{
+#if defined(__ANDROID__)
+    return JNI_RemovableStoragePath();
+#else
+    return NULL;
+#endif
+}
 
 #ifdef __linux__
 #define MEMINFO_FILE "/proc/meminfo"
@@ -2459,6 +2504,51 @@ UINT32 I_GetFreeMem(UINT32 *total)
 #endif
 }
 
+INT32 I_CheckSystemPermission(const char *permission)
+{
+#if defined(__ANDROID__)
+	if (JNI_CheckPermission(permission))
+		return 1;
+#else
+	(void)permission;
+#endif
+	return 0;
+}
+
+INT32 I_RequestSystemPermission(const char *permission)
+{
+#if defined(__ANDROID__)
+	if (SDL_AndroidRequestPermission(permission))
+		return 1;
+#else
+	(void)permission;
+#endif
+	return 0;
+}
+
+INT32 I_StoragePermission(void)
+{
+#if defined(__ANDROID__)
+	if (JNI_StoragePermissionGranted())
+		return 1;
+	else
+		return 0;
+#else
+	return 1;
+#endif
+}
+
+INT32 I_SystemStoragePermission(void)
+{
+#if defined(__ANDROID__)
+	if (JNI_CheckStoragePermission())
+		return 1;
+	else
+		return 0;
+#else
+	return 1;
+#endif
+}
 // note CPUAFFINITY code used to reside here
 void I_RegisterSysCommands(void) {}
 
