@@ -31,6 +31,9 @@ android {
 
         setProperty("archivesBaseName", srb2PackageName)
     }
+    sourceSets.main {
+        jniLibs.srcDir 'libs'
+    }
 
     externalNativeBuild {
         cmake {
