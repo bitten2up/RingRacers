@@ -2334,10 +2334,6 @@ const char *D_Home(void)
 		userhome = I_AppStorageLocation();
 #endif
 
-#ifdef ANDROID
-	return "/storage/emulated/0/ringracers";
-#endif
-
 	if (M_CheckParm("-home") && M_IsNextParm())
 		userhome = M_GetNextParm();
 	else
