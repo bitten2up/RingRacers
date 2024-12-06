@@ -2329,6 +2329,7 @@ const char *D_Home(void)
 	const char *userhome = NULL;
 #if defined(ANDROID)
 		userhome = I_AppStorageLocation();
+	return userhome;
 #endif
 
 	if (M_CheckParm("-home") && M_IsNextParm())
