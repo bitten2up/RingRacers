@@ -2330,7 +2330,8 @@ const char *D_Home(void)
 #if defined(__ANDROID__)
 	if (I_SharedStorageLocation())
 		userhome = I_SharedStorageLocation();
-	else
+	else if (I_AppStorageLocation())
+		userhome = I_AppStorageLocation();
 #endif
 
 #ifdef ANDROID
