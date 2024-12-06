@@ -1497,7 +1497,7 @@ static void D_AndroidSetupHome(const char *userhome)
 	SetupLocation(downloaddir, "DOWNLOAD");
 
 	if (dedicated)
-		SetupLocation(configfile, "d"CONFIGFILENAME);
+		SetupLocation(configfile, "d" CONFIGFILENAME);
 	else
 		SetupLocation(configfile, CONFIGFILENAME);
 
