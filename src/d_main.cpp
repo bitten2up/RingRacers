@@ -2327,10 +2327,7 @@ void D_SRB2Main(void)
 const char *D_Home(void)
 {
 	const char *userhome = NULL;
-#if defined(__ANDROID__)
-	if (I_SharedStorageLocation())
-		userhome = I_SharedStorageLocation();
-	else if (I_AppStorageLocation())
+#if defined(ANDROID)
 		userhome = I_AppStorageLocation();
 #endif
 
