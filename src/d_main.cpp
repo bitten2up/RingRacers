@@ -1464,6 +1464,53 @@ static void Command_crash(void)
 	I_Error("The game crashed on PURPOSE, because of the 'crash' command. (This is only enabled in DEVELOP builds.)");
 }
 #endif
+#if defined(__ANDROID__)
+static void FindUsableStorageLocation(char *dest, size_t destsize, char *path, const char **homelist, char *defpath)
+{
+	for (INT32 i = 0; homelist[i]; i++)
+	{
+		snprintf(dest, destsize, "%s" PATHSEP "%s", homelist[i], path);
+		if (FIL_ReadFileOK(dest))
+			return;
+	}
+
+	snprintf(dest, destsize, "%s" PATHSEP "%s", defpath, path);
+}
+
+static void D_AndroidSetupHome(const char *userhome)
+{
+	const char *homelist[3] = { NULL, NULL, NULL };
+	INT32 next = 0;
+
+	strlcpy(srb2home, userhome, sizeof(srb2home));
+
+#define ListAdd(path) \
+	homelist[next] = path; \
+	if (homelist[next]) \
+		next++;
+
+	ListAdd(srb2home);
+	ListAdd(I_AppStorageLocation());
+
+#define SetupLocation(loc, path) FindUsableStorageLocation(loc, sizeof(loc), path, homelist, srb2home)
+
+	SetupLocation(downloaddir, "DOWNLOAD");
+
+	if (dedicated)
+		SetupLocation(configfile, "d"CONFIGFILENAME);
+	else
+		SetupLocation(configfile, CONFIGFILENAME);
+
+#ifdef TOUCHINPUTS
+	SetupLocation(touchlayoutfolder, "touchlayouts");
+#endif
+
+	SetupLocation(luafiledir, "luafiles");
+
+#undef SetupLocation
+#undef ListAdd
+}
+#endif
 
 //
 // D_SRB2Main
@@ -1555,7 +1602,9 @@ void D_SRB2Main(void)
 
 	{
 		const char *userhome = D_Home(); //Alam: path to home
-
+#if defined(__ANDROID__)
+		strlcpy(srb2path, I_AppStorageLocation(), sizeof(srb2path));
+#endif
 		if (!userhome)
 		{
 #if ((defined (__unix__) && !defined (MSDOS)) || defined(__APPLE__) || defined (UNIXCOMMON)) && !defined (__CYGWIN__)
@@ -1570,6 +1619,9 @@ void D_SRB2Main(void)
 		else
 		{
 			// use user specific config file
+#if defined(__ANDROID__)
+			D_AndroidSetupHome(userhome);
+#elif defined(DEFAULTDIR)
 #ifdef DEFAULTDIR
 			snprintf(srb2home, sizeof srb2home, "%s" PATHSEP DEFAULTDIR, userhome);
 			if (dedicated)
@@ -2276,6 +2328,11 @@ void D_SRB2Main(void)
 const char *D_Home(void)
 {
 	const char *userhome = NULL;
+#if defined(__ANDROID__)
+	if (I_SharedStorageLocation())
+		userhome = I_SharedStorageLocation();
+	else
+#endif
 
 #ifdef ANDROID
 	return "/storage/emulated/0/ringracers";
