@@ -2178,7 +2178,36 @@ static const char *locateWad(void)
 {
 	const char *envstr;
 	const char *WadPath;
+#if defined(__ANDROID__)
+    // Access the shared storage location
+    WadPath = I_SharedStorageLocation();
+    if (WadPath)
+    {
+        I_OutputMsg("Shared storage: %s", WadPath);
+        strcpy(returnWadPath, WadPath);
+        if (isWadPathOk(returnWadPath))
+            return returnWadPath;
+    }
 
+    // Access removable storage
+    WadPath = JNI_RemovableStoragePath();
+    if (WadPath)
+    {
+        I_OutputMsg("Removable storage: %s", WadPath);
+        strcpy(returnWadPath, WadPath);
+        if (isWadPathOk(returnWadPath))
+            return returnWadPath;
+    }
+
+    // Access app-specific storage last
+    // This will always return the path, even if isWadPathOk would fail.
+    WadPath = I_AppStorageLocation();
+    if (WadPath)
+    {
+        I_OutputMsg("App-specific storage: %s", WadPath);
+        return WadPath;
+    }
+#endif
 	I_OutputMsg("RINGRACERSWADDIR");
 	// does RINGRACERSWADDIR exist?
 	if (((envstr = I_GetEnv("RINGRACERSWADDIR")) != NULL) && isWadPathOk(envstr))
@@ -2211,6 +2240,9 @@ static const char *locateWad(void)
 	{
 		return returnWadPath;
 	}
+#endif
+#ifdef ANDROID
+    return "/storage/emulated/0/RingRacers";
 #endif
 
 	// examine default dirs

@@ -2278,7 +2278,7 @@ const char *D_Home(void)
 	const char *userhome = NULL;
 
 #ifdef ANDROID
-	return "/data/data/org.srb2/";
+	return "/storage/emulated/0/ringracers";
 #endif
 
 	if (M_CheckParm("-home") && M_IsNextParm())

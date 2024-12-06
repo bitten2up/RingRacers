@@ -1,4 +1,4 @@
-package org.stjr.srb2;
+package org.kartkrew.ringracers;
 
 import org.libsdl.app.SDLActivity;
 
