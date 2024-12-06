@@ -1622,7 +1622,6 @@ void D_SRB2Main(void)
 #if defined(__ANDROID__)
 			D_AndroidSetupHome(userhome);
 #elif defined(DEFAULTDIR)
-#ifdef DEFAULTDIR
 			snprintf(srb2home, sizeof srb2home, "%s" PATHSEP DEFAULTDIR, userhome);
 			if (dedicated)
 				snprintf(configfile, sizeof configfile, "%s" PATHSEP "d" CONFIGFILENAME, srb2home);
