@@ -1259,6 +1259,7 @@ void Gl2Rhi::begin_default_render_pass(Handle<GraphicsContext> ctx, bool clear)
 
 	current_render_pass_ = Gl2Rhi::DefaultRenderPassState {};
 }
+#include <iostream>
 
 void Gl2Rhi::begin_render_pass(Handle<GraphicsContext> ctx, const RenderPassBeginInfo& info)
 {
@@ -1274,6 +1275,7 @@ void Gl2Rhi::begin_render_pass(Handle<GraphicsContext> ctx, const RenderPassBegi
 	{
 		// Create a new framebuffer for this color-depth pair
 		GLuint fb_name;
+        SRB2_ASSERT(gl_->GenFramebuffers!=NULL);
 		gl_->GenFramebuffers(1, &fb_name);
 		GL_ASSERT;
 		gl_->BindFramebuffer(GL_FRAMEBUFFER, fb_name);
