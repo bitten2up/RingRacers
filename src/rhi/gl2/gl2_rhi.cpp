@@ -52,13 +52,13 @@ constexpr GLenum map_pixel_format(rhi::PixelFormat format)
 	switch (format)
 	{
 	case rhi::PixelFormat::kR8:
-		return GL_LUMINANCE8;
+		return GL_LUMINANCE;
 	case rhi::PixelFormat::kRG8:
-		return GL_LUMINANCE8_ALPHA8;
+		return GL_LUMINANCE_ALPHA;
 	case rhi::PixelFormat::kRGB8:
-		return GL_RGB8;
+		return GL_RGB8_OES;
 	case rhi::PixelFormat::kRGBA8:
-		return GL_RGBA8;
+		return GL_RGBA8_OES;
 	case rhi::PixelFormat::kDepth16:
 		return GL_DEPTH_COMPONENT16;
 	case rhi::PixelFormat::kStencil8:
@@ -1251,7 +1251,7 @@ void Gl2Rhi::begin_default_render_pass(Handle<GraphicsContext> ctx, bool clear)
 	if (clear)
 	{
 		gl_->ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		gl_->ClearDepth(1.0f);
+		gl_->ClearDepthf(1.0f);
 		gl_->ClearStencil(0);
 		gl_->Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		GL_ASSERT;
@@ -1323,7 +1323,7 @@ void Gl2Rhi::begin_render_pass(Handle<GraphicsContext> ctx, const RenderPassBegi
 	{
 		if (rp.desc.depth_load_op == rhi::AttachmentLoadOp::kClear)
 		{
-			gl_->ClearDepth(1.f);
+			gl_->ClearDepthf(1.f);
 			clear_bits |= GL_DEPTH_BUFFER_BIT;
 		}
 		if (rp.desc.stencil_load_op == rhi::AttachmentLoadOp::kClear)
@@ -1787,8 +1787,10 @@ void Gl2Rhi::read_pixels(Handle<GraphicsContext> ctx, const Rect& rect, PixelFor
 	SRB2_ASSERT(rect.y + rect.h <= src_dim.h);
 
 	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
+	#if 0 // gles2 doesnt support this but gles3 does -bitten
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
+	#endif
 
 	gl_->ReadPixels(rect.x, rect.y, rect.w, rect.h, layout, type, out.data());
 	GL_ASSERT;
