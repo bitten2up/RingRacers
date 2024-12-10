@@ -52,6 +52,8 @@ struct RenderPass
 struct Renderbuffer
 {
 };
+    using TextureOrRenderbuffer = std::variant<Handle<Texture>, Handle<Renderbuffer>>;
+
 
 enum class VertexAttributeFormat
 {

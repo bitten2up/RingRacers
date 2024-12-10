@@ -1427,7 +1427,7 @@ static SDL_bool Impl_CreateContext(void)
 	{
 		std::unique_ptr<rhi::SdlGles2Platform> platform = std::make_unique<rhi::SdlGles2Platform>();
 		platform->window = window;
-		g_rhi = std::make_unique<rhi::Gles2Rhi>(std::move(platform), reinterpret_cast<rhi::GlLoadFunc>(SDL_GL_GetProcAddress));
+		g_rhi = std::make_unique<rhi::Gles2Rhi>(std::move(platform), reinterpret_cast<rhi::Gles2LoadFunc>(SDL_GL_GetProcAddress));
 		g_rhi_generation += 1;
 	}
 
