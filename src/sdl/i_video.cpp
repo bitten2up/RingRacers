@@ -21,8 +21,8 @@
 #include <imgui.h>
 
 #include "../rhi/rhi.hpp"
-#include "../rhi/gl2/gl2_rhi.hpp"
-#include "rhi_gl2_platform.hpp"
+#include "../rhi/gles2/gles2_rhi.hpp"
+#include "rhi_gles2_platform.hpp"
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4214 4244)
@@ -1425,9 +1425,9 @@ static SDL_bool Impl_CreateContext(void)
 
 	if (!g_rhi)
 	{
-		std::unique_ptr<rhi::SdlGl2Platform> platform = std::make_unique<rhi::SdlGl2Platform>();
+		std::unique_ptr<rhi::SdlGles2Platform> platform = std::make_unique<rhi::SdlGles2Platform>();
 		platform->window = window;
-		g_rhi = std::make_unique<rhi::Gl2Rhi>(std::move(platform), reinterpret_cast<rhi::GlLoadFunc>(SDL_GL_GetProcAddress));
+		g_rhi = std::make_unique<rhi::Gles2Rhi>(std::move(platform), reinterpret_cast<rhi::GlLoadFunc>(SDL_GL_GetProcAddress));
 		g_rhi_generation += 1;
 	}
 

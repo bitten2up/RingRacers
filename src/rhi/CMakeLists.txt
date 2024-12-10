@@ -6,4 +6,4 @@ target_sources(SRB2SDL2 PRIVATE
 	shader_load_context.hpp
 )
 
-add_subdirectory(gl2)
+add_subdirectory(gles2)

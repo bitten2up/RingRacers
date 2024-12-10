@@ -359,6 +359,12 @@ struct lua_Debug {
   int i_ci;  /* active function */
 };
 
+#if defined(ANDROID)
+char *Android_strchr(const char *str, int character);
+#undef strchr
+#define strchr Android_strchr
+#endif
+
 /* }====================================================================== */
 
 

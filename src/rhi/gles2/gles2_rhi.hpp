@@ -26,8 +26,8 @@ namespace srb2::rhi
 
 struct Gles2FramebufferKey
 {
-	TextureOrRenderbuffer color;
-	std::optional<TextureOrRenderbuffer> depth;
+    Handle<Texture> color;
+	std::optional<Handle<Renderbuffer>> depth;
 
 	bool operator==(const Gles2FramebufferKey& rhs) const noexcept { return color == rhs.color && depth == rhs.depth; }
 
