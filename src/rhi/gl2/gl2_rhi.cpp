@@ -18,7 +18,7 @@
 #include <utility>
 
 #include <fmt/format.h>
-#include <glad/gl.h>
+#include <glad/gles2.h>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "../shader_load_context.hpp"
@@ -579,8 +579,8 @@ Gl2Platform::~Gl2Platform() = default;
 
 Gl2Rhi::Gl2Rhi(std::unique_ptr<Gl2Platform>&& platform, GlLoadFunc load_func) : platform_(std::move(platform))
 {
-	gl_ = std::make_unique<GladGLContext>();
-	gladLoadGLContext(gl_.get(), load_func);
+	gl_ = std::make_unique<GladGLESContext>();
+	gladLoadGLESContext(gl_.get(), load_func);
 }
 
 Gl2Rhi::~Gl2Rhi() = default;
