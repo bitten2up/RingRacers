@@ -1,4 +1,4 @@
-// DR. ROBOTNIK'S RING RACERS
+q// DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 // Copyright (C) 2024 by Ronald "Eidolon" Kinard
 // Copyright (C) 2024 by Kart Krew
@@ -1969,8 +1969,10 @@ void Gl2Rhi::copy_framebuffer_to_texture(
 	SRB2_ASSERT(src_region.y + src_region.h <= src_dim.h);
 
 	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
+#if 0 // gles2 dont support readbuffer
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
+#endif
 
 	gl_->BindTexture(GL_TEXTURE_2D, tex.texture);
 	GL_ASSERT;
