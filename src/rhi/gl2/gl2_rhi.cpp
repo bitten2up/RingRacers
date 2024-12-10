@@ -580,7 +580,7 @@ Gl2Platform::~Gl2Platform() = default;
 Gl2Rhi::Gl2Rhi(std::unique_ptr<Gl2Platform>&& platform, GlLoadFunc load_func) : platform_(std::move(platform))
 {
 	gl_ = std::make_unique<GladGLESContext>();
-	gladLoadGLESContext(gl_.get(), load_func);
+	gladLoadGLES2Context(gl_.get(), load_func);
 }
 
 Gl2Rhi::~Gl2Rhi() = default;
