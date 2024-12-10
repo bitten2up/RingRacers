@@ -1966,9 +1966,8 @@ void Gl2Rhi::copy_framebuffer_to_texture(
 	SRB2_ASSERT(src_region.y >= 0);
 	SRB2_ASSERT(src_region.x + src_region.w <= src_dim.w);
 	SRB2_ASSERT(src_region.y + src_region.h <= src_dim.h);
-
-	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
 #if 0 // gles2 dont support readbuffer
+	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
 #endif
