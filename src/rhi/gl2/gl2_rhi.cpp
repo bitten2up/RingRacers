@@ -860,8 +860,8 @@ rhi::Handle<rhi::Renderbuffer> Gl2Rhi::create_renderbuffer(const rhi::Renderbuff
 
 	// For reference, D32FS8 at 4k requires 64 MiB of linear memory. D24S8 is 32 MiB.
 
-	gl_->RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, desc.width, desc.height);
-	GL_ASSERT;
+	gl_->RenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_ATTACHMENT, desc.width, desc.height);
+	GL_ASSERT; // was GL_DEPTH24_STENCIL8
 
 	Gl2Renderbuffer rb;
 	rb.renderbuffer = name;
