@@ -1,4 +1,4 @@
-q// DR. ROBOTNIK'S RING RACERS
+// DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 // Copyright (C) 2024 by Ronald "Eidolon" Kinard
 // Copyright (C) 2024 by Kart Krew
@@ -151,13 +151,13 @@ constexpr GLenum map_internal_texture_format(rhi::TextureFormat format)
 	switch (format)
 	{
 	case rhi::TextureFormat::kRGBA:
-		return GL_RGBA8;
+		return GL_RGBA8_OES;
 	case rhi::TextureFormat::kRGB:
-		return GL_RGB8;
+		return GL_RGB8_OES;
 	case rhi::TextureFormat::kLuminance:
-		return GL_LUMINANCE8;
+		return GL_LUMINANCE;
 	case rhi::TextureFormat::kLuminanceAlpha:
-		return GL_LUMINANCE8_ALPHA8;
+		return GL_LUMINANCE_ALPHA;
 	default:
 		return GL_ZERO;
 	}
@@ -579,7 +579,7 @@ Gl2Platform::~Gl2Platform() = default;
 
 Gl2Rhi::Gl2Rhi(std::unique_ptr<Gl2Platform>&& platform, GlLoadFunc load_func) : platform_(std::move(platform))
 {
-	gl_ = std::make_unique<GladGLESContext>();
+	gl_ = std::make_unique<GladGLES2Context>();
 	gladLoadGLES2Context(gl_.get(), load_func);
 }
 
