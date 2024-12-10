@@ -57,7 +57,7 @@ struct std::hash<srb2::rhi::Gl2FramebufferKey>
 	}
 };
 
-struct GladGLContext;
+struct GladGLES2Context;
 
 namespace srb2::rhi
 {
@@ -134,7 +134,7 @@ class Gl2Rhi final : public Rhi
 {
 	std::unique_ptr<Gl2Platform> platform_;
 
-	std::unique_ptr<GladGLContext> gl_;
+	std::unique_ptr<GladGLES2Context> gl_;
 
 	Slab<Gl2RenderPass> render_pass_slab_;
 	Slab<Gl2Texture> texture_slab_;
