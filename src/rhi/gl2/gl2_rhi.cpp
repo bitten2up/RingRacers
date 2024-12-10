@@ -1785,12 +1785,11 @@ void Gl2Rhi::read_pixels(Handle<GraphicsContext> ctx, const Rect& rect, PixelFor
 	SRB2_ASSERT(rect.y >= 0);
 	SRB2_ASSERT(rect.x + rect.w <= src_dim.w);
 	SRB2_ASSERT(rect.y + rect.h <= src_dim.h);
-
+#if 0 // gles2 doesnt support this but gles3 does -bitten
 	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
-	#if 0 // gles2 doesnt support this but gles3 does -bitten
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
-	#endif
+#endif
 
 	gl_->ReadPixels(rect.x, rect.y, rect.w, rect.h, layout, type, out.data());
 	GL_ASSERT;
