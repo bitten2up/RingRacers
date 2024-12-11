@@ -25,7 +25,7 @@
 
 using namespace srb2;
 using namespace rhi;
-
+#define NDEBUG
 #ifndef NDEBUG
 #define GL_ASSERT                                                                                                      \
 	while (1)                                                                                                          \
@@ -880,312 +880,313 @@ void Gl2Rhi::destroy_renderbuffer(rhi::Handle<rhi::Renderbuffer> handle)
 
 rhi::Handle<rhi::Pipeline> Gl2Rhi::create_pipeline(const PipelineDesc& desc)
 {
-	SRB2_ASSERT(platform_ != nullptr);
-	// TODO assert compatibility of pipeline description with program using ProgramRequirements
+    SRB2_ASSERT(platform_ != nullptr);
+    // TODO assert compatibility of pipeline description with program using ProgramRequirements
 
-	const rhi::ProgramRequirements& reqs = rhi::program_requirements_for_program(desc.program);
+    const rhi::ProgramRequirements& reqs = rhi::program_requirements_for_program(desc.program);
 
-	GLuint vertex = 0;
-	GLuint fragment = 0;
-	GLuint program = 0;
-	Gl2Pipeline pipeline;
+    GLuint vertex = 0;
+    GLuint fragment = 0;
+    GLuint program = 0;
+    Gl2Pipeline pipeline;
 
-	auto [vert_srcs, frag_srcs] = platform_->find_shader_sources(desc.program);
+    auto [vert_srcs, frag_srcs] = platform_->find_shader_sources(desc.program);
 
-	// GL 2 note:
-	// Do not explicitly set GLSL version. Unversioned sources are required to be treated as 110, but writing 110
-	// breaks the AMD driver's program linker in a bizarre way.
 
-	// Process vertex shader sources
-	std::vector<const char*> vert_sources;
-	ShaderLoadContext vert_ctx;
-	vert_ctx.set_version("120");
-	for (auto& attribute : desc.vertex_input.attr_layouts)
-	{
-		for (auto const& require_attr : reqs.vertex_input.attributes)
-		{
-			if (require_attr.name == attribute.name && !require_attr.required)
-			{
-				vert_ctx.define(map_vertex_attribute_enable_define(attribute.name));
-			}
-		}
-	}
-	for (auto& uniform_group : desc.uniform_input.enabled_uniforms)
-	{
-		for (auto& uniform : uniform_group)
-		{
-			for (auto const& req_uni_group : reqs.uniforms.uniform_groups)
-			{
-				for (auto const& req_uni : req_uni_group)
-				{
-					if (req_uni.name == uniform && !req_uni.required)
-					{
-						vert_ctx.define(map_uniform_enable_define(uniform));
-					}
-				}
-			}
-		}
-	}
-	for (auto& src : vert_srcs)
-	{
-		vert_ctx.add_source(std::move(src));
-	}
-	vert_sources = vert_ctx.get_sources_array();
+    // GL 2 note:
+    // Do not explicitly set GLSL version. Unversioned sources are required to be treated as 110, but writing 110
+    // breaks the AMD driver's program linker in a bizarre way.
 
-	// Process vertex shader sources
-	std::vector<const char*> frag_sources;
-	ShaderLoadContext frag_ctx;
-	frag_ctx.set_version("120");
-	for (auto& sampler : desc.sampler_input.enabled_samplers)
-	{
-		for (auto const& require_sampler : reqs.samplers.samplers)
-		{
-			if (sampler == require_sampler.name && !require_sampler.required)
-			{
-				frag_ctx.define(map_sampler_enable_define(sampler));
-			}
-		}
-	}
-	for (auto& uniform_group : desc.uniform_input.enabled_uniforms)
-	{
-		for (auto& uniform : uniform_group)
-		{
-			for (auto const& req_uni_group : reqs.uniforms.uniform_groups)
-			{
-				for (auto const& req_uni : req_uni_group)
-				{
-					if (req_uni.name == uniform && !req_uni.required)
-					{
-						frag_ctx.define(map_uniform_enable_define(uniform));
-					}
-				}
-			}
-		}
-	}
-	for (auto& src : frag_srcs)
-	{
-		frag_ctx.add_source(std::move(src));
-	}
-	frag_sources = frag_ctx.get_sources_array();
+    // Process vertex shader sources
+    std::vector<const char*> vert_sources;
+    ShaderLoadContext vert_ctx;
+    vert_ctx.set_version("100");
+    for (auto& attribute : desc.vertex_input.attr_layouts)
+    {
+        for (auto const& require_attr : reqs.vertex_input.attributes)
+        {
+            if (require_attr.name == attribute.name && !require_attr.required)
+            {
+                vert_ctx.define(map_vertex_attribute_enable_define(attribute.name));
+            }
+        }
+    }
+    for (auto& uniform_group : desc.uniform_input.enabled_uniforms)
+    {
+        for (auto& uniform : uniform_group)
+        {
+            for (auto const& req_uni_group : reqs.uniforms.uniform_groups)
+            {
+                for (auto const& req_uni : req_uni_group)
+                {
+                    if (req_uni.name == uniform && !req_uni.required)
+                    {
+                        vert_ctx.define(map_uniform_enable_define(uniform));
+                    }
+                }
+            }
+        }
+    }
+    for (auto& src : vert_srcs)
+    {
+        vert_ctx.add_source(std::move(src));
+    }
+    vert_sources = vert_ctx.get_sources_array();
 
-	vertex = gl_->CreateShader(GL_VERTEX_SHADER);
-	gl_->ShaderSource(vertex, vert_sources.size(), vert_sources.data(), NULL);
-	gl_->CompileShader(vertex);
-	GLint is_compiled = 0;
-	gl_->GetShaderiv(vertex, GL_COMPILE_STATUS, &is_compiled);
-	if (is_compiled == GL_FALSE)
-	{
-		GLint max_length = 0;
-		gl_->GetShaderiv(vertex, GL_INFO_LOG_LENGTH, &max_length);
-		std::vector<GLchar> compile_error(max_length);
-		gl_->GetShaderInfoLog(vertex, max_length, &max_length, compile_error.data());
+    // Process vertex shader sources
+    std::vector<const char*> frag_sources;
+    ShaderLoadContext frag_ctx;
+    frag_ctx.set_version("100");
+    for (auto& sampler : desc.sampler_input.enabled_samplers)
+    {
+        for (auto const& require_sampler : reqs.samplers.samplers)
+        {
+            if (sampler == require_sampler.name && !require_sampler.required)
+            {
+                frag_ctx.define(map_sampler_enable_define(sampler));
+            }
+        }
+    }
+    for (auto& uniform_group : desc.uniform_input.enabled_uniforms)
+    {
+        for (auto& uniform : uniform_group)
+        {
+            for (auto const& req_uni_group : reqs.uniforms.uniform_groups)
+            {
+                for (auto const& req_uni : req_uni_group)
+                {
+                    if (req_uni.name == uniform && !req_uni.required)
+                    {
+                        frag_ctx.define(map_uniform_enable_define(uniform));
+                    }
+                }
+            }
+        }
+    }
+    for (auto& src : frag_srcs)
+    {
+        frag_ctx.add_source(std::move(src));
+    }
+    frag_sources = frag_ctx.get_sources_array();
 
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error(fmt::format("Vertex shader compilation failed: {}", std::string(compile_error.data()))
-		);
-	}
-	fragment = gl_->CreateShader(GL_FRAGMENT_SHADER);
-	gl_->ShaderSource(fragment, frag_sources.size(), frag_sources.data(), NULL);
-	gl_->CompileShader(fragment);
-	gl_->GetShaderiv(vertex, GL_COMPILE_STATUS, &is_compiled);
-	if (is_compiled == GL_FALSE)
-	{
-		GLint max_length = 0;
-		gl_->GetShaderiv(fragment, GL_INFO_LOG_LENGTH, &max_length);
-		std::vector<GLchar> compile_error(max_length);
-		gl_->GetShaderInfoLog(fragment, max_length, &max_length, compile_error.data());
+    vertex = gl_->CreateShader(GL_VERTEX_SHADER);
+    gl_->ShaderSource(vertex, vert_sources.size(), vert_sources.data(), NULL);
+    gl_->CompileShader(vertex);
+    GLint is_compiled = 0;
+    gl_->GetShaderiv(vertex, GL_COMPILE_STATUS, &is_compiled);
+    if (is_compiled == GL_FALSE)
+    {
+        GLint max_length = 0;
+        gl_->GetShaderiv(vertex, GL_INFO_LOG_LENGTH, &max_length);
+        std::vector<GLchar> compile_error(max_length);
+        gl_->GetShaderInfoLog(vertex, max_length, &max_length, compile_error.data());
 
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error(
-			fmt::format("Fragment shader compilation failed: {}", std::string(compile_error.data()))
-		);
-	}
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error(fmt::format("Vertex shader compilation failed: {}", std::string(compile_error.data()))
+        );
+    }
+    fragment = gl_->CreateShader(GL_FRAGMENT_SHADER);
+    gl_->ShaderSource(fragment, frag_sources.size(), frag_sources.data(), NULL);
+    gl_->CompileShader(fragment);
+    gl_->GetShaderiv(vertex, GL_COMPILE_STATUS, &is_compiled);
+    if (is_compiled == GL_FALSE)
+    {
+        GLint max_length = 0;
+        gl_->GetShaderiv(fragment, GL_INFO_LOG_LENGTH, &max_length);
+        std::vector<GLchar> compile_error(max_length);
+        gl_->GetShaderInfoLog(fragment, max_length, &max_length, compile_error.data());
 
-	// Program link
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error(
+                fmt::format("Fragment shader compilation failed: {}", std::string(compile_error.data()))
+        );
+    }
 
-	program = gl_->CreateProgram();
-	gl_->AttachShader(program, vertex);
-	gl_->AttachShader(program, fragment);
-	gl_->LinkProgram(program);
-	gl_->GetProgramiv(program, GL_LINK_STATUS, &is_compiled);
-	if (is_compiled == GL_FALSE)
-	{
-		GLint max_length = 0;
-		gl_->GetProgramiv(program, GL_INFO_LOG_LENGTH, &max_length);
-		std::vector<GLchar> link_error(max_length);
-		gl_->GetProgramInfoLog(program, max_length, &max_length, link_error.data());
+    // Program link
 
-		gl_->DeleteProgram(program);
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error(fmt::format("Pipeline program link failed: {}", std::string(link_error.data())));
-	}
+    program = gl_->CreateProgram();
+    gl_->AttachShader(program, vertex);
+    gl_->AttachShader(program, fragment);
+    gl_->LinkProgram(program);
+    gl_->GetProgramiv(program, GL_LINK_STATUS, &is_compiled);
+    if (is_compiled == GL_FALSE)
+    {
+        GLint max_length = 0;
+        gl_->GetProgramiv(program, GL_INFO_LOG_LENGTH, &max_length);
+        std::vector<GLchar> link_error(max_length);
+        gl_->GetProgramInfoLog(program, max_length, &max_length, link_error.data());
 
-	std::unordered_map<std::string, Gl2ActiveUniform> active_attributes;
-	GLint active_attribute_total = -1;
-	gl_->GetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &active_attribute_total);
-	if (active_attribute_total < 0)
-	{
-		gl_->DeleteProgram(program);
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error("Unable to retrieve program active attributes");
-	}
-	if (desc.vertex_input.attr_layouts.size() != static_cast<GLuint>(active_attribute_total))
-	{
-		gl_->DeleteProgram(program);
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error(fmt::format(
-			"Pipeline's enabled attribute count does not match the linked program's total: {} vs {}",
-			desc.vertex_input.attr_layouts.size(),
-			static_cast<GLuint>(active_attribute_total)
-		));
-	}
-	for (GLint i = 0; i < active_attribute_total; i++)
-	{
-		GLsizei name_len = 0;
-		GLint size = 0;
-		GLenum type = GL_ZERO;
-		char name[256];
-		gl_->GetActiveAttrib(program, i, 255, &name_len, &size, &type, name);
-		GL_ASSERT;
-		GLint location = gl_->GetAttribLocation(program, name);
-		GL_ASSERT;
-		active_attributes.insert({std::string(name), Gl2ActiveUniform {type, static_cast<GLuint>(location)}});
-	}
+        gl_->DeleteProgram(program);
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error(fmt::format("Pipeline program link failed: {}", std::string(link_error.data())));
+    }
 
-	std::unordered_map<std::string, Gl2ActiveUniform> active_uniforms;
-	size_t total_enabled_uniforms = 0;
-	for (auto g = desc.uniform_input.enabled_uniforms.cbegin(); g != desc.uniform_input.enabled_uniforms.cend();
-		 g = std::next(g))
-	{
-		total_enabled_uniforms += g->size();
-	}
-	GLint active_uniform_total = -1;
-	gl_->GetProgramiv(program, GL_ACTIVE_UNIFORMS, &active_uniform_total);
-	if (active_uniform_total < 0)
-	{
-		gl_->DeleteProgram(program);
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error("Unable to retrieve program active uniforms");
-	}
-	if (total_enabled_uniforms + desc.sampler_input.enabled_samplers.size() !=
-		static_cast<GLuint>(active_uniform_total))
-	{
-		gl_->DeleteProgram(program);
-		gl_->DeleteShader(fragment);
-		gl_->DeleteShader(vertex);
-		throw std::runtime_error(fmt::format(
-			"Pipeline's enabled uniform count (uniforms + samplers) does not match the linked program's total: {} vs "
-			"{}",
-			total_enabled_uniforms + desc.sampler_input.enabled_samplers.size(),
-			static_cast<GLuint>(active_uniform_total)
-		));
-	}
-	for (GLint i = 0; i < active_uniform_total; i++)
-	{
-		GLsizei name_len = 0;
-		GLint size = 0;
-		GLenum type = GL_ZERO;
-		char name[256];
-		gl_->GetActiveUniform(program, i, 255, &name_len, &size, &type, name);
-		GL_ASSERT;
-		GLint location = gl_->GetUniformLocation(program, name);
-		GL_ASSERT;
-		active_uniforms.insert({std::string(name), Gl2ActiveUniform {type, static_cast<GLuint>(location)}});
-	}
+    std::unordered_map<std::string, Gl2ActiveUniform> active_attributes;
+    GLint active_attribute_total = -1;
+    gl_->GetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &active_attribute_total);
+    if (active_attribute_total < 0)
+    {
+        gl_->DeleteProgram(program);
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error("Unable to retrieve program active attributes");
+    }
+    if (desc.vertex_input.attr_layouts.size() != static_cast<GLuint>(active_attribute_total))
+    {
+        gl_->DeleteProgram(program);
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error(fmt::format(
+                "Pipeline's enabled attribute count does not match the linked program's total: {} vs {}",
+                desc.vertex_input.attr_layouts.size(),
+                static_cast<GLuint>(active_attribute_total)
+        ));
+    }
+    for (GLint i = 0; i < active_attribute_total; i++)
+    {
+        GLsizei name_len = 0;
+        GLint size = 0;
+        GLenum type = GL_ZERO;
+        char name[256];
+        gl_->GetActiveAttrib(program, i, 255, &name_len, &size, &type, name);
+        GL_ASSERT;
+        GLint location = gl_->GetAttribLocation(program, name);
+        GL_ASSERT;
+        active_attributes.insert({std::string(name), Gl2ActiveUniform {type, static_cast<GLuint>(location)}});
+    }
 
-	for (auto& attr : desc.vertex_input.attr_layouts)
-	{
-		const char* symbol_name = map_vertex_attribute_symbol_name(attr.name);
-		SRB2_ASSERT(symbol_name != nullptr);
-		if (active_attributes.find(symbol_name) == active_attributes.end())
-		{
-			gl_->DeleteProgram(program);
-			gl_->DeleteShader(fragment);
-			gl_->DeleteShader(vertex);
-			throw std::runtime_error("Enabled attribute not found in linked program");
-		}
-		auto& active_attr = active_attributes[symbol_name];
-		auto expected_format = rhi::vertex_attribute_format(attr.name);
-		auto expected_gl_type = map_vertex_attribute_format(expected_format);
-		SRB2_ASSERT(expected_gl_type != GL_ZERO);
-		if (expected_gl_type != active_attr.type)
-		{
-			gl_->DeleteProgram(program);
-			gl_->DeleteShader(fragment);
-			gl_->DeleteShader(vertex);
-			throw std::runtime_error("Active attribute type does not match expected type");
-		}
+    std::unordered_map<std::string, Gl2ActiveUniform> active_uniforms;
+    size_t total_enabled_uniforms = 0;
+    for (auto g = desc.uniform_input.enabled_uniforms.cbegin(); g != desc.uniform_input.enabled_uniforms.cend();
+         g = std::next(g))
+    {
+        total_enabled_uniforms += g->size();
+    }
+    GLint active_uniform_total = -1;
+    gl_->GetProgramiv(program, GL_ACTIVE_UNIFORMS, &active_uniform_total);
+    if (active_uniform_total < 0)
+    {
+        gl_->DeleteProgram(program);
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error("Unable to retrieve program active uniforms");
+    }
+    if (total_enabled_uniforms + desc.sampler_input.enabled_samplers.size() !=
+        static_cast<GLuint>(active_uniform_total))
+    {
+        gl_->DeleteProgram(program);
+        gl_->DeleteShader(fragment);
+        gl_->DeleteShader(vertex);
+        throw std::runtime_error(fmt::format(
+                "Pipeline's enabled uniform count (uniforms + samplers) does not match the linked program's total: {} vs "
+                "{}",
+                total_enabled_uniforms + desc.sampler_input.enabled_samplers.size(),
+                static_cast<GLuint>(active_uniform_total)
+        ));
+    }
+    for (GLint i = 0; i < active_uniform_total; i++)
+    {
+        GLsizei name_len = 0;
+        GLint size = 0;
+        GLenum type = GL_ZERO;
+        char name[256];
+        gl_->GetActiveUniform(program, i, 255, &name_len, &size, &type, name);
+        GL_ASSERT;
+        GLint location = gl_->GetUniformLocation(program, name);
+        GL_ASSERT;
+        active_uniforms.insert({std::string(name), Gl2ActiveUniform {type, static_cast<GLuint>(location)}});
+    }
 
-		pipeline.attrib_locations.insert({attr.name, active_attr.location});
-	}
+    for (auto& attr : desc.vertex_input.attr_layouts)
+    {
+        const char* symbol_name = map_vertex_attribute_symbol_name(attr.name);
+        SRB2_ASSERT(symbol_name != nullptr);
+        if (active_attributes.find(symbol_name) == active_attributes.end())
+        {
+            gl_->DeleteProgram(program);
+            gl_->DeleteShader(fragment);
+            gl_->DeleteShader(vertex);
+            throw std::runtime_error("Enabled attribute not found in linked program");
+        }
+        auto& active_attr = active_attributes[symbol_name];
+        auto expected_format = rhi::vertex_attribute_format(attr.name);
+        auto expected_gl_type = map_vertex_attribute_format(expected_format);
+        SRB2_ASSERT(expected_gl_type != GL_ZERO);
+        if (expected_gl_type != active_attr.type)
+        {
+            gl_->DeleteProgram(program);
+            gl_->DeleteShader(fragment);
+            gl_->DeleteShader(vertex);
+            throw std::runtime_error("Active attribute type does not match expected type");
+        }
 
-	for (auto group_itr = desc.uniform_input.enabled_uniforms.cbegin();
-		 group_itr != desc.uniform_input.enabled_uniforms.cend();
-		 group_itr = std::next(group_itr))
-	{
-		auto& group = *group_itr;
-		for (auto itr = group.cbegin(); itr != group.cend(); itr = std::next(itr))
-		{
-			auto& uniform = *itr;
-			const char* symbol_name = map_uniform_attribute_symbol_name(uniform);
-			SRB2_ASSERT(symbol_name != nullptr);
-			if (active_uniforms.find(symbol_name) == active_uniforms.end())
-			{
-				gl_->DeleteProgram(program);
-				gl_->DeleteShader(fragment);
-				gl_->DeleteShader(vertex);
-				throw std::runtime_error("Enabled uniform not found in linked program");
-			}
-			auto& active_uniform = active_uniforms[symbol_name];
-			auto expected_format = rhi::uniform_format(uniform);
-			auto expected_gl_type = map_uniform_format(expected_format);
-			SRB2_ASSERT(expected_gl_type != GL_ZERO);
-			if (expected_gl_type != active_uniform.type)
-			{
-				gl_->DeleteProgram(program);
-				gl_->DeleteShader(fragment);
-				gl_->DeleteShader(vertex);
-				throw std::runtime_error("Active uniform type does not match expected type");
-			}
-			SRB2_ASSERT(pipeline.uniform_locations.find(uniform) == pipeline.uniform_locations.end());
-			pipeline.uniform_locations.insert({uniform, active_uniform.location});
-		}
-	}
+        pipeline.attrib_locations.insert({attr.name, active_attr.location});
+    }
 
-	for (auto& sampler : desc.sampler_input.enabled_samplers)
-	{
-		const char* symbol_name = map_sampler_symbol_name(sampler);
-		SRB2_ASSERT(symbol_name != nullptr);
-		if (active_uniforms.find(symbol_name) == active_uniforms.end())
-		{
-			gl_->DeleteProgram(program);
-			gl_->DeleteShader(fragment);
-			gl_->DeleteShader(vertex);
-			throw std::runtime_error("Enabled sampler not found in linked program");
-		}
-		auto& active_sampler = active_uniforms[symbol_name];
-		if (active_sampler.type != GL_SAMPLER_2D)
-		{
-			gl_->DeleteProgram(program);
-			gl_->DeleteShader(fragment);
-			gl_->DeleteShader(vertex);
-			throw std::runtime_error("Active sampler type does not match expected type");
-		}
+    for (auto group_itr = desc.uniform_input.enabled_uniforms.cbegin();
+         group_itr != desc.uniform_input.enabled_uniforms.cend();
+         group_itr = std::next(group_itr))
+    {
+        auto& group = *group_itr;
+        for (auto itr = group.cbegin(); itr != group.cend(); itr = std::next(itr))
+        {
+            auto& uniform = *itr;
+            const char* symbol_name = map_uniform_attribute_symbol_name(uniform);
+            SRB2_ASSERT(symbol_name != nullptr);
+            if (active_uniforms.find(symbol_name) == active_uniforms.end())
+            {
+                gl_->DeleteProgram(program);
+                gl_->DeleteShader(fragment);
+                gl_->DeleteShader(vertex);
+                throw std::runtime_error("Enabled uniform not found in linked program");
+            }
+            auto& active_uniform = active_uniforms[symbol_name];
+            auto expected_format = rhi::uniform_format(uniform);
+            auto expected_gl_type = map_uniform_format(expected_format);
+            SRB2_ASSERT(expected_gl_type != GL_ZERO);
+            if (expected_gl_type != active_uniform.type)
+            {
+                gl_->DeleteProgram(program);
+                gl_->DeleteShader(fragment);
+                gl_->DeleteShader(vertex);
+                throw std::runtime_error("Active uniform type does not match expected type");
+            }
+            SRB2_ASSERT(pipeline.uniform_locations.find(uniform) == pipeline.uniform_locations.end());
+            pipeline.uniform_locations.insert({uniform, active_uniform.location});
+        }
+    }
 
-		pipeline.sampler_locations.insert({sampler, active_sampler.location});
-	}
+    for (auto& sampler : desc.sampler_input.enabled_samplers)
+    {
+        const char* symbol_name = map_sampler_symbol_name(sampler);
+        SRB2_ASSERT(symbol_name != nullptr);
+        if (active_uniforms.find(symbol_name) == active_uniforms.end())
+        {
+            gl_->DeleteProgram(program);
+            gl_->DeleteShader(fragment);
+            gl_->DeleteShader(vertex);
+            throw std::runtime_error("Enabled sampler not found in linked program");
+        }
+        auto& active_sampler = active_uniforms[symbol_name];
+        if (active_sampler.type != GL_SAMPLER_2D)
+        {
+            gl_->DeleteProgram(program);
+            gl_->DeleteShader(fragment);
+            gl_->DeleteShader(vertex);
+            throw std::runtime_error("Active sampler type does not match expected type");
+        }
 
-	pipeline.desc = desc;
-	pipeline.vertex_shader = vertex;
-	pipeline.fragment_shader = fragment;
-	pipeline.program = program;
+        pipeline.sampler_locations.insert({sampler, active_sampler.location});
+    }
 
-	return pipeline_slab_.insert(std::move(pipeline));
+    pipeline.desc = desc;
+    pipeline.vertex_shader = vertex;
+    pipeline.fragment_shader = fragment;
+    pipeline.program = program;
+
+    return pipeline_slab_.insert(std::move(pipeline));
 }
 
 void Gl2Rhi::destroy_pipeline(rhi::Handle<rhi::Pipeline> handle)
@@ -1785,11 +1786,9 @@ void Gl2Rhi::read_pixels(Handle<GraphicsContext> ctx, const Rect& rect, PixelFor
 	SRB2_ASSERT(rect.y >= 0);
 	SRB2_ASSERT(rect.x + rect.w <= src_dim.w);
 	SRB2_ASSERT(rect.y + rect.h <= src_dim.h);
-#if 0 // gles2 doesnt support this but gles3 does -bitten
 	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
-#endif
 
 	gl_->ReadPixels(rect.x, rect.y, rect.w, rect.h, layout, type, out.data());
 	GL_ASSERT;
@@ -1966,11 +1965,11 @@ void Gl2Rhi::copy_framebuffer_to_texture(
 	SRB2_ASSERT(src_region.y >= 0);
 	SRB2_ASSERT(src_region.x + src_region.w <= src_dim.w);
 	SRB2_ASSERT(src_region.y + src_region.h <= src_dim.h);
-#if 0 // gles2 dont support readbuffer
+
 	GLenum read_buffer = is_back ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0;
 	gl_->ReadBuffer(read_buffer);
 	GL_ASSERT;
-#endif
+
 
 	gl_->BindTexture(GL_TEXTURE_2D, tex.texture);
 	GL_ASSERT;

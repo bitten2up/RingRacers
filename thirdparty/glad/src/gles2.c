@@ -123,6 +123,7 @@ static void glad_gl_load_GL_ES_VERSION_2_0(GladGLES2Context *context, GLADuserpt
     context->PixelStorei = (PFNGLPIXELSTOREIPROC) load(userptr, "glPixelStorei");
     context->PolygonOffset = (PFNGLPOLYGONOFFSETPROC) load(userptr, "glPolygonOffset");
     context->ReadPixels = (PFNGLREADPIXELSPROC) load(userptr, "glReadPixels");
+    context->ReadBuffer = (PFNGLREADBUFFERPROC) load(userptr, "glReadBuffer");
     context->ReleaseShaderCompiler = (PFNGLRELEASESHADERCOMPILERPROC) load(userptr, "glReleaseShaderCompiler");
     context->RenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC) load(userptr, "glRenderbufferStorage");
     context->SampleCoverage = (PFNGLSAMPLECOVERAGEPROC) load(userptr, "glSampleCoverage");
@@ -343,7 +344,7 @@ int gladLoadGLES2Context(GladGLES2Context *context, GLADloadfunc load) {
 
 
 
- 
+
 
 
 #ifdef __cplusplus

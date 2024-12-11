@@ -268,6 +268,9 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
 #define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
 #define GL_FRONT 0x0404
+#define GL_BACK 0x0405
+#define GL_BACK_LEFT 0x0402
+#define GL_BACK_RIGHT 0x0403
 #define GL_FRONT_AND_BACK 0x0408
 #define GL_FRONT_FACE 0x0B46
 #define GL_FUNC_ADD 0x8006
@@ -644,6 +647,7 @@ typedef void (GLAD_API_PTR *PFNGLLINKPROGRAMPROC)(GLuint program);
 typedef void (GLAD_API_PTR *PFNGLPIXELSTOREIPROC)(GLenum pname, GLint param);
 typedef void (GLAD_API_PTR *PFNGLPOLYGONOFFSETPROC)(GLfloat factor, GLfloat units);
 typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void * pixels);
+typedef void (GLAD_API_PTR *PFNGLREADBUFFERPROC)(GLenum src);
 typedef void (GLAD_API_PTR *PFNGLRELEASESHADERCOMPILERPROC)(void);
 typedef void (GLAD_API_PTR *PFNGLRENDERBUFFERSTORAGEPROC)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
 typedef void (GLAD_API_PTR *PFNGLSAMPLECOVERAGEPROC)(GLfloat value, GLboolean invert);
@@ -793,6 +797,8 @@ typedef struct GladGLES2Context {
     PFNGLPIXELSTOREIPROC PixelStorei;
     PFNGLPOLYGONOFFSETPROC PolygonOffset;
     PFNGLREADPIXELSPROC ReadPixels;
+    PFNGLREADBUFFERPROC ReadBuffer;
+
     PFNGLRELEASESHADERCOMPILERPROC ReleaseShaderCompiler;
     PFNGLRENDERBUFFERSTORAGEPROC RenderbufferStorage;
     PFNGLSAMPLECOVERAGEPROC SampleCoverage;
