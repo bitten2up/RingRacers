@@ -227,6 +227,13 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define GL_DECR_WRAP 0x8508
 #define GL_DELETE_STATUS 0x8B80
 #define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_DEPTH_STENCIL_OES 0x84F9
+#define GL_UNSIGNED_INT_24_8_OES 0x84FA
+#define GL_DEPTH24_STENCIL8_OES 0x88F0
+#ifndef GL_OES_packed_depth_stencil
+#define GL_OES_packed_depth_stencil 1
+GLAPI int GLAD_GL_OES_packed_depth_stencil;
+#endif
 #define GL_DEPTH_BITS 0x0D56
 #define GL_DEPTH_BUFFER_BIT 0x00000100
 #define GL_DEPTH_CLEAR_VALUE 0x0B73

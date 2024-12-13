@@ -25,7 +25,6 @@
 
 using namespace srb2;
 using namespace rhi;
-#define NDEBUG
 #ifndef NDEBUG
 #define GL_ASSERT                                                                                                      \
 	while (1)                                                                                                          \
@@ -33,7 +32,7 @@ using namespace rhi;
 		GLenum __err = gl_->GetError();                                                                                \
 		if (__err != GL_NO_ERROR)                                                                                      \
 		{                                                                                                              \
-			I_Error("GL Error at %s %d: %d", __FILE__, __LINE__, __err);                                               \
+			I_Error("GL Error at %s %d: 0x%x", __FILE__, __LINE__, __err);                                               \
 		}                                                                                                              \
 		else                                                                                                           \
 		{                                                                                                              \
@@ -598,34 +597,6 @@ void Gl2Rhi::destroy_render_pass(rhi::Handle<rhi::RenderPass> handle)
 	render_pass_slab_.remove(handle);
 }
 
-rhi::Handle<rhi::Texture> Gl2Rhi::create_texture(const rhi::TextureDesc& desc)
-{
-	GLenum internal_format = map_internal_texture_format(desc.format);
-	SRB2_ASSERT(internal_format != GL_ZERO);
-	GLenum format = GL_RGBA;
-
-	GLuint name = 0;
-	gl_->GenTextures(1, &name);
-
-	gl_->BindTexture(GL_TEXTURE_2D, name);
-
-	gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, map_texture_filter(desc.min));
-	GL_ASSERT;
-	gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, map_texture_filter(desc.mag));
-	GL_ASSERT;
-	gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, map_texture_wrap(desc.u_wrap));
-	GL_ASSERT;
-	gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, map_texture_wrap(desc.v_wrap));
-	GL_ASSERT;
-	gl_->TexImage2D(GL_TEXTURE_2D, 0, internal_format, desc.width, desc.height, 0, format, GL_UNSIGNED_BYTE, nullptr);
-	GL_ASSERT;
-
-	Gl2Texture texture;
-	texture.texture = name;
-	texture.desc = desc;
-	return texture_slab_.insert(std::move(texture));
-}
-
 void Gl2Rhi::destroy_texture(rhi::Handle<rhi::Texture> handle)
 {
 	SRB2_ASSERT(texture_slab_.is_valid(handle) == true);
@@ -633,6 +604,34 @@ void Gl2Rhi::destroy_texture(rhi::Handle<rhi::Texture> handle)
 	GLuint name = casted.texture;
 	gl_->DeleteTextures(1, &name);
 	GL_ASSERT;
+}
+
+rhi::Handle<rhi::Texture> Gl2Rhi::create_texture(const rhi::TextureDesc& desc)
+{
+    GLenum internal_format = map_internal_texture_format(desc.format);
+    SRB2_ASSERT(internal_format != GL_ZERO);
+    GLenum format = map_texture_format(desc.format);
+
+    GLuint name = 0;
+    gl_->GenTextures(1, &name);
+
+    gl_->BindTexture(GL_TEXTURE_2D, name);
+
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, map_texture_filter(desc.min));
+    GL_ASSERT;
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, map_texture_filter(desc.mag));
+    GL_ASSERT;
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, map_texture_wrap(desc.u_wrap));
+    GL_ASSERT;
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, map_texture_wrap(desc.v_wrap));
+    GL_ASSERT;
+    gl_->TexImage2D(GL_TEXTURE_2D, 0, internal_format, desc.width, desc.height, 0, format, GL_UNSIGNED_BYTE, nullptr);
+    GL_ASSERT;
+
+    Gl2Texture texture;
+    texture.texture = name;
+    texture.desc = desc;
+    return texture_slab_.insert(std::move(texture));
 }
 
 void Gl2Rhi::update_texture(
@@ -860,8 +859,8 @@ rhi::Handle<rhi::Renderbuffer> Gl2Rhi::create_renderbuffer(const rhi::Renderbuff
 
 	// For reference, D32FS8 at 4k requires 64 MiB of linear memory. D24S8 is 32 MiB.
 
-	gl_->RenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_ATTACHMENT, desc.width, desc.height);
-	GL_ASSERT; // was GL_DEPTH24_STENCIL8
+	gl_->RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, desc.width, desc.height);
+	GL_ASSERT; // was
 
 	Gl2Renderbuffer rb;
 	rb.renderbuffer = name;
@@ -1324,7 +1323,7 @@ void Gl2Rhi::begin_render_pass(Handle<GraphicsContext> ctx, const RenderPassBegi
 	{
 		if (rp.desc.depth_load_op == rhi::AttachmentLoadOp::kClear)
 		{
-			gl_->ClearDepthf(1.f);
+			gl_->ClearDepthf(1.0f);
 			clear_bits |= GL_DEPTH_BUFFER_BIT;
 		}
 		if (rp.desc.stencil_load_op == rhi::AttachmentLoadOp::kClear)
