@@ -227,6 +227,13 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define GL_DECR_WRAP 0x8508
 #define GL_DELETE_STATUS 0x8B80
 #define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_DEPTH_STENCIL_OES 0x84F9
+#define GL_UNSIGNED_INT_24_8_OES 0x84FA
+#define GL_DEPTH24_STENCIL8_OES 0x88F0
+#ifndef GL_OES_packed_depth_stencil
+#define GL_OES_packed_depth_stencil 1
+GLAPI int GLAD_GL_OES_packed_depth_stencil;
+#endif
 #define GL_DEPTH_BITS 0x0D56
 #define GL_DEPTH_BUFFER_BIT 0x00000100
 #define GL_DEPTH_CLEAR_VALUE 0x0B73
@@ -268,6 +275,9 @@ typedef void (*GLADpostcallback)(void *ret, const char *name, GLADapiproc apipro
 #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
 #define GL_FRAMEBUFFER_UNSUPPORTED 0x8CDD
 #define GL_FRONT 0x0404
+#define GL_BACK 0x0405
+#define GL_BACK_LEFT 0x0402
+#define GL_BACK_RIGHT 0x0403
 #define GL_FRONT_AND_BACK 0x0408
 #define GL_FRONT_FACE 0x0B46
 #define GL_FUNC_ADD 0x8006
@@ -644,6 +654,7 @@ typedef void (GLAD_API_PTR *PFNGLLINKPROGRAMPROC)(GLuint program);
 typedef void (GLAD_API_PTR *PFNGLPIXELSTOREIPROC)(GLenum pname, GLint param);
 typedef void (GLAD_API_PTR *PFNGLPOLYGONOFFSETPROC)(GLfloat factor, GLfloat units);
 typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void * pixels);
+typedef void (GLAD_API_PTR *PFNGLREADBUFFERPROC)(GLenum src);
 typedef void (GLAD_API_PTR *PFNGLRELEASESHADERCOMPILERPROC)(void);
 typedef void (GLAD_API_PTR *PFNGLRENDERBUFFERSTORAGEPROC)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
 typedef void (GLAD_API_PTR *PFNGLSAMPLECOVERAGEPROC)(GLfloat value, GLboolean invert);
@@ -793,6 +804,8 @@ typedef struct GladGLES2Context {
     PFNGLPIXELSTOREIPROC PixelStorei;
     PFNGLPOLYGONOFFSETPROC PolygonOffset;
     PFNGLREADPIXELSPROC ReadPixels;
+    PFNGLREADBUFFERPROC ReadBuffer;
+
     PFNGLRELEASESHADERCOMPILERPROC ReleaseShaderCompiler;
     PFNGLRENDERBUFFERSTORAGEPROC RenderbufferStorage;
     PFNGLSAMPLECOVERAGEPROC SampleCoverage;
