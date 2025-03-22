@@ -67,6 +67,7 @@ const char *JNI_GetWriteExternalStoragePermission(void);
 
 char *JNI_GetDeviceInfo(const char *info);
 void JNI_DisplayToast(const char *text);
+void JNI_OpenFolder();
 
 boolean JNI_IsInMultiWindowMode(void);
 

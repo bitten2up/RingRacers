@@ -387,12 +387,20 @@ boolean JNI_StoragePermissionGranted(void)
 
 const char *JNI_GetWriteExternalStoragePermission(void)
 {
-	return "android.permission.WRITE_EXTERNAL_STORAGE";
+    //return "android.permission.MANAGE_EXTERNAL_STORAGE"; //need to enable scoped storage from my research
+    return "android.permission.WRITE_EXTERNAL_STORAGE";
 }
 
 void JNI_DisplayToast(const char *text)
 {
 	SDL_AndroidShowToast(text, 1, -1, 0, 0);
+}
+
+void JNI_OpenFolder()
+{
+    JNIEnv *env = JNI_GetEnv();
+    jmethodID method = (*env)->GetStaticMethodID(env, activityClass, "openFolder", "()V");
+    (*env)->CallStaticVoidMethod(env, activityClass, method);
 }
 
 boolean JNI_IsInMultiWindowMode(void)

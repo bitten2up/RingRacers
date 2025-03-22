@@ -93,6 +93,7 @@ static boolean StorageCheckPermission(void)
 	PermissionRequestMessage();
 
 	// Permission granted. Create the directory.
+    JNI_OpenFolder();
 	if (I_RequestSystemPermission(JNI_GetWriteExternalStoragePermission()))
 	{
 		StorageGrantedPermission();
