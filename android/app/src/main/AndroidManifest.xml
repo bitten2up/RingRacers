@@ -46,6 +46,7 @@
         android:icon="@mipmap/ic_launcher"
         android:isGame="true"
         android:allowBackup="true"
+        android:extractNativeLibs="true"
         android:theme="@style/AppTheme"
         android:hardwareAccelerated="true" >
 
