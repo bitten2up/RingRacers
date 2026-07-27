@@ -1050,7 +1050,7 @@ void D_SRB2Loop(void)
 					world = false;
 			}
 
-			ranwipe = D_Display(world);
+			//ranwipe = D_Display(world);
 		}
 
 #ifdef HWRENDER

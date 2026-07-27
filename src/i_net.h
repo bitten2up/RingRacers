@@ -18,6 +18,11 @@
 #include "doomdef.h"
 #include "command.h"
 
+#ifdef __3DS__
+#ifdef HAVE_IPV6
+#undef HAVE_IPV6
+#endif
+#endif
 /// \brief program net id
 #define DOOMCOM_ID (INT32)0x12345678l
 

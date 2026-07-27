@@ -52,7 +52,11 @@
 #endif
 #endif
 
+#ifndef __3DS__
 static unsigned char imgbuf[1<<26];
+#else
+static unsigned char imgbuf[1<<16];
+#endif
 
 #ifdef PICTURE_PNG_USELOOKUP
 static colorlookup_t png_colorlookup;

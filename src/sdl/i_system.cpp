@@ -1606,8 +1606,8 @@ static void I_Fork(void)
 
 INT32 I_StartupSystem(void)
 {
-#ifdef __3DS__3
-	if (PTMSYSM_CheckNew3DS())
+#ifdef __3DS__
+	//if (PTMSYSM_CheckNew3DS())
 	{
 		osSetSpeedupEnable(true);
 		// enable fast clock + L2 cache on new3ds
@@ -2292,8 +2292,8 @@ static const char *locateWad(void)
 const char *I_LocateWad(void)
 {
 #ifdef __3DS__
-	chdir("sdmc:/3ds/srb2");
-	return "sdmc:/3ds/srb2";
+	chdir("sdmc:/3ds/ringracers");
+	return "sdmc:/3ds/ringracers";
 #endif
 	const char *waddir;
 

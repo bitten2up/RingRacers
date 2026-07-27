@@ -16,9 +16,11 @@
 #include <cstring>
 #include <stdexcept>
 
+#ifdef __3DS__
 // wtf 3ds, its included
 _off64_t fseeko64 (FILE *, _off64_t, int);
 _off64_t ftello64 (FILE *);
+#endif
 
 template class srb2::io::ZlibInputStream<srb2::io::SpanStream>;
 template class srb2::io::ZlibInputStream<srb2::io::VecStream>;

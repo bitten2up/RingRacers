@@ -119,6 +119,7 @@ extern "C" {
 #include "doomtype.h"
 #include "i_tcp.h"
 
+#undef HAVE_IPV6
 union mysockaddr_t
 {
 	struct sockaddr     any;
