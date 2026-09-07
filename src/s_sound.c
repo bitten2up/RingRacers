@@ -41,10 +41,6 @@
 #include "y_inter.h" // Y_PlayIntermissionMusic
 #include "f_finale.h" // F_PlayTitleScreenMusic
 
-#if defined(__ANDROID__) // bitten put in cmake not here later
-#define NOMUMBLE
-#endif
-
 extern consvar_t cv_mastervolume;
 
 CV_PossibleValue_t soundmixingbuffersize_cons_t[] = {

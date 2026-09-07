@@ -16,6 +16,15 @@ target_sources(SRB2SDL2 PRIVATE
 	hwsym_sdl.c
 )
 
+if(${CMAKE_SYSTEM} MATCHES "Android")
+	# Support 16 KB page sizes on Android
+	target_link_options(SRB2SDL2 PRIVATE
+		"-Wl,-z,max-page-size=16384"
+		"-Wl,-z,common-page-size=16384"
+	)
+	target_compile_definitions(SRB2SDL2 PRIVATE -DNOMUMBLE -DSTDC_HEADERS)
+endif()
+
 if(${SRB2_USEASM})
 	set_source_files_properties(${SRB2_ASM_SOURCES} PROPERTIES LANGUAGE C)
 	set_source_files_properties(${SRB2_ASM_SOURCES} PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")

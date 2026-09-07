@@ -1471,7 +1471,12 @@ INT32 VID_SetMode(INT32 modeNum)
 
 static SDL_bool Impl_CreateWindow(SDL_bool fullscreen)
 {
-	uint32_t flags = SDL_WINDOW_RESIZABLE;
+	uint32_t flags =
+#ifndef __ANDROID__	
+		SDL_WINDOW_RESIZABLE;
+#else
+		0;
+#endif
 
 	if (rendermode == render_none) // dedicated
 		return SDL_TRUE; // Monster Iestyn -- not sure if it really matters what we return here tbh

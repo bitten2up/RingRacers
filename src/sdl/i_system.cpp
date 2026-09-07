@@ -111,9 +111,6 @@ typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
 #include <sys/wait.h>
 #define NEWSIGNALHANDLER
 #endif
-#if defined(__ANDROID__)
-#define NOMUMBLE
-#endif
 
 #ifndef NOMUMBLE
 #ifdef __linux__ // need -lrt

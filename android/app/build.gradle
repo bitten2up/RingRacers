@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 36
     namespace 'org.kartkrew.ringracers'
     lintOptions {
         abortOnError false
@@ -11,8 +11,8 @@ android {
 
         minSdkVersion  28
         targetSdkVersion 30
-        versionCode 230
-        versionName "2.3"
+        versionCode 240
+        versionName "2.4"
         ndkVersion "26.1.10909125"
         externalNativeBuild {
             cmake {
