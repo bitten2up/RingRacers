@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -423,8 +423,8 @@ static void K_DrawFinishLineBeamForLine(fixed_t offset, angle_t aiming, line_t *
 --------------------------------------------------*/
 
 void K_RunFinishLineBeam(void)
-{
-	if ((gametyperules & GTR_ROLLINGSTART) || !(leveltime < starttime || rainbowstartavailable == true))
+{	
+	if ((gametyperules & GTR_ROLLINGSTART) || !(leveltime < starttime || rainbowstartavailable == true) || P_LevelIsFrozen())
 	{
 		return;
 	}
@@ -462,9 +462,30 @@ UINT8 K_RaceLapCount(INT16 mapNum)
 
 	if (cv_numlaps.value == -1)
 	{
-		// Use map default
-		return mapheaderinfo[mapNum]->numlaps;
+		// Use map default, except on Relaxed
+
+		UINT8 laps = mapheaderinfo[mapNum]->numlaps;
+
+		if (gamespeed == KARTSPEED_EASY && laps > 2)
+			laps = (3*laps + 4 - 1) / 4; // 3/4th laps, rounded
+
+		return laps;
 	}
 
 	return cv_numlaps.value;
+}
+
+void K_SpawnFinishEXP(player_t *player, UINT16 exp)
+{
+	if (finishBeamLine != NULL)
+	{
+		mobj_t *p1 = P_SpawnMobj(finishBeamLine->v1->x, finishBeamLine->v1->y, player->mo->z, MT_THOK);
+		mobj_t *p2 = P_SpawnMobj(finishBeamLine->v2->x, finishBeamLine->v2->y, player->mo->z, MT_THOK);
+		K_SpawnEXP(player, exp, p1);
+		K_SpawnEXP(player, exp, p2);
+	}
+	else
+	{
+		K_SpawnEXP(player, exp*2, player->mo);
+	}
 }

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -92,7 +92,7 @@ void I_OsPolling(void);
 
 /**	\brief Called by M_Responder when quit is selected, return exit code 0
 */
-void I_Quit(void) FUNCNORETURN;
+FUNCNORETURN void ATTRNORETURN I_Quit(void);
 
 typedef enum
 {
@@ -218,11 +218,11 @@ const char *I_GetJoyName(INT32 joyindex);
 #ifndef NOMUMBLE
 #include "p_mobj.h" // mobj_t
 #include "s_sound.h" // listener_t
+
 /** \brief to update Mumble of Player Postion
 */
 void I_UpdateMumble(const mobj_t *mobj, const listener_t listener);
 #endif
-
 /**	\brief Startup the mouse
 */
 void I_StartupMouse(void);

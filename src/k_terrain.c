@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 // Copyright (C) 2021 by ZDoom + GZDoom teams, and contributors
 //
 // This program is free software distributed under the
@@ -333,6 +333,16 @@ terrain_t *K_GetDefaultTerrain(void)
 }
 
 /*--------------------------------------------------
+	size_t K_GetDefaultTerrainID(void)
+
+		See header file for description.
+--------------------------------------------------*/
+size_t K_GetDefaultTerrainID(void)
+{
+	return defaultTerrain;
+}
+
+/*--------------------------------------------------
 	terrain_t *K_GetTerrainForTextureName(const char *checkName)
 
 		See header file for description.
@@ -361,6 +371,34 @@ terrain_t *K_GetTerrainForTextureName(const char *checkName)
 }
 
 /*--------------------------------------------------
+	size_t K_GetTerrainIDForTextureName(const char *checkName)
+
+		See header file for description.
+--------------------------------------------------*/
+size_t K_GetTerrainIDForTextureName(const char *checkName)
+{
+	UINT32 checkHash = quickncasehash(checkName, 8);
+	size_t i;
+
+	if (numTerrainFloorDefs > 0)
+	{
+		for (i = 0; i < numTerrainFloorDefs; i++)
+		{
+			t_floor_t *f = &terrainFloorDefs[i];
+
+			if (checkHash == f->textureHash && !strncasecmp(checkName, f->textureName, 8))
+			{
+				return f->terrainID;
+			}
+		}
+	}
+
+	// This texture doesn't have a terrain directly applied to it,
+	// so we fallback to the default terrain.
+	return K_GetDefaultTerrainID();
+}
+
+/*--------------------------------------------------
 	terrain_t *K_GetTerrainForTextureNum(INT32 textureNum)
 
 		See header file for description.
@@ -370,7 +408,7 @@ terrain_t *K_GetTerrainForTextureNum(INT32 textureNum)
 	if (textureNum >= 0 && textureNum < numtextures)
 	{
 		texture_t *tex = textures[textureNum];
-		return tex->terrain;
+		return K_GetTerrainByIndex(tex->terrainID);
 	}
 
 	// This texture doesn't have a terrain directly applied to it,
@@ -463,7 +501,21 @@ void K_ProcessTerrainEffect(mobj_t *mo)
 	if (terrain->damageType > 0)
 	{
 		UINT8 dmg = (terrain->damageType & 0xFF);
-		P_DamageMobj(mo, NULL, NULL, 1, dmg);
+
+		if ((dmg == DMG_STUMBLE) && !G_CompatLevel(0x0010))
+		{
+			if (player->mo->hitlag == 0 &&
+				(player->mo->momz == 0 || (player->mo->momz > 0) != (P_MobjFlip(player->mo) > 0)))
+			{
+				player->pflags2 |= PF2_ALWAYSDAMAGED;
+				P_DamageMobj(mo, NULL, NULL, 1, dmg);
+				player->pflags2 &= ~PF2_ALWAYSDAMAGED;
+			}
+		}
+		else
+		{
+			P_DamageMobj(mo, NULL, NULL, 1, dmg);
+		}
 	}
 
 	// Sneaker panel
@@ -551,6 +603,15 @@ void K_ProcessTerrainEffect(mobj_t *mo)
 			player->dashpadcooldown = TICRATE/3;
 			player->trickpanel = TRICKSTATE_NONE;
 			player->floorboost = 2;
+			
+			if (G_CompatLevel(0x0011))
+			{
+				// Old behavior, no grease
+			}
+			else
+			{
+				player->tiregrease = TICRATE/2;
+			}
 
 			S_StartSound(player->mo, sfx_cdfm62);
 		}
@@ -665,9 +726,7 @@ void K_SetDefaultFriction(mobj_t *mo)
 	if (mo->terrain != NULL)
 	{
 		fixed_t strength = mo->terrain->friction;
-
 		fixed_t newFriction = INT32_MAX;
-		fixed_t newMovefactor = INT32_MAX;
 
 		if (strength > 0) // sludge
 		{
@@ -693,18 +752,7 @@ void K_SetDefaultFriction(mobj_t *mo)
 
 		if (isPlayer == true)
 		{
-			newMovefactor = FixedDiv(ORIG_FRICTION, newFriction);
-
-			if (newMovefactor < FRACUNIT)
-			{
-				newMovefactor = 19*newMovefactor - 18*FRACUNIT;
-			}
-			else
-			{
-				newMovefactor = FRACUNIT;
-			}
-
-			mo->movefactor = newMovefactor;
+			mo->movefactor = P_MoveFactorFromFriction(newFriction);
 		}
 	}
 }
@@ -1592,7 +1640,7 @@ boolean K_TerrainHasAffect(terrain_t *terrain, boolean badonly)
 	|| terrain->trickPanel != 0
 	|| terrain->speedPad != 0
 	|| terrain->springStrength != 0
-	|| terrain->flags != 0);
+	|| (terrain->flags & (TRF_LIQUID|TRF_SNEAKERPANEL|TRF_TRIPWIRE)));
 }
 
 /*--------------------------------------------------
@@ -1823,7 +1871,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				t_splash_t *s = NULL;
 
@@ -1864,7 +1912,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				t_footstep_t *fs = NULL;
 
@@ -1905,7 +1953,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				t_overlay_t *o = NULL;
 
@@ -1946,7 +1994,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				terrain_t *t = NULL;
 
@@ -1987,7 +2035,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				if (stricmp(tkn, "optional") == 0)
 				{
@@ -1998,7 +2046,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 					pos = M_GetTokenPos();
 				}
 
-				if (tkn && pos < size)
+				if (tkn && pos <= size)
 				{
 					t_floor_t *f = NULL;
 
@@ -2027,7 +2075,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 					tkn = M_GetToken(NULL);
 					pos = M_GetTokenPos();
 
-					if (tkn && pos < size)
+					if (tkn && pos <= size)
 					{
 						terrain_t *t = K_GetTerrainByName(tkn);
 
@@ -2044,7 +2092,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 							INT32 tex = R_CheckTextureNumForName(f->textureName);
 							if (tex != -1)
 							{
-								textures[tex]->terrain = t;
+								textures[tex]->terrainID = f->terrainID;
 							}
 						}
 					}
@@ -2072,7 +2120,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				terrain_t *t = NULL;
 
@@ -2111,7 +2159,7 @@ static boolean K_TERRAINLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				t_footstep_t *fs = NULL;
 

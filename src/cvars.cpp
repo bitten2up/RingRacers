@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -244,10 +244,6 @@ X (cvlist_timer);
 
 X (cvlist_execversion);
 
-#ifdef DUMPCONSISTENCY
-	X (cvlist_dumpconsistency);
-#endif
-
 #undef X
 
 namespace
@@ -296,7 +292,8 @@ const auto GraphicsDriver = consvar_t::Builder(cvlist_graphics_driver).save();
 // Player local, not available on dedicated servers.
 // These usually save...
 //
-
+extern "C"
+{
 consvar_t cv_addons_md5 = Player("addons_md5", "Name").values({{0, "Name"}, {1, "Contents"}});
 consvar_t cv_addons_search_case = Player("addons_search_case", "No").yes_no();
 consvar_t cv_addons_search_type = Player("addons_search_type", "Anywhere").values({{0, "Start"}, {1, "Anywhere"}});
@@ -326,6 +323,7 @@ consvar_t cv_controlperkey = Player("controlperkey", "One").values({{1, "One"}, 
 consvar_t cv_mastervolume = Player("volume", "80").min_max(0, 100);
 consvar_t cv_digmusicvolume = Player("musicvolume", "80").min_max(0, 100);
 consvar_t cv_soundvolume = Player("soundvolume", "80").min_max(0, 100);
+consvar_t cv_voicevolume = Player("voicevolume", "100").min_max(0, 100);
 
 #ifdef HAVE_DISCORDRPC
 	void DRPC_UpdatePresence(void);
@@ -401,7 +399,7 @@ consvar_t cv_menuframeskip = Player("menuframeskip", "Off").values({
 });
 consvar_t cv_movebob = Player("movebob", "1.0").floating_point().min_max(0, 4*FRACUNIT);
 consvar_t cv_netstat = Player("netstat", "Off").on_off().dont_save(); // show bandwidth statistics
-consvar_t cv_netticbuffer = Player("netticbuffer", "1").min_max(0, 3);
+consvar_t cv_netticbuffer = Player("netticbuffer", "1").min_max(1, 3);
 
 // number of channels available
 void SetChannelsNum(void);
@@ -422,7 +420,11 @@ consvar_t cv_bgaudio = Player("bgaudio", "Nothing").onchange_noinit(BGAudio_OnCh
 	{0, "Nothing"},
 	{1, "Music"},
 	{2, "Sounds"},
+	{4, "Voices"},
 	{3, "Music&Sounds"},
+	{5, "Music&Voices"},
+	{6, "Sounds&Voices"},
+	{7, "MusicSounds&Voices"}
 });
 
 // Pause game upon window losing focus
@@ -445,9 +447,14 @@ consvar_t cv_scr_scale = Player("scr_scale", "1.0").floating_point();
 consvar_t cv_scr_x = Player("scr_x", "0.0").floating_point();
 consvar_t cv_scr_y = Player("scr_y", "0.0").floating_point();
 
+consvar_t cv_display = Player("display", "0").values(CV_Unsigned).save();
+
 consvar_t cv_seenames = Player("seenames", "On").on_off();
 consvar_t cv_shadow = Player("shadow", "On").on_off();
 consvar_t cv_showfocuslost = Player("showfocuslost", "Yes").yes_no();
+
+consvar_t cv_racesplits = Player("racesplits", "Leader").values({{0, "Off"}, {1, "Next"}, {2, "Leader"}}).save();
+consvar_t cv_attacksplits = Player("attacksplits", "Next").values({{0, "Off"}, {1, "Next"}, {2, "Leader"}}).save();
 
 void R_SetViewSize(void);
 consvar_t cv_showhud = Player("showhud", "Yes").yes_no().onchange(R_SetViewSize).dont_save();
@@ -559,7 +566,9 @@ static constexpr const char* kNetDemoRecordDefault =
 
 consvar_t cv_recordmultiplayerdemos = Server("netdemo_record", kNetDemoRecordDefault).values({{0, "Disabled"}, {1, "Manual Save"}, {2, "Auto Save"}});
 
-consvar_t cv_reducevfx = Server("reducevfx", "No").yes_no();
+void ReduceVFX_OnChange(void);
+consvar_t cv_reducevfx = Server("reducevfx", "No").yes_no().onchange(ReduceVFX_OnChange);
+
 consvar_t cv_screenshake = Server("screenshake", "Full").values({{0, "Off"}, {1, "Half"}, {2, "Full"}});
 
 consvar_t cv_rendezvousserver = Server("holepunchserver", "relay.kartkrew.org");
@@ -595,17 +604,15 @@ consvar_t cv_sleep = Server("cpusleep", "1").min_max(0, 1000/TICRATE);
 // There's a separate section for netvars that don't save...
 //
 
-void AutoBalance_OnChange(void);
-consvar_t cv_autobalance = NetVar("autobalance", "Off").on_off().onchange(AutoBalance_OnChange);
-
 consvar_t cv_blamecfail = NetVar("blamecfail", "Off").on_off();
 
 // Speed of file downloading (in packets per tic)
 consvar_t cv_downloadspeed = NetVar("downloadspeed", "32").min_max(1, 300);
 
-#ifdef DUMPCONSISTENCY
-	consvar_t cv_dumpconsistency = NetVar(cvlist_dumpconsistency)("dumpconsistency", "Off").on_off();
-#endif
+// Dump gamestates to an external file when a resync occurs.
+// This is a cheat because enabling this can take up file storage
+// for connected players very fast.
+consvar_t cv_dumpconsistency = OnlineCheat("dumpconsistency", "Off").on_off();
 
 // Intermission time Tails 04-19-2002
 consvar_t cv_inttime = NetVar("inttime", "10").min_max(0, 3600);
@@ -620,15 +627,10 @@ void Lagless_OnChange(void);
 consvar_t cv_lagless = NetVar("lagless", "Off").on_off().onchange(Lagless_OnChange);
 
 // max file size to send to a player (in kilobytes)
-consvar_t cv_maxsend = NetVar("maxsend", "51200").min_max(0, 51200);
+consvar_t cv_maxsend = NetVar("maxsend", "204800").min_max(-1, 999999999);
 
 consvar_t cv_noticedownload = NetVar("noticedownload", "Off").on_off();
 consvar_t cv_pingtimeout = NetVar("maxdelaytimeout", "10").min_max(8, 120);
-consvar_t cv_resynchattempts = NetVar("resynchattempts", "2").min_max(1, 20, {{0, "No"}});
-
-void TeamScramble_OnChange(void);
-consvar_t cv_scrambleonchange = NetVar("scrambleonchange", "Off").values({{0, "Off"}, {1, "Random"}, {2, "Points"}});
-consvar_t cv_teamscramble = NetVar("teamscramble", "Off").values({{0, "Off"}, {1, "Random"}, {2, "Points"}}).onchange_noinit(TeamScramble_OnChange);
 
 consvar_t cv_showjoinaddress = NetVar("showjoinaddress", "Off").on_off();
 consvar_t cv_zvote_delay = NetVar("zvote_delay", "20").values(CV_Unsigned);
@@ -669,38 +671,42 @@ consvar_t cv_cheats = UnsavedNetVar(cvlist_command)("cheats",
 consvar_t cv_countdowntime = UnsavedNetVar("countdowntime", "30").min_max(15, 9999);
 consvar_t cv_duelspectatorreentry = UnsavedNetVar("duelspectatorreentry", "180").min_max(0, 10*60);
 
+void KartItem_OnChange(void);
+
 // SRB2kart
 consvar_t cv_items[] = {
-	UnsavedNetVar("sneaker",			"On").on_off(),
-	UnsavedNetVar("rocketsneaker",		"On").on_off(),
-	UnsavedNetVar("invincibility",		"On").on_off(),
-	UnsavedNetVar("banana",				"On").on_off(),
-	UnsavedNetVar("eggmark",			"On").on_off(),
-	UnsavedNetVar("orbinaut",			"On").on_off(),
-	UnsavedNetVar("jawz",				"On").on_off(),
-	UnsavedNetVar("mine",				"On").on_off(),
-	UnsavedNetVar("landmine",			"On").on_off(),
-	UnsavedNetVar("ballhog",			"On").on_off(),
-	UnsavedNetVar("selfpropelledbomb",	"On").on_off(),
-	UnsavedNetVar("grow",				"On").on_off(),
-	UnsavedNetVar("shrink",				"On").on_off(),
-	UnsavedNetVar("lightningshield",	"On").on_off(),
-	UnsavedNetVar("bubbleshield",		"On").on_off(),
-	UnsavedNetVar("flameshield",		"On").on_off(),
-	UnsavedNetVar("hyudoro",			"On").on_off(),
-	UnsavedNetVar("pogospring",			"On").on_off(),
-	UnsavedNetVar("superring",			"On").on_off(),
-	UnsavedNetVar("kitchensink",		"On").on_off(),
-	UnsavedNetVar("droptarget",			"On").on_off(),
-	UnsavedNetVar("gardentop",			"On").on_off(),
-	UnsavedNetVar("gachabom",			"On").on_off(),
-	UnsavedNetVar("dualsneaker",		"On").on_off(),
-	UnsavedNetVar("triplesneaker",		"On").on_off(),
-	UnsavedNetVar("triplebanana",		"On").on_off(),
-	UnsavedNetVar("tripleorbinaut",		"On").on_off(),
-	UnsavedNetVar("quadorbinaut",		"On").on_off(),
-	UnsavedNetVar("dualjawz",			"On").on_off(),
-	UnsavedNetVar("triplegachabom",		"On").on_off(),
+	UnsavedNetVar("sneaker",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("rocketsneaker",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("invincibility",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("banana",				"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("eggmark",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("orbinaut",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("jawz",				"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("mine",				"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("landmine",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("ballhog",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("selfpropelledbomb",	"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("grow",				"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("shrink",				"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("lightningshield",	"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("bubbleshield",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("flameshield",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("hyudoro",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("pogospring",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("superring",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("kitchensink",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("droptarget",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("gardentop",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("gachabom",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("stoneshoe",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("toxomister",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("dualsneaker",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("triplesneaker",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("triplebanana",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("tripleorbinaut",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("quadorbinaut",		"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("dualjawz",			"On").on_off().onchange_noinit(KartItem_OnChange),
+	UnsavedNetVar("triplegachabom",		"On").on_off().onchange_noinit(KartItem_OnChange),
 };
 
 consvar_t cv_kartbot = UnsavedNetVar("bots", "Off").values({
@@ -734,7 +740,10 @@ consvar_t cv_kartfrantic = UnsavedNetVar("franticitems", "Off").on_off().onchang
 void KartSpeed_OnChange(void);
 consvar_t cv_kartspeed = UnsavedNetVar("gamespeed", "Auto Gear").values(kartspeed_cons_t).onchange_noinit(KartSpeed_OnChange);
 
-consvar_t cv_kartusepwrlv = UnsavedNetVar("usepwrlv", "Yes").yes_no();
+consvar_t cv_teamplay = UnsavedNetVar("teamplay", "Off").on_off();
+consvar_t cv_duel = UnsavedNetVar("duel", "On").on_off();
+
+consvar_t cv_kartusepwrlv = UnsavedNetVar("mobiums", "Yes").yes_no();
 
 void LiveStudioAudience_OnChange(void);
 #ifdef DEVELOP
@@ -743,7 +752,10 @@ void LiveStudioAudience_OnChange(void);
 	consvar_t cv_livestudioaudience = UnsavedNetVar("livestudioaudience", "Off").on_off().onchange(LiveStudioAudience_OnChange);
 #endif
 
-consvar_t cv_maxplayers = NetVar("maxplayers", "8").min_max(1, MAXPLAYERS);
+void Maxplayers_OnChange(void);
+consvar_t cv_maxplayers = NetVar("maxplayers", "8").min_max(1, MAXPLAYERS).onchange_noinit(Maxplayers_OnChange);
+
+consvar_t cv_shuffleloser = NetVar("shuffleloser", "On").on_off();
 
 // Scoring type options
 consvar_t cv_overtime = UnsavedNetVar("overtime", "Yes").yes_no();
@@ -780,13 +792,17 @@ consvar_t cv_shoutcolor = UnsavedNetVar("shout_color", "Red").values({
 consvar_t cv_shoutname = UnsavedNetVar("shout_name", "SERVER");
 
 consvar_t cv_spectatorreentry = UnsavedNetVar("spectatorreentry", "30").min_max(0, 10*60);
-consvar_t cv_thunderdome = UnsavedNetVar("thunderdome", "Off").on_off();
+
+void ThunderDome_OnChange(void);
+consvar_t cv_thunderdome = UnsavedNetVar("thunderdome", "Off").on_off().onchange_noinit(ThunderDome_OnChange);
 
 void TimeLimit_OnChange(void);
 consvar_t cv_timelimit = UnsavedNetVar("timelimit", "Default").min_max(1, 30*60, {{0, "None"}, {-1, "Default"}}).onchange_noinit(TimeLimit_OnChange);
 
 consvar_t cv_votetime = UnsavedNetVar("votetime", "20").min_max(10, 3600);
 
+consvar_t cv_dueltimelimit = UnsavedNetVar("dueltimelimit", "180").min_max(0, 3600);
+consvar_t cv_duelscorelimit = UnsavedNetVar("duelscorelimit", "4").min_max(1, 9);
 
 //
 // Online cheats - synced in netgames.
@@ -800,6 +816,7 @@ consvar_t cv_battleufotest = OnlineCheat("battleufotest", "Off").on_off().descri
 
 #ifdef DEVELOP
 	consvar_t cv_botcontrol = OnlineCheat("botcontrol", "On").on_off().description("Toggle bot AI movement");
+	consvar_t cv_takeover = OnlineCheat("takeover", "Off").on_off().description("Human players use bot movement");
 #endif
 
 extern CV_PossibleValue_t capsuletest_cons_t[];
@@ -811,15 +828,17 @@ consvar_t cv_debugencorevote = OnlineCheat("debugencorevote", "Off").on_off().de
 consvar_t cv_debuglapcheat = OnlineCheat("debuglapcheat", "Off").on_off().description("Permit far waypoint jumps and disable lap cheat prevention");
 consvar_t cv_debugnewchallenger = OnlineCheat("debugnewchallenger", "Off").on_off().description("Do not restart the map to toggle Duel mode");
 consvar_t cv_forcebots = OnlineCheat("forcebots", "No").yes_no().description("Force bots to appear, even in wrong game modes");
+consvar_t cv_debugpickmeup = OnlineCheat("debugpickmeup", "Off").on_off().description("Don't protect players from self/team damage");
 
 void ForceSkin_OnChange(void);
 consvar_t cv_forceskin = OnlineCheat("forcecharacter", "None").onchange(ForceSkin_OnChange).description("Force all players to use one character");
 
 consvar_t cv_fuzz = OnlineCheat("fuzz", "Off").on_off().description("Human players spam random inputs, get random items");
+consvar_t cv_skiprender = OnlineCheat("skiprender", "1").values(CV_Natural).description("Only render every X frames");
 
 consvar_t cv_kartdebugamount = OnlineCheat("debugitemamount", "1").min_max(1, 255).description("If debugitem, give multiple copies of an item");
 consvar_t cv_kartdebugbots = OnlineCheat("debugbots", "Off").on_off().description("Bot AI debugger");
-consvar_t cv_kartdebugdistribution = OnlineCheat("debugitemodds", "Off").on_off().description("Show items that the roulette can roll");
+consvar_t cv_kartdebugdistribution = OnlineCheat("debugitemodds", "0").min_max(0, 2).description("Show items that the roulette can roll");
 consvar_t cv_kartdebughuddrop = OnlineCheat("debugitemdrop", "Off").on_off().description("Players drop paper items when damaged in any way");
 
 consvar_t cv_kartdebugbotwhip = OnlineCheat("debugbotwhip", "Off").on_off().description("Disable bot ring and item pickups");
@@ -911,6 +930,9 @@ consvar_t cv_debugrender_visplanes = PlayerCheat("debugrender_visplanes", "Off")
 consvar_t cv_debugvirtualkeyboard = PlayerCheat("debugvirtualkeyboard", "Off").on_off().description("Always show virtual keyboard instead of using real keyboard input.");
 consvar_t cv_devmode_screen = PlayerCheat("devmode_screen", "1").min_max(1, 4).description("Choose which splitscreen player devmode applies to");
 consvar_t cv_drawpickups = PlayerCheat("drawpickups", "Yes").yes_no().description("Hide rings, spheres, item capsules, prison capsules (visual only)");
+consvar_t cv_drawtimer = PlayerCheat("drawtimer", "No").yes_no().description("Always draw the timer (race checkpoint timing, etc)");
+consvar_t cv_debugfonts = PlayerCheat("debugfonts", "No").yes_no().description("Draw font bounding boxes (integer precision, beware centered text!)");
+consvar_t cv_vorpal = ServerCheat("vorpal", "No").yes_no().description("Show real EXP odds modification");
 
 void lua_profile_OnChange(void);
 consvar_t cv_lua_profile = PlayerCheat("lua_profile", "0").values(CV_Unsigned).onchange(lua_profile_OnChange).description("Show hook timings over an average of N tics");
@@ -951,7 +973,8 @@ consvar_t cv_dummyip = MenuDummy("dummyip", "");
 consvar_t cv_dummyipselect = MenuDummy("dummyipselect", "0").min_max(0, 2);
 
 extern CV_PossibleValue_t dummykartspeed_cons_t[];
-consvar_t cv_dummykartspeed = MenuDummy("dummykartspeed", "Gear 2").values(dummykartspeed_cons_t);
+void DummyKartSpeed_OnChange(void);
+consvar_t cv_dummykartspeed = MenuDummy("dummykartspeed", "Gear 2").values(dummykartspeed_cons_t).onchange(DummyKartSpeed_OnChange);
 
 consvar_t cv_dummymatchbots = MenuDummy("dummymatchbots", "Off").values({
 	{0, "Off"},
@@ -976,6 +999,8 @@ consvar_t cv_dummymenuplayer = MenuDummy("dummymenuplayer", "P1").onchange(Dummy
 consvar_t cv_dummyprofileautoroulette = MenuDummy("dummyprofileautoroulette", "Off").on_off();
 consvar_t cv_dummyprofilefov = MenuDummy("dummyprofilefov", "100").min_max(70, 110);
 consvar_t cv_dummyprofilelitesteer = MenuDummy("dummyprofilelitesteer", "Off").on_off();
+consvar_t cv_dummyprofilestrictfastfall = MenuDummy("dummprofilestrictfastfall", "Off").on_off();
+consvar_t cv_dummyprofiledescriptiveinput = Player("dummyprofiledescriptiveinput", "Modern").values(descriptiveinput_cons_t);
 consvar_t cv_dummyprofileautoring = MenuDummy("dummyprofileautoring", "Off").on_off();
 consvar_t cv_dummyprofilekickstart = MenuDummy("dummyprofilekickstart", "Off").on_off();
 consvar_t cv_dummyprofilename = MenuDummy("dummyprofilename", "");
@@ -985,15 +1010,12 @@ consvar_t cv_dummyprofilerumble = MenuDummy("dummyprofilerumble", "On").on_off()
 consvar_t cv_dummyscramble = MenuDummy("dummyscramble", "Random").values({{0, "Random"}, {1, "Points"}});
 
 void CV_SPBAttackChanged(void);
-consvar_t cv_dummyspbattack = MenuDummy("dummyspbattack", "Off").on_off().onchange(CV_SPBAttackChanged);
+consvar_t cv_dummyspbattack = MenuDummy("dummyspbattack", "Off").on_off().onchange_noinit(CV_SPBAttackChanged);
 
 consvar_t cv_dummyspectate = MenuDummy("dummyspectate", "Spectator").values({{0, "Spectator"}, {1, "Playing"}});
 
 extern CV_PossibleValue_t dummystaff_cons_t[];
 consvar_t cv_dummystaff = MenuDummy("dummystaff", "0").values(dummystaff_cons_t);
-
-consvar_t cv_dummyteam = MenuDummy("dummyteam", "Spectator").values({{0, "Spectator"}, {1, "Red"}, {2, "Blue"}});
-
 
 //
 // lastprofile
@@ -1089,6 +1111,13 @@ consvar_t cv_litesteer[MAXSPLITSCREENPLAYERS] = {
 	Player("litesteer4", "Off").on_off().onchange(weaponPrefChange4),
 };
 
+consvar_t cv_strictfastfall[MAXSPLITSCREENPLAYERS] = {
+	Player("strictfastfall", "Off").on_off().onchange(weaponPrefChange),
+	Player("strictfastfall2", "Off").on_off().onchange(weaponPrefChange2),
+	Player("strictfastfall3", "Off").on_off().onchange(weaponPrefChange3),
+	Player("strictfastfall4", "Off").on_off().onchange(weaponPrefChange4),
+};
+
 consvar_t cv_autoring[MAXSPLITSCREENPLAYERS] = {
 	Player("autoring", "Off").on_off().onchange(weaponPrefChange),
 	Player("autoring2", "Off").on_off().onchange(weaponPrefChange2),
@@ -1109,6 +1138,14 @@ consvar_t cv_cam_height[MAXSPLITSCREENPLAYERS] = {
 	Player("cam3_height", "95").floating_point(),
 	Player("cam4_height", "95").floating_point(),
 };
+
+consvar_t cv_descriptiveinput[MAXSPLITSCREENPLAYERS] = {
+	Player("descriptiveinput", "Modern").values(descriptiveinput_cons_t),
+	Player("descriptiveinput2", "Modern").values(descriptiveinput_cons_t),
+	Player("descriptiveinput3", "Modern").values(descriptiveinput_cons_t),
+	Player("descriptiveinput4", "Modern").values(descriptiveinput_cons_t),
+};
+
 
 void CV_CamRotate_OnChange(void);
 void CV_CamRotate2_OnChange(void);
@@ -1350,8 +1387,79 @@ consvar_t cv_chatwidth = Player("chatwidth", "150").min_max(64, 150);
 // old shit console chat. (mostly exists for stuff like terminal, not because I cared if anyone liked the old chat.)
 consvar_t cv_consolechat = Player("chatmode", "Yes").values({{0, "Yes"}, {2, "No"}});
 
+// When off, inbound voice packets are ignored
+void VoiceSelfDeafen_OnChange(void);
+consvar_t cv_voice_selfdeafen = Player("voice_selfdeafen", "On")
+	.on_off()
+	.onchange(VoiceSelfDeafen_OnChange)
+	.description("Whether voice chat is played or not. Shown as self-deafen to others.");
+
+// When on, local player won't transmit voice
+consvar_t cv_voice_mode = Player("voice_mode", "Activity")
+	.values({{0, "Activity"}, {1, "PTT"}})
+	.description("How to activate voice transmission");
+
+consvar_t cv_voice_selfmute = Player("voice_selfmute", "Off")
+	.on_off()
+	.onchange(weaponPrefChange)
+	.description("Whether the local microphone is muted. Shown as self-mute to others.");
+
+consvar_t cv_voice_inputamp = Player("voice_inputamp", "14")
+	.min_max(-30, 30)
+	.description("How much louder or quieter to make voice input, in decibels.");
+
+consvar_t cv_voice_activationthreshold = Player("voice_activationthreshold", "-20")
+	.min_max(-30, 0)
+	.description("The voice activation threshold, in decibels from maximum amplitude.");
+
+// When on, local voice is played back out
+consvar_t cv_voice_loopback = Player("voice_loopback", "Off")
+	.on_off()
+	.dont_save()
+	.description("When on, plays the local player's voice");
+
+consvar_t cv_voice_denoise = Player("voice_denoise", "On")
+	.on_off()
+	.description("When on, denoises the voice microphone signal");
+
+consvar_t cv_voice_proximity = NetVar("voice_proximity", "On")
+	.on_off()
+	.description("Whether proximity effects for voice chat are enabled on the server.");
+
+// The relative distance for maximum voice attenuation
+consvar_t cv_voice_distanceattenuation_distance = NetVar("voice_distanceattenuation_distance", "4096")
+	.floating_point()
+	.description("Voice speaker's distance from listener at which positional voice is fully attenuated");
+
+consvar_t cv_voice_distanceattenuation_teamdistance = NetVar("voice_distanceattenuation_teamdistance", "8192")
+	.floating_point()
+	.description("Teammate voice speaker's distance from listener at which positional voice is fully attenuated");
+
+// The volume factor (scaled logarithmically, i.e. 0.5 = "half as loud") for voice distance attenuation
+consvar_t cv_voice_distanceattenuation_factor = NetVar("voice_distanceattenuation_factor", "0.2")
+	.floating_point()
+	.description("Maximum attenuation, in perceived loudness, when a voice speaker is at voice_distanceattenuation_distance units or further from the listener");
+
+// The scale factor applied to stereo separation for voice panning
+consvar_t cv_voice_stereopanning_factor = NetVar("voice_stereopanning_factor", "1.0")
+	.floating_point()
+	.description("Scale of stereo panning applied to a voice speaker relative to their in-game position, from 0.0-1.0");
+
+consvar_t cv_voice_concurrentattenuation_factor = NetVar("voice_concurrentattenuation_factor", "0.6")
+	.floating_point()
+	.description("The maximum attenuation factor, in perceived loudness, when at or exceeding voice_concurrentattenuation_max speakers");
+consvar_t cv_voice_concurrentattenuation_min = NetVar("voice_concurrentattenuation_min", "3")
+	.description("Minimum concurrent speakers before global attenuation starts");
+consvar_t cv_voice_concurrentattenuation_max = NetVar("voice_concurrentattenuation_max", "8")
+	.description("Maximum concurrent speakers at which full global attenuation is applied");
+
 void Mute_OnChange(void);
+void AllowServerVC_OnChange(void);
 consvar_t cv_mute = UnsavedNetVar("mute", "Off").on_off().onchange(Mute_OnChange);
+consvar_t cv_voice_allowservervoice = NetVar("voice_allowservervoice", "Off")
+	.on_off()
+	.onchange(AllowServerVC_OnChange)
+	.description("If Off, the server will not broadcast voice chat to clients");
 
 
 //
@@ -1443,7 +1551,7 @@ consvar_t cv_globalsaturation;
 consvar_t cv_rgamma, cv_ygamma, cv_ggamma, cv_cgamma, cv_bgamma, cv_mgamma;
 consvar_t cv_rhue, cv_yhue, cv_ghue, cv_chue, cv_bhue, cv_mhue;
 consvar_t cv_rsaturation, cv_ysaturation, cv_gsaturation, cv_csaturation, cv_bsaturation, cv_msaturation;
-
+}
 // clang-format on
 
 // This function can be used for more advanced cvar

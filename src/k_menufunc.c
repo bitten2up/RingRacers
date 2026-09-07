@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
@@ -59,6 +59,9 @@ struct menutransition_s menutransition; // Menu transition properties
 INT32 menuKey = -1; // keyboard key pressed for menu
 menucmd_t menucmd[MAXSPLITSCREENPLAYERS];
 
+// Prevent early resetting in Attack modes when setting a new best time.
+// I can't make demos save at the correct time, but I can do this!
+boolean blockreset = false;
 
 // finish wipes between screens
 boolean menuwipe = false;
@@ -173,7 +176,7 @@ void M_ChangeCvarDirect(INT32 choice, consvar_t *cv)
 		if (cv == &cv_nettimeout || cv == &cv_jointimeout)
 			choice *= (TICRATE/7);
 		else if (cv == &cv_maxsend)
-			choice *= 512;
+			choice *= 1024;
 
 		CV_AddValue(cv, choice);
 	}
@@ -466,10 +469,13 @@ boolean M_Responder(event_t *ev)
 			if (Playing() && !demo.playback)
 			{
 				// Quick Retry (Y in modeattacking)
-				if (modeattacking && G_PlayerInputDown(0, gc_y, splitscreen + 1) == true)
+				if (modeattacking && G_PlayerInputDown(0, gc_bail, splitscreen + 1) == true)
 				{
-					M_TryAgain(0);
-					return true;
+					if (!blockreset)
+					{
+						M_TryAgain(0);
+						return true;
+					}
 				}
 
 				// Quick Spectate (L+R+A+Start online)
@@ -541,9 +547,6 @@ void M_PlayMenuJam(void)
 		musicstatepermitted = true;
 		return;
 	}
-
-	if (soundtest.playing)
-		return;
 
 	const boolean trulystarted = M_GameTrulyStarted();
 	const boolean profilemode = (
@@ -662,7 +665,7 @@ boolean M_ConsiderSealedSwapAlert(void)
 
 void M_ValidateRestoreMenu(void)
 {
-	if (restoreMenu == NULL || restoreMenu == &MAIN_GonerDef)
+	if (restoreMenu == NULL || (restoreMenu->behaviourflags & MBF_CANTRESTORE))
 		restoreMenu = &MainDef;
 }
 
@@ -829,17 +832,10 @@ void M_StartControlPanel(void)
 
 		if (gamedata != NULL
 		&& gamedata->gonerlevel < GDGONER_OUTRO
-		&& gamestartchallenge < MAXUNLOCKABLES)
+		&& M_GameAboutToStart())
 		{
-			// See M_GameTrulyStarted
-			if (
-				gamedata->unlockpending[gamestartchallenge]
-				|| gamedata->unlocked[gamestartchallenge]
-			)
-			{
-				gamedata->gonerlevel = GDGONER_OUTRO;
-				M_GonerBGImplyPassageOfTime();
-			}
+			gamedata->gonerlevel = GDGONER_OUTRO;
+			M_GonerBGImplyPassageOfTime();
 		}
 
 		if (M_GameTrulyStarted() == false)
@@ -847,7 +843,7 @@ void M_StartControlPanel(void)
 			// Are you ready for the First Boot Experience?
 			M_ResetOptions();
 
-			currentMenu = &MAIN_GonerDef;
+			currentMenu = &MAIN_GonerAccessibilityDef;
 			restoreMenu = NULL;
 
 			M_PlayMenuJam();
@@ -916,10 +912,6 @@ void M_ClearMenus(boolean callexitmenufunc)
 	if (currentMenu->quitroutine && callexitmenufunc && !currentMenu->quitroutine())
 		return; // we can't quit this menu (also used to set parameter from the menu)
 
-#ifndef DC // Save the config file. I'm sick of crashing the game later and losing all my changes!
-	COM_BufAddText(va("saveconfig \"%s\" -silent\n", configfile));
-#endif //Alam: But not on the Dreamcast's VMUs
-
 	currentMenu->lastOn = itemOn;
 
 	if (gamestate == GS_MENU) // Back to title screen
@@ -931,6 +923,24 @@ void M_ClearMenus(boolean callexitmenufunc)
 		}
 		D_StartTitle();
 	}
+
+	M_AbortVirtualKeyboard();
+	menumessage.active = false;
+
+	menuactive = false;
+}
+
+void M_ClearMenusNoTitle(boolean callexitmenufunc)
+{
+	if (!menuactive)
+		return;
+
+	CON_ClearHUD();
+
+	if (currentMenu->quitroutine && callexitmenufunc && !currentMenu->quitroutine())
+		return; // we can't quit this menu (also used to set parameter from the menu)
+
+	currentMenu->lastOn = itemOn;
 
 	M_AbortVirtualKeyboard();
 	menumessage.active = false;
@@ -1074,7 +1084,7 @@ void M_SetMenuDelay(UINT8 i)
 	}
 }
 
-void M_UpdateMenuCMD(UINT8 i, boolean bailrequired)
+void M_UpdateMenuCMD(UINT8 i, boolean bailrequired, boolean chat_open)
 {
 	UINT8 mp = max(1, setup_numplayers);
 
@@ -1086,6 +1096,10 @@ void M_UpdateMenuCMD(UINT8 i, boolean bailrequired)
 
 	menucmd[i].buttonsHeld = menucmd[i].buttons;
 	menucmd[i].buttons = 0;
+
+	// Eat inputs made when chat is open
+	if (chat_open && pausemenu.closing)
+		return;
 
 	if (G_PlayerInputDown(i, gc_screenshot,    mp)) { menucmd[i].buttons |= MBT_SCREENSHOT; }
 	if (G_PlayerInputDown(i, gc_startmovie,    mp)) { menucmd[i].buttons |= MBT_STARTMOVIE; }

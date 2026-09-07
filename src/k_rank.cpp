@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -26,6 +26,8 @@
 #include "byteptr.h"
 #include "k_race.h"
 #include "command.h"
+#include "k_objects.h"
+#include "m_cond.h"
 
 // I was ALMOST tempted to start tearing apart all
 // of the map loading code and turning it into C++
@@ -288,7 +290,7 @@ static UINT32 RankCapsules_CountFromMap(const INT32 cupLevelNum)
 void gpRank_t::Init(void)
 {
 	UINT8 numHumans = 0;
-	UINT32 laps = 0;
+	UINT32 exp = 0;
 	INT32 i;
 
 	memset(this, 0, sizeof(gpRank_t));
@@ -310,7 +312,7 @@ void gpRank_t::Init(void)
 		}
 	}
 
-	// Calculate players 
+	// Calculate players
 	numPlayers = numHumans;
 	totalPlayers = K_GetGPPlayerCount(numHumans);
 
@@ -321,7 +323,7 @@ void gpRank_t::Init(void)
 	// (Should this account for all coop players?)
 	for (i = 0; i < numHumans; i++)
 	{
-		totalPoints += grandprixinfo.cup->numlevels * K_CalculateGPRankPoints(i + 1, totalPlayers);
+		totalPoints += grandprixinfo.cup->numlevels * K_CalculateGPRankPoints(EXP_MAX, i+1, totalPlayers);
 	}
 
 	totalRings = grandprixinfo.cup->numlevels * numHumans * 20;
@@ -331,14 +333,13 @@ void gpRank_t::Init(void)
 		const INT32 cupLevelNum = grandprixinfo.cup->cachedlevels[i];
 		if (cupLevelNum < nummapheaders && mapheaderinfo[cupLevelNum] != NULL)
 		{
-			laps += K_RaceLapCount(cupLevelNum);
+			exp += EXP_TARGET;
 		}
 	}
 
-	// +1, since 1st place laps are worth 2 pts.
-	for (i = 0; i < numHumans+1; i++)
+	for (i = 0; i < numHumans; i++)
 	{
-		totalLaps += laps;
+		totalExp += exp;
 	}
 
 	// Search through all of the cup's bonus levels
@@ -372,9 +373,8 @@ void gpRank_t::Rejigger(UINT16 removedmap, UINT16 removedgt, UINT16 addedmap, UI
 	{
 		for (i = 0; i < numPlayers; i++)
 		{
-			deltaPoints += K_CalculateGPRankPoints(i + 1, totalPlayers);
+			deltaPoints += K_CalculateGPRankPoints(EXP_MAX, i + 1, totalPlayers);
 		}
-
 		if (addedgt == GT_RACE)
 			totalPoints += deltaPoints;
 		else if (totalPoints > deltaPoints)
@@ -383,7 +383,7 @@ void gpRank_t::Rejigger(UINT16 removedmap, UINT16 removedgt, UINT16 addedmap, UI
 			totalPoints = 0;
 	}
 
-	INT32 deltaLaps = 0;
+	INT32 deltaExp = 0;
 	INT32 deltaPrisons = 0;
 	INT32 deltaRings = 0;
 
@@ -392,12 +392,7 @@ void gpRank_t::Rejigger(UINT16 removedmap, UINT16 removedgt, UINT16 addedmap, UI
 	{
 		if (removedgt == GT_RACE)
 		{
-			// AGH CAN'T USE, gametype already possibly not GT_RACE...
-			//deltaLaps -= K_RaceLapCount(removedmap);
-			if (cv_numlaps.value == -1)
-				deltaLaps -= mapheaderinfo[removedmap]->numlaps;
-			else
-				deltaLaps -= cv_numlaps.value;
+			deltaExp -= EXP_TARGET;
 		}
 		if ((gametypes[removedgt]->rules & GTR_SPHERES) == 0)
 		{
@@ -414,7 +409,7 @@ void gpRank_t::Rejigger(UINT16 removedmap, UINT16 removedgt, UINT16 addedmap, UI
 	{
 		if (addedgt == GT_RACE)
 		{
-			deltaLaps += K_RaceLapCount(addedmap);
+			deltaExp += EXP_TARGET;
 		}
 		if ((gametypes[addedgt]->rules & GTR_SPHERES) == 0)
 		{
@@ -426,26 +421,13 @@ void gpRank_t::Rejigger(UINT16 removedmap, UINT16 removedgt, UINT16 addedmap, UI
 		}
 	}
 
-	if (deltaLaps)
+	if (deltaExp)
 	{
-		INT32 workingTotalLaps = totalLaps;
-
-		// +1, since 1st place laps are worth 2 pts.
-		for (i = 0; i < numPlayers+1; i++)
-		{
-			workingTotalLaps += deltaLaps;
-		}
-
-		if (workingTotalLaps > 0)
-			totalLaps = workingTotalLaps;
+		deltaExp += totalExp;
+		if (deltaExp > 0)
+			totalExp = deltaExp;
 		else
-			totalLaps = 0;
-
-		deltaLaps += laps;
-		if (deltaLaps > 0)
-			laps = deltaLaps;
-		else
-			laps = 0;
+			totalExp = 0;
 	}
 
 	if (deltaPrisons)
@@ -510,7 +492,8 @@ void gpRank_t::Update(void)
 	}
 
 	lvl->time = UINT32_MAX;
-	lvl->totalLapPoints = K_RaceLapCount(gamemap - 1) * 2;
+
+	lvl->totalExp = EXP_TARGET;
 	lvl->totalPrisons = maptargets;
 
 	UINT8 i;
@@ -552,7 +535,7 @@ void gpRank_t::Update(void)
 
 		dta->position = player->tally.position;
 		dta->rings = player->tally.rings;
-		dta->lapPoints = player->tally.laps;
+		dta->exp = player->tally.exp;
 		dta->prisons = player->tally.prisons;
 		dta->gotSpecialPrize = !!!(player->pflags & PF_NOCONTEST);
 		dta->grade = static_cast<gp_rank_e>(player->tally.rank);
@@ -566,13 +549,10 @@ void K_UpdateGPRank(gpRank_t *rankData)
 	rankData->Update();
 }
 
-/*--------------------------------------------------
-	gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
-
-		See header file for description.
---------------------------------------------------*/
 gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
 {
+	INT32 retGrade = GRADE_E;
+
 	{
 		extern consvar_t cv_debugrank;
 
@@ -582,6 +562,9 @@ gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
 		}
 	}
 
+
+	fixed_t percent = K_CalculateGPPercent(rankData);
+
 	static const fixed_t gradePercents[GRADE_A] = {
 		 7*FRACUNIT/20,		// D: 35% or higher
 		10*FRACUNIT/20,		// C: 50% or higher
@@ -589,20 +572,67 @@ gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
 		17*FRACUNIT/20		// A: 85% or higher
 	};
 
-	INT32 retGrade = GRADE_E;
+	const fixed_t upgraderequirement = 370*FRACUNIT/400;
 
+	// If our last map was Special, check for "uncredited" continues to offset the rank bump.
+	fixed_t hiddenpercent = percent;
+	gpRank_level_t *lastgrade = &rankData->levels[rankData->numLevels - 1];
+
+	if (rankData->specialWon)
+	{
+		hiddenpercent -= FRACUNIT / RANK_CONTINUE_PENALTY_DIV * lastgrade->continues;
+	}
+
+	for (retGrade = GRADE_E; retGrade < GRADE_A; retGrade++)
+	{
+		if (percent < gradePercents[retGrade])
+		{
+			break;
+		}
+	}
+
+	if (rankData->specialWon == true && hiddenpercent >= upgraderequirement)
+	{
+		// Winning the Special Stage gives you
+		// a free grade increase.
+		retGrade++;
+	}
+
+	return static_cast<gp_rank_e>(retGrade);
+}
+
+fixed_t K_SealedStarEntryRequirement(gpRank_t *rankData) // Sealed Star entry is hard at first and then gets easy, avoid newbie accidents
+{
+	fixed_t entry = 370*FRACUNIT/400;
+
+	if (gamedata->everseenspecial)
+		entry -= 20*FRACUNIT/400; // Goes down to 350 for good once seen
+
+	if (grandprixinfo.masterbots && grandprixinfo.rank.position <= 1) // Master Mode Sealed Star entry only requires 1st place
+		entry = K_CalculateGPPercent(rankData);
+
+	return entry;
+}
+
+/*--------------------------------------------------
+	gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
+
+		See header file for description.
+--------------------------------------------------*/
+fixed_t K_CalculateGPPercent(gpRank_t *rankData)
+{
 	rankData->scorePosition = 0;
 	rankData->scoreGPPoints = 0;
-	rankData->scoreLaps = 0;
+	rankData->scoreExp = 0;
 	rankData->scorePrisons = 0;
 	rankData->scoreRings = 0;
 	rankData->scoreContinues = 0;
 	rankData->scoreTotal = 0;
 
-	const INT32 lapsWeight = (rankData->totalLaps > 0) ? RANK_WEIGHT_LAPS : 0;
+	const INT32 expWeight = (rankData->totalExp > 0) ? RANK_WEIGHT_EXP : 0;
 	const INT32 prisonsWeight = (rankData->totalPrisons > 0) ? RANK_WEIGHT_PRISONS : 0;
 
-	const INT32 total = RANK_WEIGHT_POSITION + RANK_WEIGHT_SCORE + lapsWeight + prisonsWeight + RANK_WEIGHT_RINGS;
+	const INT32 total = RANK_WEIGHT_POSITION + expWeight + prisonsWeight + RANK_WEIGHT_RINGS;
 	const INT32 continuesPenalty = total / RANK_CONTINUE_PENALTY_DIV;
 
 	if (rankData->position > 0)
@@ -617,9 +647,9 @@ gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
 		rankData->scoreGPPoints += (rankData->winPoints * RANK_WEIGHT_SCORE) / rankData->totalPoints;
 	}
 
-	if (rankData->totalLaps > 0)
+	if (rankData->totalExp > 0)
 	{
-		rankData->scoreLaps += (rankData->laps * lapsWeight) / rankData->totalLaps;
+		rankData->scoreExp += (std::min(rankData->exp, rankData->totalExp) * expWeight) / rankData->totalExp;
 	}
 
 	if (rankData->totalPrisons > 0)
@@ -634,31 +664,20 @@ gp_rank_e K_CalculateGPGrade(gpRank_t *rankData)
 
 	rankData->scoreContinues -= (rankData->continuesUsed - RANK_CONTINUE_PENALTY_START) * continuesPenalty;
 
-	rankData->scoreTotal = 
+	rankData->scoreTotal =
 		rankData->scorePosition +
-		rankData->scoreGPPoints +
-		rankData->scoreLaps + 
+		// rankData->scoreGPPoints +
+		rankData->scoreExp +
 		rankData->scorePrisons +
 		rankData->scoreRings +
 		rankData->scoreContinues;
 
+	if (rankData->scoreTotal < 0)
+		rankData->scoreTotal = 0;
+
 	const fixed_t percent = FixedDiv(rankData->scoreTotal, total);
-	for (retGrade = GRADE_E; retGrade < GRADE_A; retGrade++)
-	{
-		if (percent < gradePercents[retGrade])
-		{
-			break;
-		}
-	}
 
-	if (rankData->specialWon == true)
-	{
-		// Winning the Special Stage gives you
-		// a free grade increase.
-		retGrade++;
-	}
-
-	return static_cast<gp_rank_e>(retGrade);
+	return percent;
 }
 
 /*--------------------------------------------------

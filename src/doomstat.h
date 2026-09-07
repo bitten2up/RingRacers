@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -38,7 +38,9 @@ extern "C" {
 // =============================
 
 #define ROUNDQUEUE_MAX 10 // sane max? maybe make dynamically allocated later
-#define ROUNDQUEUE_CLEAR UINT16_MAX // lives in gametype field of packets
+// These two live in gametype field of packets
+#define ROUNDQUEUE_CMD_CLEAR UINT16_MAX
+#define ROUNDQUEUE_CMD_SHOW UINT16_MAX-1
 // The roundqueue itself is resident in g_game.h
 
 // Selected by user.
@@ -143,7 +145,7 @@ extern unloaded_skin_t *unloadedskins;
 struct skinreference_t
 {
 	unloaded_skin_t *unloaded;
-	UINT8 id;
+	UINT16 id;
 };
 
 // mapvisited is now a set of flags that says what we've done in the map.
@@ -154,6 +156,9 @@ struct skinreference_t
 #define MV_MYSTICMELODY		(1<<4)
 #define MV_MAX          	(MV_VISITED|MV_BEATEN|MV_ENCORE|MV_SPBATTACK|MV_MYSTICMELODY)
 
+#define MCAN_INVALID		(UINT16_MAX)
+#define MCAN_BONUS			(UINT16_MAX-1)
+
 struct recordtimes_t
 {
 	tic_t time; ///< Time in which the level was finished.
@@ -162,9 +167,10 @@ struct recordtimes_t
 
 struct recorddata_t
 {
-	UINT8 mapvisited;
+	UINT8 mapvisited; ///< Generalised flags
 	recordtimes_t timeattack; ///< Best times for Time Attack
 	recordtimes_t spbattack; ///< Best times for SPB Attack
+	UINT16 spraycan; ///< Associated spraycan id
 	UINT32 timeplayed;
 	UINT32 netgametimeplayed;
 	UINT32 modetimeplayed[GDGT_MAX];
@@ -214,6 +220,7 @@ extern boolean imcontinuing; // Temporary flag while continuing
 #define ATTACKING_LAP	(1<<1)
 #define ATTACKING_SPB	(1<<2)
 extern UINT8 modeattacking;
+const char *M_GetRecordMode(void);
 
 // menu demo things
 extern UINT8  numDemos;
@@ -230,6 +237,21 @@ extern UINT8 splitscreen;
 extern int r_splitscreen;
 
 extern boolean forceresetplayers, deferencoremode, forcespecialstage;
+extern boolean staffsync;
+extern UINT32 staffsync_map, staffsync_ghost, staffsync_done, staffsync_total, staffsync_failed;
+
+struct staffsync_t
+{
+	UINT32 map;
+	char name[MAXPLAYERNAME+1];
+	UINT32 reason;
+	UINT32 extra;
+	fixed_t totalerror;
+	UINT32 numerror;
+	UINT32 rngerror_presync[32];
+	UINT32 rngerror_postsync[32];
+};
+extern staffsync_t staffsync_results[1024];
 
 // ========================================
 // Internal parameters for sound rendering.
@@ -237,6 +259,7 @@ extern boolean forceresetplayers, deferencoremode, forcespecialstage;
 
 extern boolean sound_disabled;
 extern boolean digital_disabled;
+extern boolean g_voice_disabled;
 
 // =========================
 // Status flags for refresh.
@@ -271,14 +294,12 @@ extern boolean looptitle;
 extern char * bootmap; //bootmap for loading a map on startup
 extern char * podiummap; // map to load for podium
 
+extern char * tutorialplaygroundmap; // map to load for playground
 extern char * tutorialchallengemap; // map to load for tutorial skip
 extern UINT8 tutorialchallenge;
 #define TUTORIALSKIP_NONE 0
 #define TUTORIALSKIP_FAILED 1
 #define TUTORIALSKIP_INPROGRESS 2
-
-// CTF colors.
-extern UINT16 skincolor_redteam, skincolor_blueteam, skincolor_redring, skincolor_bluering;
 
 extern boolean exitfadestarted;
 
@@ -431,10 +452,12 @@ struct cupheader_t
 	UINT8 numbonus;							///< Number of bonus stages defined
 	UINT8 emeraldnum;						///< ID of Emerald to use for special stage (1-7 for Chaos Emeralds, 8-14 for Super Emeralds, 0 for no emerald)
 
+	// Modifiable in mainwads only
 	boolean playcredits;					///< Play the credits?
+	UINT16 hintcondition;					///< Hint condition for 2.4 Super Cup
 
+	// Truly internal data
 	UINT16 cache_cuplock;					///< Cached Unlockable ID
-
 	cupwindata_t windata[4];				///< Data for cup visitation
 	cupheader_t *next;						///< Next cup in linked list
 };
@@ -558,6 +581,8 @@ struct mapheader_t
 	mapheader_lighting_t lighting_encore;	///< Alternative lighting for Encore mode
 	boolean use_encore_lighting;			///< Whether to use separate Encore lighting
 
+	fixed_t cameraHeight;					///< Player camera height to use on this map
+
 	// Audience information
 	UINT8 numFollowers;					///< Internal. For audience support.
 	INT16 *followers;					///< List of audience followers in this level. Allocated dynamically for space reasons. Be careful.
@@ -573,7 +598,6 @@ struct mapheader_t
 	mobjtype_t destroyforchallenge[MAXDESTRUCTIBLES];	///< Assistive for UCRP_MAPDESTROYOBJECTS
 	UINT8 destroyforchallenge_size;						///< Number for above
 
-	UINT16 cache_spraycan;				///< Cached Spraycan ID
 	UINT16 cache_maplock;				///< Cached Unlockable ID
 
 	// Lua information
@@ -586,6 +610,7 @@ struct mapheader_t
 #define LF_NOZONE             (1<<1) ///< Don't include "ZONE" on level title
 #define LF_SECTIONRACE        (1<<2) ///< Section race level
 #define LF_SUBTRACTNUM        (1<<3) ///< Use subtractive position number (for bright levels)
+#define LF_NOCOMMS			  (1<<4) ///< Disable dialogue "communications in progress" graphic
 
 #define LF2_HIDEINMENU		(1<<0) ///< Hide in the multiplayer menu
 #define LF2_NOTIMEATTACK	(1<<1) ///< Hide this map in Time Attack modes
@@ -664,7 +689,7 @@ enum GameTypeRules
 	GTR_PAPERITEMS			= 1<<6,		// Replaces item boxes with paper item spawners
 	GTR_POWERSTONES			= 1<<7,		// Battle Emerald collectables.
 	GTR_KARMA				= 1<<8,		// Enables the Karma system if you're out of bumpers
-	GTR_ITEMARROWS			= 1<<9,		// Show item box arrows above players
+	// 1<<9 - UNUSED
 
 	// Bonus gametype rules
 	GTR_CHECKPOINTS			= 1<<10,	// Player respawns at specific checkpoints
@@ -762,8 +787,24 @@ extern INT32 nummaprings; //keep track of spawned rings/coins
 extern UINT8 nummapspraycans;
 extern UINT16 numchallengedestructibles;
 
-extern UINT32 bluescore; ///< Blue Team Scores
-extern UINT32 redscore;  ///< Red Team Scores
+// Teamplay
+typedef enum
+{
+	TEAM_UNASSIGNED = 0,
+	TEAM_ORANGE,
+	TEAM_BLUE,
+	TEAM__MAX
+} team_e;
+
+struct teaminfo_t
+{
+	const char *name;
+	skincolornum_t color;
+	UINT32 chat_color;
+};
+
+extern teaminfo_t g_teaminfo[TEAM__MAX];
+extern UINT32 g_teamscores[TEAM__MAX];
 
 // Eliminates unnecessary searching.
 extern boolean CheckForBustableBlocks;
@@ -845,19 +886,13 @@ extern struct maplighting
 	angle_t angle;
 } maplighting;
 
-//for CTF balancing
-extern INT16 autobalance;
-extern INT16 teamscramble;
-extern INT16 scrambleplayers[MAXPLAYERS]; //for CTF team scramble
-extern INT16 scrambleteams[MAXPLAYERS]; //for CTF team scramble
-extern INT16 scrambletotal; //for CTF team scramble
-extern INT16 scramblecount; //for CTF team scramble
-
 // SRB2kart
 extern UINT8 numlaps;
 extern UINT8 gamespeed;
 extern boolean franticitems;
 extern boolean encoremode, prevencoremode;
+extern boolean g_teamplay;
+extern boolean g_duelpermitted;
 
 extern tic_t wantedcalcdelay;
 extern tic_t itemCooldowns[NUMKARTITEMS - 1];
@@ -866,18 +901,26 @@ extern boolean thwompsactive;
 extern UINT8 lastLowestLap;
 extern SINT8 spbplace;
 extern boolean rainbowstartavailable;
-extern tic_t linecrossed;
+extern tic_t attacktimingstarted;
 extern boolean inDuel;
+extern UINT8 overtimecheckpoints;
 
 extern tic_t bombflashtimer;	// Used to avoid causing seizures if multiple mines explode close to you :)
 extern boolean legitimateexit;
 extern boolean comebackshowninfo;
 
+#define VOTE_NUM_LEVELS (4)
+#define VOTE_NOT_PICKED (-1)
 #define VOTE_SPECIAL (MAXPLAYERS)
 #define VOTE_TOTAL (MAXPLAYERS+1)
-extern UINT16 g_voteLevels[4][2];
+
+#define VOTE_TIMEOUT_LOSER (MAXPLAYERS+1) // not a real vote ID
+#define VOTE_TIMEOUT_WINNER (MAXPLAYERS+2) // ditto
+
+extern UINT16 g_voteLevels[VOTE_NUM_LEVELS][2];
 extern SINT8 g_votes[VOTE_TOTAL];
 extern SINT8 g_pickedVote;
+extern boolean g_votes_striked[VOTE_NUM_LEVELS];
 
 // ===========================
 // Internal parameters, fixed.
@@ -891,8 +934,7 @@ extern tic_t gametic;
 
 // Player spawn spots.
 extern mapthing_t *playerstarts[MAXPLAYERS]; // Cooperative
-extern mapthing_t *bluectfstarts[MAXPLAYERS]; // CTF
-extern mapthing_t *redctfstarts[MAXPLAYERS]; // CTF
+extern mapthing_t *teamstarts[TEAM__MAX][MAXPLAYERS]; // Teamplay
 extern mapthing_t *faultstart; // Kart Fault
 
 #define TUBEWAYPOINTSEQUENCESIZE 256

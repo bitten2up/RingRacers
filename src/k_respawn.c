@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -61,18 +61,11 @@ static void K_FudgeRespawn(player_t *player, const waypoint_t *const waypoint)
 }
 
 /*--------------------------------------------------
-	static void K_RespawnAtWaypoint(player_t *player, waypoint_t *waypoint)
+	void K_RespawnAtWaypoint(player_t *player, waypoint_t *waypoint)
 
-		Updates a player's respawn variables to go to the provided waypoint.
-
-	Input Arguments:-
-		player - Player to preform for.
-		waypoint - Waypoint to respawn to.
-
-	Return:-
-		None
+		See header file for description.
 --------------------------------------------------*/
-static void K_RespawnAtWaypoint(player_t *player, waypoint_t *waypoint)
+void K_RespawnAtWaypoint(player_t *player, waypoint_t *waypoint)
 {
 	if (player == NULL || player->mo == NULL || P_MobjWasRemoved(player->mo))
 	{
@@ -141,11 +134,15 @@ void K_DoIngameRespawn(player_t *player)
 		return;
 	}
 
-	if (player->respawn.state != RESPAWNST_NONE &&
-			( player->pflags & PF_FAULT ) == 0)
+	if (player->finalfailsafe < FAILSAFETIME)
 	{
-		return;
+		if (player->respawn.state != RESPAWNST_NONE &&
+				( player->pflags & PF_FAULT ) == 0)
+		{
+			return;
+		}
 	}
+
 
 	if (leveltime <= introtime)
 	{
@@ -179,12 +176,18 @@ void K_DoIngameRespawn(player_t *player)
 		K_DoFault(player);
 	}
 
+	if (player->rings <= -20 && !player->respawn.fromRingShooter)
+	{
+		P_KillMobj(player->mo, NULL, NULL, DMG_INSTAKILL);
+		return;
+	}
+
 	player->ringboost = 0;
 	player->driftboost = player->strongdriftboost = 0;
 	player->gateBoost = 0;
 	player->trickcharge = 0;
 	player->infinitether = 0;
-	player->wavedash = player->wavedashboost = player->wavedashdelay = 0;
+	player->wavedash = player -> wavedashleft = player->wavedashright = player->wavedashboost = player->wavedashdelay = 0;
 
 	K_TumbleInterrupt(player);
 	P_ResetPlayer(player);
@@ -241,33 +244,46 @@ void K_DoIngameRespawn(player_t *player)
 		UINT32 bestdist = UINT32_MAX;
 		mapthing_t *beststart = NULL;
 		UINT8 numstarts = 0;
+		mapthing_t **starts;
 
 		if (gametyperules & GTR_BATTLESTARTS)
 		{
 			numstarts = numdmstarts;
+			starts = deathmatchstarts;
 		}
 		else
 		{
 			numstarts = numcoopstarts;
+			starts = playerstarts;
 		}
 
 		if (numstarts > 0)
 		{
 			UINT8 i = 0;
 
-			for (i = 0; i < numstarts; i++)
+			if (gametype == GT_TUTORIAL)
+			{
+				// In tutorial, spawnpoints are player ID locked.
+				// ...but returning from Test Track can do funny things,
+				// so we use relative ID instead of literal slot number.
+				UINT8 spos = 0;
+				for (; i < MAXPLAYERS; i++)
+				{
+					if (i == player-players)
+						break;
+					if (!playeringame[i])
+						continue;
+					spos++;
+				}
+
+				beststart = starts[spos % numstarts];
+			}
+			else for (i = 0; i < numstarts; i++)
 			{
 				UINT32 dist = UINT32_MAX;
 				mapthing_t *checkstart = NULL;
 
-				if (gametyperules & GTR_BATTLESTARTS)
-				{
-					checkstart = deathmatchstarts[i];
-				}
-				else
-				{
-					checkstart = playerstarts[i];
-				}
+				checkstart = starts[i];
 
 				dist = (UINT32)P_AproxDistance((player->mo->x >> FRACBITS) - checkstart->x,
 					(player->mo->y >> FRACBITS) - checkstart->y);
@@ -446,12 +462,18 @@ static void K_MovePlayerToRespawnPoint(player_t *player)
 		// Reduce by the amount we needed to get to this waypoint
 		stepamt -= dist;
 
+		fixed_t oldx = player->mo->x;
+		fixed_t oldy = player->mo->y;
+
 		// We've reached the destination point,
 		P_UnsetThingPosition(player->mo);
 		player->mo->x = dest.x;
 		player->mo->y = dest.y;
 		player->mo->z = dest.z;
 		P_SetThingPosition(player->mo);
+
+		// Did we cross a checkpoint during our last step?
+		Obj_CrossCheckpoints(player, oldx, oldy);
 
 		// We are no longer traveling from death location to 1st waypoint, so use standard timings
 		if (player->respawn.fast)
@@ -870,6 +892,12 @@ static void K_HandleDropDash(player_t *player)
 		else
 		{
 			player->mo->colorized = false;
+		}
+		// if player got trapped inside a bubble but lost its bubble object in a unintended way, remove no gravity flag
+		if (((P_MobjWasRemoved(player->mo->tracer) || player->mo->tracer == NULL || (!P_MobjWasRemoved(player->mo->tracer) && player->mo->tracer && player->mo->tracer->type != MT_BUBBLESHIELDTRAP)) && player->carry == CR_TRAPBUBBLE) && (player->mo->flags & MF_NOGRAVITY))
+		{
+			player->mo->flags &= ~MF_NOGRAVITY;
+			player->carry = CR_NONE;
 		}
 	}
 	else

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -24,6 +24,7 @@
 #include "lua_hook.h"
 #include "lua_hud.h" // hud_running errors
 #include "lua_profile.h"
+#include "lua_playerlib.h" // constplayer
 
 #include "command.h"
 #include "m_perfstats.h"
@@ -660,6 +661,17 @@ int LUA_HookPlayer(player_t *player, int hook_type)
 	return hook.status;
 }
 
+int LUA_HookPlayerForceResults(player_t *player, int hook_type)
+{
+	Hook_State hook;
+	if (prepare_hook(&hook, 0, hook_type))
+	{
+		LUA_PushUserdata(gL, player, META_PLAYER);
+		call_hooks(&hook, 1, res_force);
+	}
+	return hook.status;
+}
+
 int LUA_HookTiccmd(player_t *player, ticcmd_t *cmd, int hook_type)
 {
 	Hook_State hook;
@@ -688,11 +700,11 @@ void LUA_HookHUD(huddrawlist_h list, int hook_type)
 
 		hud_running = true; // local hook
 
-		// Catch runaway clipping rectangles.
-		V_ClearClipRect();
-
 		init_hook_call(&hook, 0, res_none);
 		call_mapped(&hook, &hudHookIds[hook_type]);
+
+		// Catch runaway clipping rectangles.
+		V_ClearClipRect();
 
 		hud_running = false;
 	}
@@ -842,7 +854,7 @@ void LUA_HookSpecialExecute(activator_t *activator, INT32 *args, char **stringar
 	}
 }
 
-int LUA_HookPlayerMsg(int source, int target, int flags, char *msg, int mute)
+int LUA_HookPlayerMsg(int source, int target, int flags, char *msg)
 {
 	Hook_State hook;
 	if (prepare_hook(&hook, false, HOOK(PlayerMsg)))
@@ -862,7 +874,6 @@ int LUA_HookPlayerMsg(int source, int target, int flags, char *msg, int mute)
 			LUA_PushUserdata(gL, &players[target-1], META_PLAYER); // target
 		}
 		lua_pushstring(gL, msg); // msg
-		lua_pushboolean(gL, mute); // the message was supposed to be eaten by spamprotecc.
 
 		call_hooks(&hook, 1, res_true);
 	}
@@ -961,6 +972,7 @@ void LUA_HookPlayerQuit(player_t *plr, kickreason_t reason)
 	}
 }
 
+/*
 int LUA_HookTeamSwitch(player_t *player, int newteam, boolean fromspectators, boolean tryingautobalance, boolean tryingscramble)
 {
 	Hook_State hook;
@@ -975,6 +987,7 @@ int LUA_HookTeamSwitch(player_t *player, int newteam, boolean fromspectators, bo
 	}
 	return hook.status;
 }
+*/
 
 int LUA_HookViewpointSwitch(player_t *player, player_t *newdisplayplayer, boolean forced)
 {
@@ -1003,6 +1016,65 @@ int LUA_HookSeenPlayer(player_t *player, player_t *seenfriend)
 		hud_running = true; // local hook
 		call_hooks(&hook, 1, res_false);
 		hud_running = false;
+	}
+	return hook.status;
+}
+
+static int roulette_hook(
+	player_t *player,
+	itemroulette_t *const roulette,
+	boolean ringbox,
+	int hook_type,
+	Hook_Callback results_handler)
+{
+	Hook_State hook;
+	if (prepare_hook(&hook, false, hook_type))
+	{
+		if (player == NULL) {
+			lua_pushnil(gL);
+		} else {
+			LUA_PushUserdata(gL, player, META_PLAYER);
+		}
+		LUA_PushUserdata(gL, roulette, META_ITEMROULETTE);
+		lua_pushboolean(gL, ringbox);
+		constplayer = true; // Do not allow players to be modified.
+		call_hooks(&hook, 1, results_handler);
+		constplayer = false; // You're good.
+	}
+	return hook.status;
+}
+
+int LUA_HookPreFillItemRoulette(player_t *player, itemroulette_t *const roulette, boolean ringbox)
+{
+	return roulette_hook(player, roulette, ringbox, HOOK(PreFillItemRoulette), res_true);
+}
+
+
+int LUA_HookFillItemRoulette(player_t *player, itemroulette_t *const roulette, boolean ringbox)
+{
+	return roulette_hook(player, roulette, ringbox, HOOK(FillItemRoulette), res_true);
+}
+
+static void res_gprankpoints(Hook_State *hook)
+{
+	if (!lua_isnil(gL, -1))
+	{
+		INT16 *points = (INT16*)hook->userdata;
+		*points = lua_tointeger(gL, -1);
+		hook->status = true;
+	}
+}
+
+int LUA_HookGPRankPoints(UINT8 position, UINT8 numplayers, INT16 *points)
+{
+	Hook_State hook;
+	if (prepare_hook(&hook, 0, HOOK(GPRankPoints)))
+	{
+		hook.userdata = points;
+		lua_pushinteger(gL, position);
+		lua_pushinteger(gL, numplayers);
+		lua_pushinteger(gL, *points);
+		call_hooks(&hook, 1, res_gprankpoints);
 	}
 	return hook.status;
 }

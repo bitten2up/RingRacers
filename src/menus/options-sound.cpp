@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -29,12 +29,6 @@ using srb2::Draw;
 namespace
 {
 
-bool basic_options()
-{
-	// M_GameTrulyStarted
-	return gamedata && gamestartchallenge < MAXUNLOCKABLES && !netgame && gamedata->gonerlevel <= GDGONER_PROFILE;
-}
-
 int flip_delay = 0;
 
 struct Slider
@@ -44,6 +38,7 @@ struct Slider
 		kMasterVolume,
 		kMusicVolume,
 		kSfxVolume,
+		kVoiceVolume,
 		kNumSliders
 	};
 
@@ -68,9 +63,10 @@ struct Slider
 			arrows.x(-10 - ofs).text("\x1C");
 			arrows.x(kWidth + 2 + ofs).text("\x1D");
 
-			if (!basic_options())
+			if (&volume_ != &cv_voicevolume)
 			{
-				h.xy(kWidth + 9, -3).small_button(Draw::Button::z, false);
+				Draw::TextElement tx = Draw::TextElement().parse("<z_animated>");
+				h.xy(kWidth + 9, -2).text(tx.string());
 			}
 		}
 
@@ -92,7 +88,7 @@ struct Slider
 		n = std::atoi(volume_.defaultvalue);
 		h.x(1 + shake_ + n + (n / 10)).size(1, 7).fill(35);
 
-		if (!toggle_(false))
+		if (!toggle_(false) && &volume_ != &cv_voicevolume)
 		{
 			h
 				.x(kWidth / 2)
@@ -100,6 +96,16 @@ struct Slider
 				.align(Draw::Align::kCenter)
 				.flags(V_40TRANS)
 				.text("S I L E N T");
+		}
+		else if (!toggle_(false))
+		{
+			h
+				.x(kWidth / 2)
+				.y(-1)
+				.font(Draw::Font::kThin)
+				.align(Draw::Align::kCenter)
+				.flags(V_20TRANS)
+				.text("DEAFENED (Voice Options)");
 		}
 	}
 
@@ -128,6 +134,7 @@ std::array<Slider, Slider::kNumSliders> sliders{{
 				n = !n;
 				CV_SetValue(&cv_gamedigimusic, n);
 				CV_SetValue(&cv_gamesounds, n);
+				CV_SetValue(&cv_voice_selfdeafen, n);
 			}
 
 			return n;
@@ -157,6 +164,18 @@ std::array<Slider, Slider::kNumSliders> sliders{{
 			return !S_SoundDisabled();
 		},
 		cv_soundvolume,
+	},
+	{
+		[](bool toggle) -> bool
+		{
+			if (toggle)
+			{
+				CV_AddValue(&cv_voice_selfdeafen, 0);
+			}
+
+			return !S_VoiceDisabled();
+		},
+		cv_voicevolume,
 	},
 }};
 
@@ -251,7 +270,7 @@ boolean input_routine(INT32)
 
 	const menuitem_t& it = currentMenu->menuitems[itemOn];
 
-	if (M_MenuButtonPressed(pid, MBT_Z) && (it.status & IT_TYPE) == IT_ARROWS && !basic_options())
+	if (M_MenuButtonPressed(pid, MBT_Z) && (it.status & IT_TYPE) == IT_ARROWS)
 	{
 		sliders.at(it.mvar2).toggle_(true);
 		return true;
@@ -266,13 +285,16 @@ menuitem_t OPTIONS_Sound[] =
 {
 
 	{IT_STRING | IT_ARROWS | IT_CV_SLIDER, "Volume", "Loudness of all game audio.",
-		NULL, {.routine = slider_routine}, 0, Slider::kMasterVolume},
+		NULL, srb2::itemaction(slider_routine), 0, Slider::kMasterVolume},
 
 	{IT_STRING | IT_ARROWS | IT_CV_SLIDER, "SFX Volume", "Loudness of sound effects.",
-		NULL, {.routine = slider_routine}, 0, Slider::kSfxVolume},
+		NULL, srb2::itemaction(slider_routine), 0, Slider::kSfxVolume},
 
 	{IT_STRING | IT_ARROWS | IT_CV_SLIDER, "Music Volume", "Loudness of music.",
-		NULL, {.routine = slider_routine}, 0, Slider::kMusicVolume},
+		NULL, srb2::itemaction(slider_routine), 0, Slider::kMusicVolume},
+
+	{IT_STRING | IT_ARROWS | IT_CV_SLIDER, "Voice Volume", "Loudness of voice chat.",
+		NULL, srb2::itemaction(slider_routine), 0, Slider::kVoiceVolume},
 
 	{IT_SPACE | IT_NOTHING, NULL,  NULL,
 		NULL, {NULL}, 0, 0},
@@ -281,19 +303,19 @@ menuitem_t OPTIONS_Sound[] =
 		NULL, {NULL}, 0, 0},
 
 	{IT_STRING | IT_CVAR, "Chat Notifications", "Play a sound effect when chat messages appear.",
-		NULL, {.cvar = &cv_chatnotifications}, 0, 0},
+		NULL, srb2::itemaction(&cv_chatnotifications), 0, 0},
 
 	{IT_STRING | IT_CVAR, "Character Voices", "Characters speak when interacting on the course.",
-		NULL, {.cvar = &cv_kartvoices}, 0, 0},
+		NULL, srb2::itemaction(&cv_kartvoices), 0, 0},
 
 	{IT_STRING | IT_CVAR, "Follower Horns", NULL, // set in init_routine
-		NULL, {.cvar = &cv_karthorns}, 0, 0},
+		NULL, srb2::itemaction(&cv_karthorns), 0, 0},
 
 	{IT_STRING | IT_CVAR, "Continuous Attack Music", "Keep music playing seamlessly when retrying in Attack modes.",
-		NULL, {.cvar = &cv_continuousmusic}, 0, 0},
+		NULL, srb2::itemaction(&cv_continuousmusic), 0, 0},
 
 	{IT_STRING | IT_CVAR, "Streamer-Safe Music", "Only play music safe for video platforms.",
-		NULL, {.cvar = &cv_streamersafemusic}, 0, 0},
+		NULL, srb2::itemaction(&cv_streamersafemusic), 0, 0},
 
 	{IT_SPACE | IT_DYBIGSPACE, NULL,  NULL,
 		NULL, {NULL}, 0, 0},
@@ -302,16 +324,16 @@ menuitem_t OPTIONS_Sound[] =
 		NULL, {NULL}, 0, 0},
 
 	{IT_STRING | IT_CVAR, "Hear Tabbed-out", "Keep playing game audio when the window is out of focus (FOCUS LOST).",
-		NULL, {.cvar = &cv_bgaudio}, 0, 0},
+		NULL, srb2::itemaction(&cv_bgaudio), 0, 0},
 
 	{IT_STRING | IT_CVAR, "Mixing Buffer Size", "Audio buffer size. Higher is faster but more delay.",
-		NULL, {.cvar = &cv_soundmixingbuffersize}, 0, 0},
+		NULL, srb2::itemaction(&cv_soundmixingbuffersize), 0, 0},
 
 	{IT_SPACE | IT_NOTHING, NULL,  NULL,
 		NULL, {NULL}, 0, 0},
 
 	{IT_STRING | IT_CALL, "\x85" "Restart Audio", "Reboot the game's audio system.",
-		NULL, {.routine = restartaudio_routine}, 0, 0},
+		NULL, srb2::itemaction(restartaudio_routine), 0, 0},
 };
 
 menu_t OPTIONS_SoundDef = {

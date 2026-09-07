@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -93,7 +93,14 @@ sine_bob
 
 	// slightly modified from objects/hyudoro.c
 	hyu->sprzoff = FixedMul(kBobHeight,
-			sineofs + FINESINE(a >> ANGLETOFINESHIFT));
+			sineofs + FINESINE(a >> ANGLETOFINESHIFT)) * P_MobjFlip(hyu);
+
+	// todo I think this is slightly wrong
+	// but I am literally fixing every single
+	// K_FlipFromObject in the code at once
+	// and this is impossible in basegame rn
+	if (P_IsObjectFlipped(hyu))
+		hyu->sprzoff -= hyu->height;
 }
 
 void
@@ -303,6 +310,7 @@ struct Flicky : mobj_t
 			color = super_color();
 		}
 
+		K_MatchFlipFlags(this, source());
 		bob_in_place(this, phase() * 8, 32);
 	}
 
@@ -379,11 +387,14 @@ struct Flicky : mobj_t
 			return;
 		}
 
+		fixed_t rand_z = P_RandomRange(PR_DECORATION, -24, 24);
+		fixed_t rand_y = P_RandomRange(PR_DECORATION, -24, 24);
+		fixed_t rand_x = P_RandomRange(PR_DECORATION, -24, 24);
 		mobj_t *fast = P_SpawnMobjFromMobjUnscaled(
 			this,
-			P_RandomRange(PR_DECORATION, -24, 24) * mapobjectscale,
-			P_RandomRange(PR_DECORATION, -24, 24) * mapobjectscale,
-			(height / 2) + (P_RandomRange(PR_DECORATION, -24, 24) * mapobjectscale),
+			rand_x * mapobjectscale,
+			rand_y * mapobjectscale,
+			(height / 2) + (rand_z * mapobjectscale),
 			MT_FASTLINE
 		);
 
@@ -394,7 +405,7 @@ struct Flicky : mobj_t
 		fast->colorized = true;
 		fast->renderflags |= RF_ADD;
 
-		K_MatchGenericExtraFlags(fast, this);
+		K_MatchGenericExtraFlagsNoZAdjust(fast, this);
 	}
 
 	void range_check()
@@ -719,6 +730,12 @@ void Controller::search()
 
 		// Do not retarget existing target or owner.
 		if (mobj == chasing() || mobj == source())
+		{
+			continue;
+		}
+
+		// Do not target someone on the same team as our owner.
+		if (G_SameTeam(player, source()->player) == true)
 		{
 			continue;
 		}

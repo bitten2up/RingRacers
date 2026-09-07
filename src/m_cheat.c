@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -115,11 +115,80 @@ void Command_Hurtme_f(void)
 
 	if (COM_Argc() < 2)
 	{
-		CONS_Printf(M_GetText("hurtme <damage>: Damage yourself by a specific amount\n"));
+		CONS_Printf(M_GetText("hurtme <damage>: Damage yourself with specific flags\n"));
+		CONS_Printf(M_GetText("Norm 0    Wipe 1    Expl 2    Tumb 3    Stng 4\n"));
+		CONS_Printf(M_GetText("Krma 5    Volt 6    Stmb 7    Whmb 8\n"));
+		CONS_Printf(M_GetText("Ikll 128  Dpit 129  Crsh 130  Spec 131  Time 132\n"));
+		CONS_Printf(M_GetText("Wmbo 16   Stel 32   Hslf 64\n"));
 		return;
 	}
 
 	D_Cheat(consoleplayer, CHEAT_HURT, atoi(COM_Argv(1)));
+}
+
+void Command_Spinout_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_NORMAL);
+}
+
+void Command_Wipeout_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_WIPEOUT);
+}
+
+void Command_Explode_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_EXPLODE);
+}
+
+void Command_Sting_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_STING);
+}
+
+
+void Command_Tumble_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_TUMBLE);
+}
+
+void Command_Stumble_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_STUMBLE);
+}
+
+void Command_Whumble_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_WHUMBLE);
+}
+
+void Command_Kill_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_HURT, DMG_INSTAKILL);
 }
 
 void Command_RTeleport_f(void)
@@ -290,6 +359,8 @@ struct debugFlagNames_s const debug_flag_names[] =
 	{"PowerLevel", DBG_PWRLV}, // alt name
 	{"Demo", DBG_DEMO},
 	{"Replay", DBG_DEMO}, // alt name
+	{"Teams", DBG_TEAMS},
+	{"Teamplay", DBG_TEAMS}, // alt name
 	{NULL, 0}
 };
 
@@ -362,6 +433,14 @@ void Command_Setspheres_f(void)
 	D_Cheat(consoleplayer, CHEAT_SPHERES, atoi(COM_Argv(1)));
 }
 
+void Command_Setamps_f(void)
+{
+	REQUIRE_CHEATS;
+	REQUIRE_INLEVEL;
+
+	D_Cheat(consoleplayer, CHEAT_AMPS, atoi(COM_Argv(1)));
+}
+
 void Command_Setlives_f(void)
 {
 	REQUIRE_CHEATS;
@@ -370,7 +449,7 @@ void Command_Setlives_f(void)
 	D_Cheat(consoleplayer, CHEAT_LIVES, atoi(COM_Argv(1)));
 }
 
-void Command_Setscore_f(void)
+void Command_Setroundscore_f(void)
 {
 	REQUIRE_CHEATS;
 	REQUIRE_INLEVEL;
@@ -589,7 +668,9 @@ static mapthing_t *OP_CreateNewMapThing(player_t *player, UINT16 type, boolean c
 	mt->angle = (INT16)(FixedInt(AngleFixed(player->mo->angle)));
 
 	mt->options = (mt->z << ZSHIFT) | (UINT16)cv_opflags.value;
-	mt->scale = player->mo->scale;
+	mt->scale = FixedDiv(player->mo->scale, mapobjectscale);
+	mt->spritexscale = FRACUNIT;
+	mt->spriteyscale = FRACUNIT;
 	memset(mt->thing_args, 0, NUM_MAPTHING_ARGS*sizeof(*mt->thing_args));
 	memset(mt->thing_stringargs, 0x00, NUM_MAPTHING_STRINGARGS*sizeof(*mt->thing_stringargs));
 	mt->special = 0;

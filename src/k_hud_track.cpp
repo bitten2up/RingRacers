@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -40,7 +40,7 @@
 
 using namespace srb2;
 
-extern "C" consvar_t cv_debughudtracker, cv_battleufotest, cv_kartdebugwaypoints;
+extern "C" consvar_t cv_debughudtracker, cv_battleufotest, cv_kartdebugwaypoints, cv_debugpickmeup;
 
 namespace
 {
@@ -143,6 +143,8 @@ struct TargetTracking
 			return false;
 
 		default:
+			if (K_IsPickMeUpItem(mobj->type))
+				return false;
 			return true;
 		}
 	}
@@ -277,8 +279,35 @@ private:
 					{{6, 2, {kp_spraycantarget_far[1]}, V_ADD}}, // 4P
 				}},
 			};
-
 		default:
+			if (K_IsPickMeUpItem(mobj->type))
+			{
+				const INT32 flipflag = P_IsObjectFlipped(mobj) ? V_VFLIP : 0;
+
+				return {
+					{ // Near
+						{2, TICRATE/2, {kp_pickmeup}, flipflag}, // 1P
+						{{2, TICRATE/2, {kp_pickmeup}, flipflag}}, // 4P
+					},
+				};
+			}
+
+			if (cv_reducevfx.value)
+			{
+				return {
+					{ // Near
+						{8, 2, {kp_capsuletarget_near[0]}}, // 1P
+						{{8, 2, {kp_capsuletarget_near[1]}}}, // 4P
+					},
+					{{ // Far
+						{2, 16, foreground ?
+							layers {kp_capsuletarget_far[0], kp_capsuletarget_far_text} :
+							layers {kp_capsuletarget_far[0]}}, // 1P
+						{{2, 16, {kp_capsuletarget_far[1]}}}, // 4P
+					}},
+				};
+			}
+
 			return {
 				{ // Near
 					{8, 2, {kp_capsuletarget_near[0]}}, // 1P
@@ -378,7 +407,20 @@ bool is_object_tracking_target(const mobj_t* mobj)
 		return !(mobj->renderflags & (RF_TRANSMASK | RF_DONTDRAW)) && // the spraycan wasn't collected yet
 			P_CheckSight(stplyr->mo, const_cast<mobj_t*>(mobj));
 
+	case MT_FLOATINGITEM:
+		if (mobj->threshold != KDROP_STONESHOETRAP)
+			return false;
+
+		if (cv_debugpickmeup.value)
+			return false;
+
+		// FALLTHRU
 	default:
+		if (K_IsPickMeUpItem(mobj->type))
+			return (mobj->target && !P_MobjWasRemoved(mobj->target) && (
+				(mobj->target->player && stplyr == mobj->target->player)
+				|| (mobj->target->player && G_SameTeam(stplyr, mobj->target->player))
+			) && P_CheckSight(stplyr->mo, const_cast<mobj_t*>(mobj)));
 		return false;
 	}
 }
@@ -391,7 +433,7 @@ std::optional<TargetTracking::Tooltip> object_tooltip(const mobj_t* mobj)
 
 	auto conditional = [](bool val, auto&& f) { return val ? std::optional<Tooltip> {f()} : std::nullopt; };
 
-	Draw::Font splitfont = (r_splitscreen > 1) ? Draw::Font::kThin : Draw::Font::kMenu;
+	Draw::Font splitfont = (r_splitscreen > 1) ? Draw::Font::kThin : Draw::Font::kMedium;
 
 	switch (mobj->type)
 	{
@@ -433,14 +475,77 @@ std::optional<TargetTracking::Tooltip> object_tooltip(const mobj_t* mobj)
 	case MT_GARDENTOP:
 		return conditional(
 			mobj->tracer == stplyr->mo && Obj_GardenTopPlayerNeedsHelp(mobj),
-			[&] { return TextElement("Try \xA7!").font(splitfont); }
+			[&] { return TextElement().parse("TRY <r_animated>").font(splitfont); }
 		);
 
 	case MT_PLAYER:
+	{
+		if (mobj->player == stplyr && stplyr->fastfall == 0 && K_CanSuperTransfer(stplyr))
+			return Tooltip(
+				TextElement(
+					TextElement().parse("<c_animated>").font(splitfont))
+				)
+			.offset3d(0, 0, 64 * mobj->scale * P_MobjFlip(mobj));
+
+		if (mobj->player == stplyr && stplyr->ballhogburst >= (BALLHOG_BURST_FUSE/3))
+		{
+			UINT32 flag = (stplyr->ballhogburst >= (2*BALLHOG_BURST_FUSE/3)) ? V_REDMAP : V_YELLOWMAP;
+			if (stplyr->ballhogburst % 2 && !cv_reducevfx.value)
+				flag = 0;
+
+			return Tooltip(
+				TextElement(
+					TextElement().parse("DANGER!").flags(V_20TRANS|flag).font(splitfont))
+				)
+			.offset3d(0, 0, 32 * mobj->scale * P_MobjFlip(mobj));
+		}
+
+		boolean offroadwarning = K_ApplyOffroad(stplyr) && stplyr->offroad >= FRACUNIT && !stplyr->spindash && stplyr->curshield != KSHIELD_TOP
+			&& stplyr->boostpower < FRACUNIT && stplyr->rings <= 0 && stplyr->speed < K_GetKartSpeed(stplyr, false, false)/2;
+
+		boolean hitwarning = stplyr->flashing && stplyr->rings <= 0 && stplyr->speed < K_GetKartSpeed(stplyr, false, false)/2
+			&& P_IsObjectOnGround(mobj) && !P_PlayerInPain(stplyr);
+
+		boolean whipping = stplyr->whip && !P_MobjWasRemoved(stplyr->whip);
+
+		boolean hasboost = (stplyr->itemamount &&
+			(
+				stplyr->itemtype == KITEM_SNEAKER || stplyr->itemtype == KITEM_INVINCIBILITY || stplyr->itemtype == KITEM_ROCKETSNEAKER
+				|| stplyr->itemtype == KITEM_FLAMESHIELD || stplyr->itemtype == KITEM_GROW
+			)
+		) || stplyr->rocketsneakertimer;
+
+		if (mobj->player == stplyr && (offroadwarning || hitwarning) && !mobj->hitlag && !whipping && leveltime > starttime && gametype != GT_TUTORIAL)
+		{
+			if (offroadwarning)
+			{
+				if (hasboost)
+				{
+					return Tooltip(
+						TextElement(
+							TextElement().parse("BOOST <l_animated>").font(splitfont))
+						)
+					.offset3d(0, 0, 64 * mobj->scale * P_MobjFlip(mobj));
+				}
+			}
+
+			return Tooltip(
+				TextElement(
+					TextElement().parse("HOLD <c_animated>").font(splitfont))
+				)
+			.offset3d(0, 0, 64 * mobj->scale * P_MobjFlip(mobj));
+		}
+
 		return conditional(
 			mobj->player == stplyr && stplyr->icecube.frozen,
-			[&] { return Tooltip(TextElement("\xA7")).offset3d(0, 0, 64 * mobj->scale * P_MobjFlip(mobj)); }
+			[&] { return Tooltip(TextElement(
+				(leveltime/(TICRATE/2)%2) ?
+					TextElement().parse("<r_animated>").font(splitfont) :
+					TextElement().parse("<a_animated>").font(splitfont)
+				)).offset3d(0, 0, 64 * mobj->scale * P_MobjFlip(mobj)); }
+			// I will be trying to figure out why the return value didn't accept a straightforward call to parse() for the rest of my life (apprx. 15 seconds)
 		);
+	}
 
 	default:
 		return {};
@@ -454,7 +559,11 @@ Visibility is_object_visible(const mobj_t* mobj)
 	case MT_SPRAYCAN:
 	case MT_SUPER_FLICKY:
 		// Always flickers.
-		return Visibility::kFlicker;
+		// Actually no, it gave my friend a migraine, this will *not* always flicker
+		if (cv_reducevfx.value)
+			return Visibility::kTransparent;
+		else
+			return Visibility::kFlicker;
 
 	default:
 		// Transparent when not visible.
@@ -466,7 +575,7 @@ void K_DrawTargetTracking(const TargetTracking& target)
 {
 	if (target.nametag != PLAYERTAG_NONE)
 	{
-		K_DrawPlayerTag(target.result.x, target.result.y, target.mobj->player, target.nametag, target.foreground ? 0 : V_60TRANS);
+		K_DrawPlayerTag(target.result.x, target.result.y, target.mobj->player, target.nametag, target.foreground);
 		return;
 	}
 
@@ -588,13 +697,19 @@ void K_DrawTargetTracking(const TargetTracking& target)
 		if (target.mobj->type == MT_BATTLECAPSULE
 			|| target.mobj->type == MT_CDUFO)
 		{
-			targetPatch = kp_capsuletarget_icon[timer & 1];
+			if (cv_reducevfx.value)
+				targetPatch = kp_capsuletarget_icon[(timer/6) & 1];
+			else
+				targetPatch = kp_capsuletarget_icon[timer & 1];
 		}
 
 		if (abs(borderDir.x) > abs(borderDir.y))
 		{
 			// Horizontal arrow
-			arrowPatch = kp_capsuletarget_arrow[1][timer & 1];
+			if (cv_reducevfx.value)
+				arrowPatch = kp_capsuletarget_arrow[1][(timer/6) & 1];
+			else
+				arrowPatch = kp_capsuletarget_arrow[1][timer & 1];
 			arrowDir.y = 0;
 
 			if (borderDir.x < 0)
@@ -611,7 +726,10 @@ void K_DrawTargetTracking(const TargetTracking& target)
 		else
 		{
 			// Vertical arrow
-			arrowPatch = kp_capsuletarget_arrow[0][timer & 1];
+			if (cv_reducevfx.value)
+				arrowPatch = kp_capsuletarget_arrow[0][(timer/6) & 1];
+			else
+				arrowPatch = kp_capsuletarget_arrow[0][timer & 1];
 			arrowDir.x = 0;
 
 			if (borderDir.y < 0)
@@ -686,8 +804,8 @@ void K_DrawTargetTracking(const TargetTracking& target)
 			patch_t* patch = array[(leveltime / anim.tics_per_frame) % anim.frames];
 
 			V_DrawFixedPatch(
-				targetPos.x - ((patch->width << FRACBITS) >> 1),
-				targetPos.y - ((patch->height << FRACBITS) >> 1),
+				targetPos.x - (((anim.video_flags &  V_FLIP) ? -1 : 1) * (patch->width  << (FRACBITS-1))),
+				targetPos.y - (((anim.video_flags & V_VFLIP) ? -1 : 1) * (patch->height << (FRACBITS-1))),
 				FRACUNIT,
 				V_SPLITSCREEN | anim.video_flags | trans,
 				patch,
@@ -735,9 +853,26 @@ void K_CullTargetList(std::vector<TargetTracking>& targetList)
 				bit = 2; // nametags will cull on a separate plane
 
 				// see also K_DrawNameTagForPlayer
-				if ((gametyperules & GTR_ITEMARROWS) && p->itemtype != KITEM_NONE && p->itemamount != 0)
+				if ((p->itemtype != KITEM_NONE && p->itemamount != 0)
+					|| (p->itemRoulette.active == true && p->itemRoulette.ringbox == false))
 				{
 					x1 -= 24 * FRACUNIT;
+				}
+			}
+			else if (tr.nametag == PLAYERTAG_RIVAL || tr.nametag == PLAYERTAG_CPU)
+			{
+				const player_t* p = tr.mobj->player;
+
+				x1 = tr.result.x - (14 * FRACUNIT);
+				x2 = tr.result.x + (14 * FRACUNIT);
+				y1 = tr.result.y - (20 * FRACUNIT);
+				y2 = tr.result.y - (4 * FRACUNIT);
+				bit = 2; // nametags will cull on a separate plane
+
+				// see also K_DrawNameTagForPlayer
+				if (p->itemtype != KITEM_NONE && p->itemamount != 0)
+				{
+					y1 -= 23 * FRACUNIT;
 				}
 			}
 			else if (tr.nametag != PLAYERTAG_NONE)
@@ -841,6 +976,20 @@ void K_drawTargetHUD(const vector3_t* origin, player_t* player)
 
 		if (tracking)
 		{
+			fixed_t itemOffset = 36*mobj->scale;
+
+			if (K_IsPickMeUpItem(mobj->type))
+			{
+				if (mobj->eflags & MFE_VERTICALFLIP)
+				{
+					pos.z -= itemOffset;
+				}
+				else
+				{
+					pos.z += itemOffset;
+				}
+			}
+
 			K_ObjectTracking(&tr.result, &pos, false);
 			targetList.push_back(tr);
 		}

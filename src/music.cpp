@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -25,6 +25,7 @@ TuneManager g_tunes;
 
 void Music_Init(void)
 {
+	// Many tunes below now have their default songs set in Music_TuneReset. Check there first for changing those.
 	{
 		Tune& tune = g_tunes.insert("level");
 
@@ -55,21 +56,21 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("battle_overtime", g_tunes.find("level"));
 
-		tune.song = "shwdwn";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 11;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("battle_overtime_stress", g_tunes.find("battle_overtime"));
 
-		tune.song = "shwdn2";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 10;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("grow");
 
-		tune.song = "kgrow";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 20;
 		tune.resume_fade_in = 200;
 		tune.use_level_volume = true;
@@ -78,7 +79,7 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("invinc");
 
-		tune.song = "kinvnc";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 21;
 		tune.use_level_volume = true;
 	}
@@ -86,7 +87,7 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("finish_silence");
 
-		tune.song = "";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 30;
 	}
 
@@ -100,7 +101,7 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("comeon");
 
-		tune.song = "chalng";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 35;
 		tune.loop = false;
 	}
@@ -116,7 +117,7 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("vote");
 
-		tune.song = "vote";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 50;
 		tune.credit = true;
 	}
@@ -124,14 +125,14 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("vote_suspense");
 
-		tune.song = "voteea";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 51;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("vote_end");
 
-		tune.song = "voteeb";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 52;
 		tune.loop = false;
 	}
@@ -139,14 +140,14 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("wait");
 
-		tune.song = "WAIT2J";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 60;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("title");
 
-		tune.song = "_title";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 100;
 		tune.resist = true;
 	}
@@ -167,22 +168,22 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("credits_silence");
 
-		tune.song = "";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 100;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("credits");
 
-		tune.priority = 100;
-		tune.song = "_creds";
+		tune.priority = 101;
+		tune.song = ""; // F_NewCreditsMusic
 		tune.credit = true;
 	}
 
 	{
 		Tune& tune = g_tunes.insert("shore");
 
-		tune.priority = 100;
+		tune.priority = 101;
 		tune.loop = false;
 	}
 
@@ -213,11 +214,15 @@ void Music_Init(void)
 	{
 		Tune& tune = g_tunes.insert("lawyer");
 
-		tune.song = "lawyer";
+		tune.song = ""; // Music_TuneReset
 		tune.priority = 35;
 		tune.loop = false;
 	}
+	
+	Music_TuneReset();
 }
+
+
 
 void Music_Tick(void)
 {
@@ -227,6 +232,22 @@ void Music_Tick(void)
 void Music_Flip(void)
 {
 	g_tunes.flip();
+}
+
+void Music_AddTune(const char* id, int priority, int tuneflags)
+{
+	Tune& tune = g_tunes.insert(id);
+
+	tune.song = "";
+	tune.priority = priority;
+
+	tune.loop = (tuneflags & TN_LOOPING);
+	tune.fade_out_inclusive = (tuneflags & TN_INCLUSIVEFADE);
+	tune.use_level_volume = (tuneflags & TN_USEMAPVOLUME);
+	tune.sync = (tuneflags & TN_SYNCMUSIC);
+	tune.credit = (tuneflags & TN_MUSICCRED);
+	tune.vapes = (tuneflags & TN_VAPES);
+	tune.nightcoreable = (tuneflags & TN_NIGHTCOREABLE);
 }
 
 void Music_Play(const char* id)
@@ -251,6 +272,30 @@ void Music_SetFadeOut(const char* id, int fade_out)
 		if (tune->time_remaining() <= detail::msec_to_tics(tune->fade_out))
 		{
 			// If this action would cause a fade out, start
+			// fading immediately.
+			g_tunes.tick();
+		}
+	}
+}
+
+void Music_SetFadeIn(const char* id, int fade_in, boolean resume)
+{
+	Tune* tune = g_tunes.find(id);
+
+	if (tune)
+	{
+		if (resume)
+		{
+			tune->resume_fade_in = fade_in;
+		}
+		else
+		{
+			tune->fade_in = fade_in;
+		}
+
+		if (tune->elapsed() <= detail::msec_to_tics(fade_in))
+		{
+			// If this action would cause a fade in, start
 			// fading immediately.
 			g_tunes.tick();
 		}
@@ -368,6 +413,17 @@ void Music_Remap(const char* id, const char* song)
 	}
 }
 
+boolean Music_TuneExists(const char* id)
+{
+	const Tune* tune = g_tunes.find(id);
+
+	if (tune)
+	{
+		return true;
+	}
+	return false;
+}
+
 boolean Music_Playing(const char* id)
 {
 	const Tune* tune = g_tunes.find(id);
@@ -468,4 +524,21 @@ void Music_LevelVolume(int volume)
 void Music_ResetLevelVolume(void)
 {
 	g_tunes.level_volume(100, true);
+}
+
+void Music_TuneReset(void)
+{
+	Music_Remap("battle_overtime", "shwdwn");
+	Music_Remap("battle_overtime_stress", "shwdn2");
+	Music_Remap("grow", "kgrow");
+	Music_Remap("invinc", "kinvnc");
+	Music_Remap("finish_silence", "");
+	Music_Remap("comeon", "chalng");
+	Music_Remap("vote", "vote");
+	Music_Remap("vote_suspense", "voteea");
+	Music_Remap("vote_end", "voteeb");
+	Music_Remap("wait", "WAIT2J");
+	Music_Remap("title", "_title");
+	Music_Remap("credits_silence", "");
+	Music_Remap("lawyer", "lawyer");
 }

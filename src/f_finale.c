@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -67,6 +67,11 @@ static tic_t animtimer; // Used for some animation timings
 static tic_t stoptimer;
 
 static boolean keypressed = false;
+
+#define SKIPHISTORYSIZE 32
+static UINT8 skipinputindex = 0;
+static UINT8 skipinputhistory[SKIPHISTORYSIZE];
+static UINT8 skiptype = 0;
 
 static tic_t attractcountdown; // Countdown until attract demo ends
 static boolean attractcredit; // Show music credit once attract demo begins
@@ -499,7 +504,7 @@ static void F_IntroDrawScene(void)
 			}
 
 			// Joyeaux Anniversaire
-			V_DrawCenteredMenuString(BASEVIDWIDTH/2, 174 - (textoffs/FRACUNIT), (trans<<V_ALPHASHIFT)|V_SUBTRACT, "2013 - 11 years - 2024");
+			V_DrawCenteredMenuString(BASEVIDWIDTH/2, 174 - (textoffs/FRACUNIT), (trans<<V_ALPHASHIFT)|V_SUBTRACT, "2013 - 12 years - 2025");
 
 			// Joyeaux Adressaire
 			V_DrawCenteredMenuString(BASEVIDWIDTH/2, 184 - (textoffs/FRACUNIT), (trans<<V_ALPHASHIFT)|V_SUBTRACT, "kartkrew.org");
@@ -835,6 +840,13 @@ void F_IntroDrawer(void)
 	F_IntroDrawScene();
 }
 
+static void ResetSkipSequences(void)
+{
+	skiptype = 0;
+	skipinputindex = 0;
+	memset(skipinputhistory, 0, sizeof(skipinputhistory));
+}
+
 //
 // F_IntroTicker
 //
@@ -855,8 +867,8 @@ void F_IntroTicker(void)
 	const boolean disclaimerskippable =
 	(
 		intro_scenenum == INTROSCENE_DISCLAIMER
-		&& dc_state == DISCLAIMER_FINAL
-		&& dc_tics >= (TICRATE/2) + (5*6) // bottom text needs to fade all the way in
+		&& (dc_state < DISCLAIMER_SLIDE
+		|| (dc_state == DISCLAIMER_FINAL && dc_textfade == 0)) // bottom text needs to fade all the way in
 	);
 	const boolean doskip =
 	(
@@ -872,9 +884,70 @@ void F_IntroTicker(void)
 	if (keypressed)
 		keypressed = false;
 
+	if (skiptype == 2) // Test Run
+	{
+		ResetSkipSequences();
+		if (M_MapLocked(1))
+		{
+			G_SetUsedCheats();
+		}
+
+		D_MapChange(1, GT_RACE, (cv_kartencore.value == 1), true, 0, false, false);
+		return;
+	}
+
+	if (skiptype == 1) // Online
+	{
+		ResetSkipSequences();
+		M_StartControlPanel();
+		CV_StealthSetValue(&cv_advertise, 1);
+		currentMenu = &PLAY_MP_OptSelectDef;
+		return;
+	}
+
+	if (skiptype == 3) // Quick Race
+	{
+		ResetSkipSequences();
+		CV_StealthSetValue(&cv_kartbot, 9);
+		CV_StealthSetValue(&cv_maxplayers, 8);
+		D_MapChange(G_RandMap(TOL_RACE, UINT16_MAX-1, true, false, NULL)+1, GT_RACE, (cv_kartencore.value == 1), true, 0, false, false);
+		return;
+	}
+
+	if (skiptype == 4) // Nice Try
+	{
+		ResetSkipSequences();
+		S_StartSound(NULL, sfx_supflk);
+		S_StartSound(NULL, sfx_supflk);
+		S_StartSound(NULL, sfx_supflk);
+		S_StartSound(NULL, sfx_supflk);
+	}
+
+	if (skiptype == 5) // Quick Race Menu
+	{
+		ResetSkipSequences();
+		M_StartControlPanel();
+		currentMenu = &PLAY_RaceGamemodesDef;
+		return;
+	}
+
+	if (skiptype == 6) // Dev Exec
+	{
+		ResetSkipSequences();
+		COM_ImmedExecute("exec devexec.cfg");
+	}
+
 	if (doskip && disclaimerskippable)
 	{
-		dc_state = DISCLAIMER_OUT;
+		if (dc_state == DISCLAIMER_FINAL) {
+			dc_state = DISCLAIMER_OUT;
+			I_FadeOutStopSong(MUSICRATE*2/3);
+		} else {
+			if (dc_state <= DISCLAIMER_FADE)
+				Music_Play("lawyer");
+			dc_state = DISCLAIMER_SLIDE;
+			dc_segaframe = 23;
+		}
 		dc_tics = 0;
 	}
 	else if (doskip || timetonext <= 0)
@@ -930,6 +1003,69 @@ void F_IntroTicker(void)
 		animtimer--;
 }
 
+// Scan through intro input history looking for skip sequences.
+// Messy and stupid, but input history is required for this to "feel right".
+static void AdvanceSkipSequences(UINT8 input)
+{
+#ifndef DEVELOP
+	if (intro_scenenum != INTROSCENE_DISCLAIMER)
+		return;
+#endif
+
+	// add input to history
+	skipinputhistory[skipinputindex] = input;
+
+	// we're going to walk backwards from the end of the cheat because it's slightly
+	// easier for me to reaosn about
+	// get an index we can naively subtract+mod without dealing with modulo negative horseshit
+	UINT8 mi = (skipinputindex + SKIPHISTORYSIZE);
+
+	// I swear to god there must be a better way to do this,
+	// but SO says you can't get array length from a pointer to the array
+	// because C is a defective dinosaur language for assholes
+#ifdef DEVELOP
+	UINT8 s2cheat[] = {1, 1, 1};
+	UINT8 s3cheat[] = {2, 2, 2};
+	UINT8 s3kcheat[] = {3, 3, 3};
+	UINT8 spincheat[] = {1, 3, 1};
+	UINT8 devcheat[] = {4, 4, 4};
+#else
+	UINT8 s2cheat[] = {1, 1, 1, 3, 3, 3, 1};
+	UINT8 s3cheat[] = {1, 1, 3, 3, 1, 1, 1, 1};
+	UINT8 s3kcheat[] = {4, 4, 4, 2, 2, 2, 1, 1, 1};
+	UINT8 spincheat[] = {1, 2, 3, 4, 3, 2, 1};
+	UINT8 devcheat[] = {4, 4, 4};
+#endif
+	UINT8 nicetry[] = {1, 1, 3, 3, 4, 2, 4, 2};
+
+	#define NUMCHEATSPLUSONE 6
+
+	UINT8 *cheats[NUMCHEATSPLUSONE] = {s2cheat, s3cheat, s3kcheat, nicetry, spincheat, devcheat};
+	UINT8 cheatlengths[NUMCHEATSPLUSONE] = {sizeof(s2cheat), sizeof(s3cheat), sizeof(s3kcheat), sizeof(nicetry), sizeof(spincheat), sizeof(devcheat)};
+
+	for (UINT8 i = 0; i < NUMCHEATSPLUSONE; i++) 	// for each cheat...
+	{
+		UINT8 cheatsize = cheatlengths[i];
+		boolean matched = true;
+
+		for (UINT8 j = 0; j < cheatsize; j++) // start at our input history index, and walk backwards until an input doesn't match
+		{
+			if (skipinputhistory[(mi-j)%SKIPHISTORYSIZE] != cheats[i][cheatsize-j-1])
+			{
+				matched = false;
+				break;
+			}
+		}
+
+		if (matched) // if we made it through the whole cheat without a mismatch, we are now gaming
+			skiptype = i+1;
+	}
+
+	#undef NUMCHEATSPLUSONE
+
+	skipinputindex++;
+}
+
 //
 // F_IntroResponder
 //
@@ -979,6 +1115,26 @@ boolean F_IntroResponder(event_t *event)
 
 		if (event->type != ev_keydown && key != 301)
 			return false;
+	}
+
+	// Quick skips for development/testing. See F_IntroTicker.
+	if (!demo.playback && skippableallowed)
+	{
+		switch(key)
+		{
+			case KEY_UPARROW:
+				AdvanceSkipSequences(1);
+				break;
+			case KEY_DOWNARROW:
+				AdvanceSkipSequences(3);
+				break;
+			case KEY_RIGHTARROW:
+				AdvanceSkipSequences(2);
+				break;
+			case KEY_LEFTARROW:
+				AdvanceSkipSequences(4);
+				break;					
+		}
 	}
 
 	if (key != 27 && key != KEY_ENTER && key != KEY_SPACE && key != KEY_BACKSPACE)
@@ -1363,7 +1519,7 @@ void F_GameEvaluationDrawer(void)
 		const char *rtatext, *cuttext;
 		rtatext = (marathonmode & MA_INGAME) ? "In-game timer" : "RTA timer";
 		cuttext = (marathonmode & MA_NOCUTSCENES) ? "" : " w/ cutscenes";
-		endingtext = va("%s, %s%s", skins[players[consoleplayer].skin].realname, rtatext, cuttext);
+		endingtext = va("%s, %s%s", skins[players[consoleplayer].skin]->realname, rtatext, cuttext);
 		V_DrawCenteredString(BASEVIDWIDTH/2, 182, V_SNAPTOBOTTOM|(ultimatemode ? V_REDMAP : V_YELLOWMAP), endingtext);
 	}
 
@@ -1437,6 +1593,7 @@ void F_StartGameEnd(void)
 	V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
 	F_WipeEndScreen();
 	F_RunWipe(wipe_level_toblack, wipedefs[wipe_level_toblack], false, "FADEMAP0", false, false);
+	Music_Stop("credits");
 
 	nextmap = NEXTMAP_TITLE;
 	G_EndGame();
@@ -1878,13 +2035,13 @@ void F_TitleScreenDrawer(void)
 
 				if (eggSkin != -1)
 				{
-					eggColor = skins[eggSkin].prefcolor;
+					eggColor = skins[eggSkin]->prefcolor;
 				}
 				eggColormap = R_GetTranslationColormap(TC_DEFAULT, eggColor, GTC_MENUCACHE);
 
 				if (tailsSkin != -1)
 				{
-					tailsColor = skins[tailsSkin].prefcolor;
+					tailsColor = skins[tailsSkin]->prefcolor;
 				}
 				tailsColormap = R_GetTranslationColormap(TC_DEFAULT, tailsColor, GTC_MENUCACHE);
 
@@ -2235,9 +2392,9 @@ void F_StartWaitingPlayers(void)
 	if (waitcolormap)
 		Z_Free(waitcolormap);
 
-	waitcolormap = R_GetTranslationColormap(randskin, skins[randskin].prefcolor, 0);
+	waitcolormap = R_GetTranslationColormap(randskin, skins[randskin]->prefcolor, 0);
 
-	sprdef = &skins[randskin].sprites[P_GetSkinSprite2(&skins[randskin], SPR2_FSTN, NULL)];
+	sprdef = &skins[randskin]->sprites[P_GetSkinSprite2(skins[randskin], SPR2_FSTN, NULL)];
 
 	for (i = 0; i < 2; i++)
 	{

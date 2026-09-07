@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2004 by Stephen McGranahan.
 //
@@ -11,7 +11,9 @@
 /// \file  p_slopes.c
 /// \brief ZDoom + Eternity Engine Slopes, ported and enhanced by Kalaron
 
+#include "d_think.h"
 #include "doomdef.h"
+#include "g_demo.h"
 #include "r_defs.h"
 #include "r_state.h"
 #include "m_bbox.h"
@@ -25,6 +27,7 @@
 #include "w_wad.h"
 #include "r_fps.h"
 #include "k_kart.h" // K_PlayerEBrake
+#include "m_easing.h"
 
 pslope_t *slopelist = NULL;
 UINT16 slopecount = 0;
@@ -89,9 +92,7 @@ void P_UpdateSlopeLightOffset(pslope_t *slope)
 
 	// Between -2 and 2 for software, -16 and 16 for hardware
 	slope->lightOffset = FixedFloor((extralight / 8) + (FRACUNIT / 2)) / FRACUNIT;
-#ifdef HWRENDER
 	slope->hwLightOffset = FixedFloor(extralight + (FRACUNIT / 2)) / FRACUNIT;
-#endif
 }
 
 // Calculate line normal
@@ -299,13 +300,16 @@ void T_DynamicSlopeVert (dynvertexplanethink_t* th)
 
 static inline void P_AddDynLineSlopeThinker (pslope_t* slope, dynplanetype_t type, line_t* sourceline, fixed_t extent)
 {
-	dynlineplanethink_t* th = Z_Calloc(sizeof (*th), PU_LEVSPEC, NULL);
+	dynlineplanethink_t* th = Z_LevelPoolCalloc(sizeof (*th));
+	th->thinker.alloctype = TAT_LEVELPOOL;
+	th->thinker.size = sizeof(*th);
 	th->thinker.function.acp1 = (actionf_p1)T_DynamicSlopeLine;
 	th->slope = slope;
 	th->type = type;
 	th->sourceline = sourceline;
 	th->extent = extent;
-	P_AddThinker(THINK_DYNSLOPE, &th->thinker);
+	// Handle old demos as well.
+	P_AddThinker(G_CompatLevel(0x000E) ? THINK_DYNSLOPEDEMO : THINK_DYNSLOPE, &th->thinker);
 
 	// interpolation
 	R_CreateInterpolator_DynSlope(&th->thinker, slope);
@@ -313,7 +317,9 @@ static inline void P_AddDynLineSlopeThinker (pslope_t* slope, dynplanetype_t typ
 
 static inline void P_AddDynVertexSlopeThinker (pslope_t* slope, const INT16 tags[3], const vector3_t vx[3])
 {
-	dynvertexplanethink_t* th = Z_Calloc(sizeof (*th), PU_LEVSPEC, NULL);
+	dynvertexplanethink_t* th = Z_LevelPoolCalloc(sizeof (*th));
+	th->thinker.alloctype = TAT_LEVELPOOL;
+	th->thinker.size = sizeof(*th);
 	size_t i;
 	INT32 l;
 	th->thinker.function.acp1 = (actionf_p1)T_DynamicSlopeVert;
@@ -333,7 +339,8 @@ static inline void P_AddDynVertexSlopeThinker (pslope_t* slope, const INT16 tags
 		if (lines[l].args[0])
 			th->relative |= 1<<i;
 	}
-	P_AddThinker(THINK_DYNSLOPE, &th->thinker);
+	// Handle old demos as well.
+	P_AddThinker(G_CompatLevel(0x000E) ? THINK_DYNSLOPEDEMO : THINK_DYNSLOPE, &th->thinker);
 }
 
 /// Create a new slope and add it to the slope list.
@@ -985,6 +992,14 @@ boolean P_CanApplySlopeLaunch(mobj_t *mo, pslope_t *slope)
 		return false;
 	}
 
+	if (mo->eflags & MFE_DONTSLOPELAUNCH)
+	{
+		CONS_Printf("MFE_DONTSLOPELAUNCH\n");
+		mo->eflags &= ~MFE_DONTSLOPELAUNCH; // You get one cancelled launch
+		// Don't launch off of slopes.
+		return false;
+	}
+
 	// We can do slope launching.
 	return true;
 }
@@ -1090,7 +1105,7 @@ void P_HandleSlopeLanding(mobj_t *thing, pslope_t *slope)
 	vector3_t mom; // Ditto.
 
 	if (P_CanApplySlopePhysics(thing, slope) == false) // No physics, no need to make anything complicated.
-	{ 
+	{
 		if (P_MobjFlip(thing)*(thing->momz) < 0) // falling, land on slope
 		{
 			thing->standingslope = slope;
@@ -1150,7 +1165,7 @@ void P_ButteredSlope(mobj_t *mo)
 		{
 			// Allow the player to stand still on slopes below a certain steepness.
 			// 45 degree angle steep, to be exact.
-			return; 
+			return;
 		}
 	}
 
@@ -1202,8 +1217,38 @@ void P_ButteredSlope(mobj_t *mo)
 	// Let's get the gravity strength for the object...
 	thrust = FixedMul(thrust, abs(P_GetMobjGravity(mo)));
 
-	// ... and its friction against the ground for good measure (divided by original friction to keep behaviour for normal slopes the same).
-	thrust = FixedMul(thrust, FixedDiv(mo->friction, ORIG_FRICTION));
+	fixed_t basefriction = ORIG_FRICTION;
+	if (mo->player)
+		basefriction = K_PlayerBaseFriction(mo->player, ORIG_FRICTION);
+
+	if (mo->friction != basefriction && basefriction != 0)
+	{
+		// ... and its friction against the ground for good measure.
+		// (divided by original friction to keep behaviour for normal slopes the same)
+		thrust = FixedMul(thrust, FixedDiv(mo->friction, basefriction));
+
+		// Sal: Also consider movefactor of players.
+		// We want ice to make slopes *really* funnel you in a specific direction.
+		fixed_t move_factor = P_MoveFactorFromFriction(mo->friction);
+
+		if (mo->player != NULL)
+		{
+			if (mo->player->icecube.frozen == true)
+			{
+				// Undo this change with ice cubes, because it is insanity.
+				move_factor = FRACUNIT;
+			}
+			else if (mo->player->tiregrease > 0)
+			{
+				// Undo this change with tire grease, so that
+				// springs and spindash can still overpower slopes.
+				fixed_t grease_frac = clamp((FRACUNIT * mo->player->tiregrease) / greasetics, 0, FRACUNIT);
+				move_factor = Easing_Linear(grease_frac, move_factor, FRACUNIT);
+			}
+		}
+
+		thrust = FixedMul(thrust, FixedDiv(FRACUNIT, move_factor));
+	}
 
 	P_Thrust(mo, mo->standingslope->xydirection, thrust);
 }

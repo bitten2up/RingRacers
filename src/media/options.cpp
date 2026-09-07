@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -53,14 +53,12 @@ float Options::get<float>(const char* option) const
 template <typename T>
 consvar_t Options::values(const char* default_value, const Range<T> range, std::map<std::string_view, T> list)
 {
-	constexpr bool is_float = std::is_floating_point_v<T>;
-
 	const std::size_t min_max_size = (range.min || range.max) ? 2 : 0;
 	auto* arr = new CV_PossibleValue_t[list.size() + min_max_size + 1];
 
 	auto cast = [](T n)
 	{
-		if constexpr (is_float)
+		if constexpr (std::is_floating_point_v<T>)
 		{
 			return FloatToFixed(n);
 		}
@@ -94,7 +92,7 @@ consvar_t Options::values(const char* default_value, const Range<T> range, std::
 
 	int32_t flags = CV_SAVE;
 
-	if constexpr (is_float)
+	if constexpr (std::is_floating_point_v<T>)
 	{
 		flags |= CV_FLOAT;
 	}

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -834,6 +834,12 @@ boolean R_ThingIsFlashing(mobj_t *thing)
 		baddie_is_flashing(thing);
 }
 
+boolean R_ThingIsUsingBakedOffsets(mobj_t* thing)
+{
+	return ((thing->bakexoff) || (thing->bakeyoff) || (thing->bakezoff) ||
+			(thing->bakexpiv) || (thing->bakeypiv) || (thing->bakezpiv));
+}
+
 UINT8 *R_GetSpriteTranslation(vissprite_t *vis)
 {
 	if (vis->cut & SC_PRECIP)
@@ -848,7 +854,7 @@ UINT8 *R_GetSpriteTranslation(vissprite_t *vis)
 
 	if (vis->mobj->skin && vis->mobj->sprite == SPR_PLAY) // This thing is a player!
 	{
-		skinnum = (skin_t*)vis->mobj->skin-skins;
+		skinnum = ((skin_t*)vis->mobj->skin)->skinnum;
 
 		// Hide not-yet-unlocked characters in replays from other people
 		if (!R_CanShowSkinInDemo(skinnum))
@@ -991,9 +997,6 @@ static void R_DrawVisSprite(vissprite_t *vis)
 
 	frac = vis->startfrac;
 	windowtop = windowbottom = sprbotscreen = INT32_MAX;
-
-	if (!(vis->cut & SC_PRECIP) && vis->mobj->skin && ((skin_t *)vis->mobj->skin)->highresscale != FRACUNIT)
-		this_scale = FixedMul(this_scale, ((skin_t *)vis->mobj->skin)->highresscale);
 
 	if (this_scale <= 0)
 		this_scale = 1;
@@ -1501,8 +1504,6 @@ static void R_ProjectDropShadow(
 	shadow->gzt = groundz + patch->height * shadowyscale / 2;
 	shadow->gz = shadow->gzt - patch->height * shadowyscale;
 	shadow->texturemid = FixedMul(interp.scale, FixedDiv(shadow->gzt - viewz, shadowyscale));
-	if (thing->skin && ((skin_t *)thing->skin)->highresscale != FRACUNIT)
-		shadow->texturemid = FixedMul(shadow->texturemid, ((skin_t *)thing->skin)->highresscale);
 	shadow->scalestep = 0;
 	shadow->shear.tan = shadowskew; // repurposed variable
 
@@ -1685,7 +1686,7 @@ static void R_ProjectBoundingBox(mobj_t *thing, vissprite_t *vis)
 fixed_t R_GetSpriteDirectionalLighting(angle_t angle)
 {
 	// Copied from P_UpdateSegLightOffset
-	const UINT8 contrast = std::min(std::max(0, maplighting.contrast - maplighting.backlight), UINT8_MAX);
+	const UINT8 contrast = std::min<UINT8>(std::max(0, maplighting.contrast - maplighting.backlight), UINT8_MAX);
 	const fixed_t contrastFixed = ((fixed_t)contrast) * FRACUNIT;
 
 	fixed_t light = FRACUNIT;
@@ -1777,6 +1778,7 @@ static void R_ProjectSprite(mobj_t *thing)
 	patch_t *rotsprite = NULL;
 	INT32 rollangle = 0;
 	angle_t spriterotangle = 0;
+	vector2_t visoffs;
 #endif
 
 	// uncapped/interpolation
@@ -1793,8 +1795,10 @@ static void R_ProjectSprite(mobj_t *thing)
 	}
 
 	this_scale = interp.scale;
+	if (thing->skin && ((skin_t *)thing->skin)->highresscale != FRACUNIT)
+		this_scale = FixedMul(this_scale, ((skin_t *)thing->skin)->highresscale);
 
-	// hitlag vibrating (todo: interp somehow?)
+	// hitlag vibrating
 	if (thing->hitlag > 0 && (thing->eflags & MFE_DAMAGEHITLAG))
 	{
 		fixed_t mul = thing->hitlag * HITLAGJITTERS;
@@ -1934,9 +1938,6 @@ static void R_ProjectSprite(mobj_t *thing)
 
 	I_Assert(lump < max_spritelumps);
 
-	if (thing->skin && ((skin_t *)thing->skin)->highresscale != FRACUNIT)
-		this_scale = FixedMul(this_scale, ((skin_t *)thing->skin)->highresscale);
-
 	spr_width = spritecachedinfo[lump].width;
 	spr_height = spritecachedinfo[lump].height;
 	spr_offset = spritecachedinfo[lump].offset;
@@ -1987,10 +1988,31 @@ static void R_ProjectSprite(mobj_t *thing)
 	if (spritexscale < 1 || spriteyscale < 1)
 		return;
 
+#ifdef ROTSPRITE
+	// initialize and rotate pitch/roll vector
+	visoffs.x = 0;
+	visoffs.y = 0;
+
+	const fixed_t visoffymul = (vflip ? -FRACUNIT : FRACUNIT);
+
+	if (R_ThingIsUsingBakedOffsets(thing))
+	{
+		R_RotateSpriteOffsetsByPitchRoll(thing,
+										 vflip,
+										 hflip,
+										 &visoffs);
+	}
+#endif
+
 	if (thing->renderflags & RF_ABSOLUTEOFFSETS)
 	{
 		spr_offset = interp.spritexoffset;
+#ifdef ROTSPRITE
+		spr_topoffset = (interp.spriteyoffset + FixedDiv((visoffs.y * visoffymul),
+																mapobjectscale));
+#else
 		spr_topoffset = interp.spriteyoffset;
+#endif
 	}
 	else
 	{
@@ -1999,14 +2021,27 @@ static void R_ProjectSprite(mobj_t *thing)
 		if ((thing->renderflags & RF_FLIPOFFSETS) && flip)
 			flipoffset = -1;
 
-		spr_offset += interp.spritexoffset * flipoffset;
+		spr_offset += (interp.spritexoffset) * flipoffset;
+#ifdef ROTSPRITE
+		spr_topoffset += (interp.spriteyoffset + FixedDiv((visoffs.y * visoffymul),
+															mapobjectscale))
+																* flipoffset;
+#else
 		spr_topoffset += interp.spriteyoffset * flipoffset;
+#endif
 	}
 
 	if (flip)
 		offset = spr_offset - spr_width;
 	else
 		offset = -spr_offset;
+
+#ifdef ROTSPRITE
+	if (visoffs.x)
+	{
+		offset -= FixedDiv((visoffs.x * FRACUNIT), mapobjectscale);
+	}
+#endif
 
 	offset = FixedMul(offset, FixedMul(spritexscale, this_scale));
 	offset2 = FixedMul(spr_width, FixedMul(spritexscale, this_scale));
@@ -2172,10 +2207,15 @@ static void R_ProjectSprite(mobj_t *thing)
 			R_InterpolateMobjState(thing, FRACUNIT, &tracer_interp);
 		}
 
-		// hitlag vibrating (todo: interp somehow?)
+		// hitlag vibrating
 		if (thing->hitlag > 0 && (thing->eflags & MFE_DAMAGEHITLAG))
 		{
-			fixed_t mul = thing->hitlag * (FRACUNIT / 10);
+			// previous code multiplied by (FRACUNIT / 10) instead of HITLAGJITTERS, um wadaflip
+			fixed_t jitters = HITLAGJITTERS;
+			if (R_UsingFrameInterpolation() && !paused)
+				jitters += (rendertimefrac / HITLAGDIV);
+			
+			fixed_t mul = thing->hitlag * jitters;
 
 			if (leveltime & 1)
 			{
@@ -2479,7 +2519,7 @@ static void R_ProjectSprite(mobj_t *thing)
 
 	vis->xscale = FixedMul(spritexscale, xscale); //SoM: 4/17/2000
 	vis->scale = FixedMul(spriteyscale, yscale); //<<detailshift;
-	vis->thingscale = interp.scale;
+	vis->thingscale = this_scale;
 
 	vis->spritexscale = spritexscale;
 	vis->spriteyscale = spriteyscale;
@@ -2784,7 +2824,7 @@ void R_AddSprites(sector_t *sec, INT32 lightlevel)
 	INT32 lightnum;
 	fixed_t limit_dist;
 
-	if (rendermode != render_soft)
+	if (rendermode == render_opengl)
 		return;
 
 	// BSP is traversed by subsector.
@@ -3765,27 +3805,58 @@ void R_ClipSprites(drawseg_t* dsstart, portal_t* portal)
 	}
 }
 
+boolean R_DrawPickups(void)
+{
+	if (g_takemapthumbnail != TMT_NO)
+	{
+		return false;
+	}
+
+	return (boolean)cv_drawpickups.value;
+}
+
 /* Check if thing may be drawn from our current view. */
 boolean R_ThingVisible (mobj_t *thing)
 {
 	if (thing->sprite == SPR_NULL)
 		return false;
 
-	if (!cv_drawpickups.value)
+	if (!R_DrawPickups())
 	{
 		switch (thing->type)
 		{
+			// Players
+			case MT_PLAYER:
+			case MT_FOLLOWER:
+			// Individual pickups
 			case MT_RING:
 			case MT_FLINGRING:
 			case MT_BLUESPHERE:
+			case MT_SPRAYCAN:
+			// Item Boxes and Capsules
+			case MT_EXPLODE:
 			case MT_RANDOMITEM:
 			case MT_SPHEREBOX:
 			case MT_ITEMCAPSULE:
 			case MT_ITEMCAPSULE_PART:
 			case MT_OVERLAY: // mostly capsule numbers :)))
+			// Prison Eggs
 			case MT_BATTLECAPSULE:
 			case MT_BATTLECAPSULE_PIECE:
-			case MT_SPRAYCAN:
+			// Duel hazards
+			case MT_DUELBOMB:
+			case MT_LANDMINE:
+			case MT_SSMINE:
+			case MT_SSMINE_SHIELD:
+			case MT_MINERADIUS:
+			case MT_POGOSPRING:
+			case MT_DROPTARGET:
+			case MT_HYUDORO:
+			case MT_SHADOW: // hyuu fake shadow
+			// Checkpoints
+			case MT_CHECKPOINT_END:
+			case MT_SIGNSPARKLE:
+			case MT_THOK: // checkpoint parts
 				return false;
 
 			default:

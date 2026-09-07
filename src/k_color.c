@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -53,11 +53,11 @@ UINT16 K_RainbowColor(tic_t time)
 }
 
 /*--------------------------------------------------
-	void K_RainbowColormap(UINT8 *dest_colormap, UINT8 skincolor)
+	void K_RainbowColormap(UINT8 *dest_colormap, skincolornum_t skincolor)
 
 		See header file for description.
 --------------------------------------------------*/
-void K_RainbowColormap(UINT8 *dest_colormap, UINT8 skincolor)
+void K_RainbowColormap(UINT8 *dest_colormap, skincolornum_t skincolor)
 {
 	INT32 i;
 	RGBA_t color;
@@ -147,7 +147,7 @@ void K_HitlagColormap(UINT8 *dest_colormap)
 		v = K_HitlagColorValue(color);
 
 		// Convert raw brightness value to an offset from the greyscale palette line
-		offset = (255 - v) / 8; 
+		offset = (255 - v) / 8;
 
 		dest_colormap[i] = offset; // Starts from 0, add it if greyscale moves.
 	}
@@ -163,7 +163,7 @@ static void K_IntermissionColormap(UINT8 *dest_colormap)
 	RGBA_t color;
 	INT32 i;
 
-	// for every colour in the palette, check its 
+	// for every colour in the palette, check its
 	for (i = 0; i < NUM_PALETTE_ENTRIES; i++)
 	{
 		color = V_GetColor(i);
@@ -193,7 +193,7 @@ static void K_IntermissionColormap(UINT8 *dest_colormap)
 			}
 		}
 
-		UINT16 skincolor = SKINCOLOR_INTERMISSION1;
+		skincolornum_t skincolor = SKINCOLOR_INTERMISSION1;
 		const double blue_start = 3.0;
 		const double blue_end = 5.0;
 		const double green_buffer = 0.5;
@@ -214,11 +214,11 @@ static void K_IntermissionColormap(UINT8 *dest_colormap)
 }
 
 /*--------------------------------------------------
-	void K_GenerateKartColormap(UINT8 *dest_colormap, INT32 skinnum, UINT8 color)
+	void K_GenerateKartColormap(UINT8 *dest_colormap, INT32 skinnum, skincolornum_t color)
 
 		See header file for description.
 --------------------------------------------------*/
-void K_GenerateKartColormap(UINT8 *dest_colormap, INT32 skinnum, UINT8 color)
+void K_GenerateKartColormap(UINT8 *dest_colormap, INT32 skinnum, skincolornum_t color)
 {
 	INT32 i;
 	INT32 starttranscolor;
@@ -264,7 +264,7 @@ void K_GenerateKartColormap(UINT8 *dest_colormap, INT32 skinnum, UINT8 color)
 		return;
 	}
 
-	starttranscolor = (skinnum != TC_DEFAULT) ? skins[skinnum].starttranscolor : DEFAULT_STARTTRANSCOLOR;
+	starttranscolor = (skinnum != TC_DEFAULT) ? skins[skinnum]->starttranscolor : DEFAULT_STARTTRANSCOLOR;
 
 	// Fill in the entries of the palette that are fixed
 	for (i = 0; i < starttranscolor; i++)

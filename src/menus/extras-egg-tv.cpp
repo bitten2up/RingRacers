@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -98,17 +98,17 @@ void M_FavoriteReplay(INT32 c)
 // extras menu: replay hut
 menuitem_t EXTRAS_EggTV[] =
 {
-	{IT_STRING | IT_CALL, "WATCH REPLAY", NULL, NULL, {.routine = [](auto) { g_egg_tv->watch(); }}, 0, 0},
-	{IT_STRING | IT_CALL, "STANDINGS", NULL, NULL, {.routine = [](auto) { g_egg_tv->standings(); }}, 0, 0},
-	{IT_STRING | IT_CALL, "FAVORITE", NULL, NULL, {.routine = M_FavoriteReplay}, 0, 0},
+	{IT_STRING | IT_CALL, "WATCH REPLAY", NULL, NULL, srb2::itemaction([](auto) -> void { g_egg_tv->watch(); }), 0, 0 },
+	{IT_STRING | IT_CALL, "STANDINGS", NULL, NULL, srb2::itemaction([](auto) { g_egg_tv->standings(); }), 0, 0},
+	{IT_STRING | IT_CALL, "FAVORITE", NULL, NULL, srb2::itemaction(M_FavoriteReplay), 0, 0},
 
 	{IT_SPACE},
 
-	{IT_STRING | IT_CALL, "DELETE REPLAY", NULL, NULL, {.routine = M_DeleteReplay}, 0, 0},
+	{IT_STRING | IT_CALL, "DELETE REPLAY", NULL, NULL, srb2::itemaction(M_DeleteReplay), 0, 0},
 
 	{IT_SPACE},
 
-	{IT_STRING | IT_CALL, "GO BACK", NULL, NULL, {.routine = [](auto) { g_egg_tv->back(); }}, 0, 0},
+	{IT_STRING | IT_CALL, "GO BACK", NULL, NULL, srb2::itemaction([](auto) { g_egg_tv->back(); }), 0, 0},
 };
 
 menu_t EXTRAS_EggTVDef =

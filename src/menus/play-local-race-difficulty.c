@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -188,10 +188,10 @@ void Dummygpdifficulty_OnChange(void)
 	switch (cv_dummygpdifficulty.value)
 	{
 		case KARTSPEED_EASY:
-			tooltip = "Low-stakes racing at \x83Gear 1""\x80"". Take a drive and \x83""enjoy the sights!";
+			tooltip = "Low-stakes racing at \x83Gear 1""\x80"". \x83No placement requirements\x80.";
 			break;
 		case KARTSPEED_NORMAL:
-			tooltip = "Aim for the prize at\x82 Gear 2\x80. Can you \x82surpass your limits?";
+			tooltip = "Aim for the prize at\x82 Gear 2\x80. Place \x82""within the top half\x80 to advance!";
 			break;
 		case KARTSPEED_HARD:
 			tooltip = "Challenge fierce competition at\x87 Gear 3\x80. For\x87 thrill-seekers!";
@@ -202,4 +202,24 @@ void Dummygpdifficulty_OnChange(void)
 	}
 
 	PLAY_RaceDifficulty[drace_gpdifficulty].tooltip = tooltip;
+}
+void DummyKartSpeed_OnChange(void);
+void DummyKartSpeed_OnChange(void)
+{
+	const char *tooltip = NULL;
+
+	switch (cv_dummykartspeed.value)
+	{
+		case KARTSPEED_EASY:
+			tooltip = "Boosts are reduced for ""\x83""casual play""\x80""! The ""\x83""main event""\x80"" when ""\x83""inviting friends""\x80"" over!";
+			break;
+		case KARTSPEED_NORMAL:
+			tooltip = "Designed around ""\x82""competition""\x80"". Even playing from behind ""\x82""requires good driving""\x80"".";
+			break;
+		case KARTSPEED_HARD:
+			tooltip = "An ""\x87""extra ""\x80""kick for various challenges. ""\x85""Not as tightly balanced""\x80"", but fun in bursts.";
+			break;
+	}
+
+	PLAY_RaceDifficulty[drace_mrkartspeed].tooltip = tooltip;
 }

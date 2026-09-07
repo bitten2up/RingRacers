@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -28,7 +28,7 @@ void Obj_ServantHandSpawning(player_t *player)
 		{
 			player->handtimer++;
 			if (player->hand == NULL && player->handtimer == TICRATE)
-			{
+			{				
 				mobj_t *hand = P_SpawnMobj(
 					player->mo->x,
 					player->mo->y,
@@ -38,8 +38,7 @@ void Obj_ServantHandSpawning(player_t *player)
 
 				if (hand)
 				{
-					K_FlipFromObject(hand, player->mo);
-					hand->old_z = hand->z;
+					K_FlipFromObjectNoInterp(hand, player->mo);
 
 					P_SetTarget(&hand->target, player->mo);
 					P_SetTarget(&player->hand, hand);
@@ -115,7 +114,7 @@ void Obj_ServantHandThink(mobj_t *hand)
 		{
 			hand->color = player->skincolor;
 			hand->angle = player->besthanddirection;
-
+			
 			P_MoveOrigin(hand,
 				player->mo->x + xoffs,
 				player->mo->y + yoffs,

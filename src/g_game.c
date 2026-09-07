@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -179,13 +179,9 @@ boolean looptitle = true;
 char * bootmap = NULL; //bootmap for loading a map on startup
 char * podiummap = NULL; // map to load for podium
 
+char * tutorialplaygroundmap = NULL; // map to load for playground
 char * tutorialchallengemap = NULL; // map to load for tutorial skip
 UINT8 tutorialchallenge = TUTORIALSKIP_NONE;
-
-UINT16 skincolor_redteam = SKINCOLOR_RED;
-UINT16 skincolor_blueteam = SKINCOLOR_BLUE;
-UINT16 skincolor_redring = SKINCOLOR_RASPBERRY;
-UINT16 skincolor_bluering = SKINCOLOR_PERIWINKLE;
 
 boolean exitfadestarted = false;
 
@@ -222,7 +218,7 @@ INT32 luabanks[NUM_LUABANKS];
 // Temporary holding place for nights data for the current map
 //nightsdata_t ntemprecords;
 
-UINT32 bluescore, redscore; // CTF and Team Match team scores
+UINT32 g_teamscores[TEAM__MAX];
 
 // ring count... for PERFECT!
 INT32 nummaprings = 0;
@@ -289,13 +285,6 @@ fixed_t mapobjectscale;
 
 struct maplighting maplighting;
 
-INT16 autobalance; //for CTF team balance
-INT16 teamscramble; //for CTF team scramble
-INT16 scrambleplayers[MAXPLAYERS]; //for CTF team scramble
-INT16 scrambleteams[MAXPLAYERS]; //for CTF team scramble
-INT16 scrambletotal; //for CTF team scramble
-INT16 scramblecount; //for CTF team scramble
-
 // SRB2Kart
 // Cvars that we don't want changed mid-game
 UINT8 numlaps; // Removed from Cvar hell
@@ -304,10 +293,18 @@ boolean encoremode = false; // Encore Mode currently enabled?
 boolean prevencoremode;
 boolean franticitems; // Frantic items currently enabled?
 
+// Server wants to enable teams?
+// (Certain gametypes can override this -- prefer using G_GametypeHasTeams().)
+boolean g_teamplay;
+
+// Server wants to allow Duel mode?
+boolean g_duelpermitted;
+
 // Voting system
-UINT16 g_voteLevels[4][2]; // Levels that were rolled by the host
+UINT16 g_voteLevels[VOTE_NUM_LEVELS][2]; // Levels that were rolled by the host
 SINT8 g_votes[VOTE_TOTAL]; // Each player's vote
 SINT8 g_pickedVote; // What vote the host rolls
+boolean g_votes_striked[VOTE_NUM_LEVELS]; // Which levels were striked from votes?
 
 // Server-sided, synched variables
 tic_t wantedcalcdelay; // Time before it recalculates WANTED
@@ -317,8 +314,9 @@ boolean thwompsactive; // Thwomps activate on lap 2
 UINT8 lastLowestLap; // Last lowest lap, for activating race lap executors
 SINT8 spbplace; // SPB exists, give the person behind better items
 boolean rainbowstartavailable; // Boolean, keeps track of if the rainbow start was gotten
-tic_t linecrossed; // For Time Attack
+tic_t attacktimingstarted; // For Time Attack
 boolean inDuel; // Boolean, keeps track of if it is a 1v1
+UINT8 overtimecheckpoints; // Duel overtime speedups!
 
 // Client-sided, unsynched variables (NEVER use in anything that needs to be synced with other players)
 tic_t bombflashtimer = 0;	// Cooldown before another FlashPal can be intialized by a bomb exploding near a displayplayer. Avoids seizures.
@@ -498,7 +496,11 @@ bademblem:
 
 	if (!gonnadrawtime && showownrecord)
 	{
-		stickermedalinfo.timetoreach = G_GetBestTime(map);
+		stickermedalinfo.timetoreach = (encoremode == true)
+			? mapheaderinfo[map]->records.spbattack.time
+			: mapheaderinfo[map]->records.timeattack.time;
+		if (!stickermedalinfo.timetoreach)
+			stickermedalinfo.timetoreach = UINT32_MAX;
 	}
 
 	if (stickermedalinfo.timetoreach != UINT32_MAX)
@@ -586,9 +588,14 @@ static void G_UpdateRecordReplays(void)
 	char lastdemo[256], bestdemo[256];
 	const char *modeprefix = "";
 
+	// See also M_GetRecordMode
 	if (encoremode)
 	{
 		modeprefix = "spb-";
+	}
+	else if (K_LegacyRingboost(&players[consoleplayer]))
+	{
+		modeprefix = "hivolt-";
 	}
 
 	if (players[consoleplayer].pflags & PF_NOCONTEST)
@@ -848,6 +855,15 @@ static INT32 G_GetValueFromControlTable(INT32 deviceID, INT32 deadzone, INT32 *c
 	return failret;
 }
 
+static void G_SetGamepadPrompts(UINT8 p, boolean prompts)
+{
+	if (showgamepadprompts[p] != prompts)
+	{
+		// CONS_Printf("Setting player %d to gamepadprompts %d\n", p, prompts);
+		showgamepadprompts[p] = prompts;
+	}
+}
+
 INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 {
 	const INT32 deadzone = (JOYAXISRANGE * cv_deadzone[p].value) / FRACUNIT;
@@ -879,6 +895,7 @@ INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 			// This is only intended for P1.
 			if (main_player == true)
 			{
+				G_SetGamepadPrompts(p, false);
 				return value;
 			}
 			else
@@ -898,6 +915,7 @@ INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 	value = G_GetValueFromControlTable(deviceID, deadzone, &(gamecontrol[p][gc][0]));
 	if (value > 0)
 	{
+		G_SetGamepadPrompts(p, (deviceID != KEYBOARD_MOUSE_DEVICE));
 		return value;
 	}
 	if (value != NO_BINDS_REACHABLE)
@@ -911,6 +929,7 @@ INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 		value = G_GetValueFromControlTable(KEYBOARD_MOUSE_DEVICE, deadzone, &(gamecontrol[p][gc][0]));
 		if (value > 0)
 		{
+			G_SetGamepadPrompts(p, false);
 			return value;
 		}
 		if (value != NO_BINDS_REACHABLE)
@@ -951,6 +970,7 @@ INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 					value = G_GetValueFromControlTable(tryDevice, deadzone, &(gamecontrol[p][gc][0]));
 					if (value > 0)
 					{
+						G_SetGamepadPrompts(p, (tryDevice != KEYBOARD_MOUSE_DEVICE));
 						return value;
 					}
 					if (value != NO_BINDS_REACHABLE)
@@ -967,6 +987,7 @@ INT32 G_PlayerInputAnalog(UINT8 p, INT32 gc, UINT8 menuPlayers)
 			value = G_GetValueFromControlTable(deviceID, deadzone, &(gamecontroldefault[gc][0]));
 			if (value > 0)
 			{
+				G_SetGamepadPrompts(p, (deviceID != KEYBOARD_MOUSE_DEVICE));
 				return value;
 			}
 		}
@@ -1232,26 +1253,36 @@ void G_StartTitleCard(void)
 	// prepare status bar
 	ST_startTitleCard(); // <-- always must be called to init some variables
 
-	// The title card has been disabled for this map.
-	// Oh well.
-	if (demo.rewinding || !G_IsTitleCardAvailable())
-	{
-		WipeStageTitle = false;
+	if (demo.simplerewind)
 		return;
+
+	sfxenum_t kstart = 0;
+
+	if (K_CheckBossIntro() == true)
+	{
+		kstart = sfx_ssa021;
 	}
+	else if (encoremode)
+	{
+		kstart = sfx_ruby2;
+	}
+
+	if (kstart)
+	{
+		// Play the guaranteed alt sounds
+		S_StartSound(NULL, kstart);
+	}
+
+	if (!G_IsTitleCardAvailable())
+		return;
 
 	// start the title card
 	WipeStageTitle = (gamestate == GS_LEVEL);
 
-	// play the sound
-	if (WipeStageTitle)
+	if (WipeStageTitle && !kstart)
 	{
-		sfxenum_t kstart = sfx_kstart;
-		if (K_CheckBossIntro() == true)
-			kstart = sfx_ssa021;
-		else if (encoremode == true)
-			kstart = sfx_ruby2;
-		S_StartSound(NULL, kstart);
+		// Play the standard titlecard sound
+		S_StartSound(NULL, sfx_kstart);
 	}
 }
 
@@ -1278,7 +1309,7 @@ void G_PreLevelTitleCard(void)
 			M_LegacySaveFrame();
 		else
 #endif
-		if (moviemode && rendermode != render_none)
+		if (moviemode && rendermode == render_soft)
 			I_CaptureVideoFrame();
 
 		while (!((nowtime = I_GetTime()) - lasttime))
@@ -1296,6 +1327,10 @@ void G_PreLevelTitleCard(void)
 //
 boolean G_IsTitleCardAvailable(void)
 {
+	// We're trying to take map pictures dude
+	if (roundqueue.snapshotmaps == true)
+		return false;
+
 	// Don't show for attract demos
 	if (demo.attract)
 		return false;
@@ -1383,6 +1418,7 @@ boolean G_Responder(event_t *ev)
 		if (HU_Responder(ev))
 		{
 			hu_keystrokes = true;
+			chat_keydown = true;
 			return true; // chat ate the event
 		}
 	}
@@ -1422,13 +1458,7 @@ boolean G_Responder(event_t *ev)
 		{
 			paused = !paused;
 
-			if (demo.rewinding)
-			{
-				G_ConfirmRewind(leveltime);
-				paused = true;
-				S_PauseAudio();
-			}
-			else if (paused)
+			if (paused)
 				S_PauseAudio();
 			else
 				S_ResumeAudio();
@@ -1498,6 +1528,7 @@ boolean G_Responder(event_t *ev)
 			return true;
 
 		case ev_keyup:
+			chat_keydown = false; // prevents repeat inputs from inputs made with chat open
 			return false; // always let key up events filter down
 
 		case ev_mouse:
@@ -1539,9 +1570,9 @@ boolean G_CouldView(INT32 playernum)
 		return false;
 
 	// SRB2Kart: we have no team-based modes, YET...
-	if (G_GametypeHasTeams())
+	if (G_GametypeHasTeams() && !demo.playback)
 	{
-		if (players[consoleplayer].ctfteam && player->ctfteam != players[consoleplayer].ctfteam)
+		if (players[consoleplayer].spectator == false && player->team != players[consoleplayer].team)
 			return false;
 	}
 
@@ -1774,6 +1805,77 @@ void G_FixCamera(UINT8 view)
 	R_ResetViewInterpolation(view);
 }
 
+void G_UpdatePlayerPreferences(player_t *const player)
+{
+	player->followerready = true; // we are ready to perform follower related actions in the player thinker, now.
+
+	if (demo.playback)
+		return;
+
+	// set skin
+	INT32 new_skin = player->prefskin;
+	if (K_CanChangeRules(true) == true && cv_forceskin.value >= 0)
+	{
+		// Server wants everyone to use the same player
+		new_skin = cv_forceskin.value;
+	}
+
+	if (player->skin != new_skin)
+	{
+		SetPlayerSkinByNum(player - players, new_skin);
+	}
+
+	// set color
+	UINT16 new_color = player->prefcolor;
+	if (new_color == SKINCOLOR_NONE)
+	{
+		new_color = skins[player->skin]->prefcolor;
+	}
+
+	if (G_GametypeHasTeams() == true && player->team != TEAM_UNASSIGNED)
+	{
+		new_color = g_teaminfo[player->team].color;
+	}
+
+	if (player->skincolor != new_color)
+	{
+		player->skincolor = new_color;
+		K_KartResetPlayerColor(player);
+	}
+
+	// set follower
+	if (player->followerskin != player->preffollower)
+	{
+		K_SetFollowerByNum(player - players, player->preffollower);
+	}
+
+	// set follower color
+	if (player->followercolor != player->preffollowercolor)
+	{
+		// Don't bother doing garbage and kicking if we receive None,
+		// this is both silly and a waste of time,
+		// this will be handled properly in K_HandleFollower.
+		player->followercolor = player->preffollowercolor;
+	}
+}
+
+void G_UpdateAllPlayerPreferences(void)
+{
+	INT32 i;
+
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		if (playeringame[i] == false)
+		{
+			continue;
+		}
+
+		G_UpdatePlayerPreferences(&players[i]);
+	}
+}
+
+extern boolean demosynced;
+
 //
 // G_Ticker
 // Make ticcmd_ts for the players.
@@ -1790,7 +1892,13 @@ void G_Ticker(boolean run)
 
 	P_MapStart();
 
-	if (gamestate == GS_LEVEL && G_GetRetryFlag())
+	if (demo.playback && staffsync && !demosynced && false) // We want to assess the magnitude of position desync, don't bail early!
+	{
+		G_ClearRetryFlag();
+		G_StopDemo();
+		Command_ExitGame_f();
+	}
+	else if (gamestate == GS_LEVEL && G_GetRetryFlag())
 	{
 		if (demo.playback == true)
 		{
@@ -1817,16 +1925,21 @@ void G_Ticker(boolean run)
 						&& grandprixinfo.gp == true
 						&& grandprixinfo.masterbots == false)
 					{
-						UINT8 bot_level_decrease = 3;
+						UINT8 bot_level_decrease = 2;
+						UINT8 min_lvl = 5;
 
 						if (grandprixinfo.gamespeed == KARTSPEED_EASY)
 						{
 							bot_level_decrease++;
+							min_lvl = 1;
 						}
 						else if (grandprixinfo.gamespeed == KARTSPEED_HARD)
 						{
 							bot_level_decrease--;
+							min_lvl = 9;
 						}
+
+						boolean already_min_lvl = (players[i].botvars.difficulty >= min_lvl);
 
 						if (players[i].botvars.difficulty <= bot_level_decrease)
 						{
@@ -1836,6 +1949,9 @@ void G_Ticker(boolean run)
 						{
 							players[i].botvars.difficulty -= bot_level_decrease;
 						}
+
+						if (already_min_lvl)
+							players[i].botvars.difficulty = max(players[i].botvars.difficulty, min_lvl);
 					}
 					else
 					{
@@ -1865,6 +1981,13 @@ void G_Ticker(boolean run)
 		if (changed == true)
 		{
 			K_UpdateAllPlayerPositions();
+		}
+	}
+	else if (Playing() && !Y_IntermissionPlayerLock())
+	{
+		if (run)
+		{
+			G_UpdateAllPlayerPreferences();
 		}
 	}
 
@@ -1935,6 +2058,8 @@ void G_Ticker(boolean run)
 			break;
 
 		case GS_MENU:
+			if (staffsync)
+				COM_BufInsertText("staffsync");
 			break;
 
 		case GS_INTRO:
@@ -1968,6 +2093,9 @@ void G_Ticker(boolean run)
 				P_Ticker(run);
 
 			F_TitleScreenTicker(run);
+
+			if (staffsync)
+				COM_BufInsertText("staffsync");
 			break;
 
 		case GS_CEREMONY:
@@ -2059,6 +2187,14 @@ void G_Ticker(boolean run)
 
 			if (g_fast_forward == 0)
 			{
+				// Not "rewinding" anymore.
+				if (demo.simplerewind == DEMO_REWIND_PAUSE)
+				{
+					paused = true;
+					S_PauseAudio();
+				}
+				demo.simplerewind = DEMO_REWIND_OFF;
+
 				// Next fast-forward is unlimited.
 				g_fast_forward_clock_stop = INFTICS;
 			}
@@ -2117,8 +2253,9 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	UINT32 followitem;
 
 	INT32 pflags;
+	INT32 pflags2;
 
-	UINT8 ctfteam;
+	UINT8 team;
 
 	INT32 cheatchecknum;
 	INT32 exiting;
@@ -2126,12 +2263,15 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	INT16 totalring;
 	UINT8 laps;
 	UINT8 latestlap;
-	UINT32 lapPoints;
+	UINT32 exp;
+	INT32 gradingfactor;
+	UINT16 gradingpointnum;
+
 	UINT16 skincolor;
 	INT32 skin;
 	UINT8 availabilities[MAXAVAILABILITY];
-	UINT8 fakeskin;
-	UINT8 lastfakeskin;
+	UINT16 fakeskin;
+	UINT16 lastfakeskin;
 
 	tic_t jointime;
 
@@ -2144,14 +2284,20 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	boolean spectator;
 	boolean bot;
 	UINT8 botdifficulty;
+	botStyle_e style;
 
 	INT16 rings;
 	INT16 spheres;
 	INT16 steering;
 	angle_t playerangleturn;
 
-	UINT8 botdiffincrease;
+	INT16 botdiffincrease;
 	boolean botrival;
+	boolean botfoe;
+
+	boolean cangrabitems;
+
+	boolean finalized;
 
 	SINT8 xtralife;
 
@@ -2167,9 +2313,14 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	INT32 kickstartaccel;
 	INT32 checkpointId;
 	boolean enteredGame;
+	tic_t spectatewait;
 	UINT8 lastsafelap;
 	UINT8 lastsafecheatcheck;
 	UINT16 bigwaypointgap;
+
+	INT16 duelscore;
+
+	boolean mfdfinish;
 
 	roundconditions_t roundconditions;
 	boolean saveroundconditions;
@@ -2179,19 +2330,29 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 
 	tic_t laptime[LAP__MAX];
 
+	UINT16 prefcolor;
+	INT32 prefskin;
+	UINT16 preffollowercolor;
+	INT32 preffollower;
+
+	tic_t splits[MAXRACESPLITS];
+
+	UINT8 amps;
+
 	INT32 i;
 
 	// This needs to be first, to permit it to wipe extra information
 	jointime = players[player].jointime;
 	if (jointime <= 1)
 	{
-		G_SpectatePlayerOnJoin(player);
+		// Now called in Got_AddPlayer. In case of weirdness, break glass.
+		// G_SpectatePlayerOnJoin(player);
 		betweenmaps = true;
 	}
 
 	score = players[player].score;
 	lives = players[player].lives;
-	ctfteam = players[player].ctfteam;
+	team = players[player].team;
 
 	splitscreenindex = players[player].splitscreenindex;
 	spectator = players[player].spectator;
@@ -2202,12 +2363,17 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	skincolor = players[player].skincolor;
 	skin = players[player].skin;
 
+	prefcolor = players[player].prefcolor;
+	prefskin = players[player].prefskin;
+	preffollower = players[player].preffollower;
+	preffollowercolor = players[player].preffollowercolor;
+
 	if (betweenmaps)
 	{
 		fakeskin = MAXSKINS;
-		kartspeed = skins[players[player].skin].kartspeed;
-		kartweight = skins[players[player].skin].kartweight;
-		charflags = skins[players[player].skin].flags;
+		kartspeed = skins[players[player].skin]->kartspeed;
+		kartweight = skins[players[player].skin]->kartweight;
+		charflags = skins[players[player].skin]->flags;
 
 		for (i = 0; i < LAP__MAX; i++)
 		{
@@ -2218,7 +2384,7 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	{
 		UINT32 skinflags = (demo.playback)
 			? demo.skinlist[demo.currentskinid[player]].flags
-			: skins[players[player].skin].flags;
+			: skins[players[player].skin]->flags;
 
 		fakeskin = players[player].fakeskin;
 		kartspeed = players[player].kartspeed;
@@ -2242,15 +2408,20 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	followitem = players[player].followitem;
 
 	bot = players[player].bot;
+	style = players[player].botvars.style;
 	botdifficulty = players[player].botvars.difficulty;
 
 	botdiffincrease = players[player].botvars.diffincrease;
 	botrival = players[player].botvars.rival;
+	botfoe = players[player].botvars.foe;
 
 	totalring = players[player].totalring;
 	xtralife = players[player].xtralife;
 
+	mfdfinish = players[player].mfdfinish;
+
 	pflags = (players[player].pflags & (PF_WANTSTOJOIN|PF_KICKSTARTACCEL|PF_SHRINKME|PF_SHRINKACTIVE|PF_AUTOROULETTE|PF_ANALOGSTICK|PF_AUTORING));
+	pflags2 = (players[player].pflags2 & (PF2_SELFMUTE | PF2_SELFDEAFEN | PF2_SERVERTEMPMUTE | PF2_SERVERMUTE | PF2_SERVERDEAFEN | PF2_STRICTFASTFALL));
 
 	// SRB2kart
 	memcpy(&itemRoulette, &players[player].itemRoulette, sizeof (itemRoulette));
@@ -2297,7 +2468,7 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	}
 	else
 	{
-		rings = 10;
+		rings = 10; // Never mind, people love serious POSITION
 	}
 
 	saveroundconditions = false;
@@ -2314,7 +2485,9 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 		khudfault = 0;
 		laps = 0;
 		latestlap = 0;
-		lapPoints = 0;
+		exp = 0;
+		gradingfactor = FRACUNIT;
+		gradingpointnum = 0;
 		roundscore = 0;
 		exiting = 0;
 		khudfinish = 0;
@@ -2322,8 +2495,18 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 		lastsafelap = 0;
 		lastsafecheatcheck = 0;
 		bigwaypointgap = 0;
+		duelscore = 0;
+		mfdfinish = 0;
+
+		finalized = false;
 
 		tallyactive = false;
+
+		cangrabitems = 0;
+
+		memset(&splits, 0, sizeof(splits));
+
+		amps = 0;
 	}
 	else
 	{
@@ -2351,7 +2534,11 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 
 		laps = players[player].laps;
 		latestlap = players[player].latestlap;
-		lapPoints = players[player].lapPoints;
+		exp = players[player].exp;
+		gradingfactor = players[player].gradingfactor;
+		gradingpointnum = players[player].gradingpointnum;
+
+		finalized = players[player].finalized;
 
 		roundscore = players[player].roundscore;
 
@@ -2377,6 +2564,13 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 		{
 			tally = players[player].tally;
 		}
+
+		cangrabitems = players[player].cangrabitems;
+
+		duelscore = players[player].duelscore;
+		memcpy(&splits, &players[player].splits, sizeof(splits));
+
+		amps = players[player].amps;
 	}
 
 	spectatorReentry = (betweenmaps ? 0 : players[player].spectatorReentry);
@@ -2418,6 +2612,8 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 		hoverhyudoro = players[player].hoverhyudoro;
 		skyboxviewpoint = players[player].skybox.viewpoint;
 		skyboxcenterpoint = players[player].skybox.centerpoint;
+
+		K_UpdateBallhogReticules(&players[player], 0, false);
 	}
 	else
 	{
@@ -2428,6 +2624,7 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	checkpointId = players[player].checkpointId;
 
 	enteredGame = players[player].enteredGame;
+	spectatewait = players[player].spectatewait;
 
 	p = &players[player];
 	memset(p, 0, sizeof (*p));
@@ -2436,7 +2633,8 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	p->roundscore = roundscore;
 	p->lives = lives;
 	p->pflags = pflags;
-	p->ctfteam = ctfteam;
+	p->pflags2 = pflags2;
+	p->team = team;
 	p->jointime = jointime;
 	p->splitscreenindex = splitscreenindex;
 	p->spectator = spectator;
@@ -2450,11 +2648,18 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	p->skincolor = skincolor;
 	p->skin = skin;
 
+	p->prefcolor = prefcolor;
+	p->prefskin = prefskin;
+	p->preffollower = preffollower;
+	p->preffollowercolor = preffollowercolor;
+
 	p->fakeskin = fakeskin;
 	p->kartspeed = kartspeed;
 	p->kartweight = kartweight;
 	p->charflags = charflags;
 	p->lastfakeskin = lastfakeskin;
+
+	p->cangrabitems = cangrabitems;
 
 	memcpy(players[player].availabilities, availabilities, sizeof(availabilities));
 	p->followitem = followitem;
@@ -2465,8 +2670,12 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 
 	p->laps = laps;
 	p->latestlap = latestlap;
-	p->lapPoints = lapPoints;
+	p->exp = exp;
+	p->gradingfactor = gradingfactor;
+	p->gradingpointnum = gradingpointnum;
 	p->totalring = totalring;
+
+	p->duelscore = duelscore;
 
 	for (i = 0; i < LAP__MAX; i++)
 	{
@@ -2474,16 +2683,22 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	}
 
 	p->bot = bot;
+	p->botvars.style = style;
 	p->botvars.difficulty = botdifficulty;
 	p->rings = rings;
 	p->spheres = spheres;
 	p->botvars.diffincrease = botdiffincrease;
 	p->botvars.rival = botrival;
+	p->botvars.foe = botfoe;
 	p->xtralife = xtralife;
+
+	p->finalized = finalized;
+
+	p->mfdfinish = mfdfinish;
 
 	// SRB2kart
 	p->itemtype = itemtype;
-	p->itemamount = itemamount;
+	K_SetPlayerItemAmount(p, itemamount);
 	p->growshrinktimer = growshrinktimer;
 	p->karmadelay = 0;
 	p->eggmanblame = -1;
@@ -2491,6 +2706,7 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	p->karthud[khud_fault] = khudfault;
 	p->kickstartaccel = kickstartaccel;
 	p->checkpointId = checkpointId;
+	p->spectatewait = spectatewait;
 
 	p->ringvolume = 255;
 	p->ringtransparency = 255;
@@ -2505,10 +2721,14 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	p->griefValue = griefValue;
 	p->griefStrikes = griefStrikes;
 
+	p->amps = amps;
+
 	memcpy(&p->itemRoulette, &itemRoulette, sizeof (p->itemRoulette));
 	memcpy(&p->respawn, &respawn, sizeof (p->respawn));
 
 	memcpy(&p->public_key, &public_key, sizeof(p->public_key));
+
+	memcpy(&p->splits, &splits, sizeof(p->splits));
 
 	if (saveroundconditions)
 		memcpy(&p->roundconditions, &roundconditions, sizeof (p->roundconditions));
@@ -2530,35 +2750,16 @@ void G_PlayerReborn(INT32 player, boolean betweenmaps)
 	//p->follower = NULL;	// respawn a new one with you, it looks better.
 	// ^ Not necessary anyway since it will be respawned regardless considering it doesn't exist anymore.
 
+	if (G_GametypeHasTeams() == true
+		&& p->team == TEAM_UNASSIGNED
+		&& p->spectator == false)
+	{
+		// No team?
+		G_AutoAssignTeam(p);
+	}
+
 	p->playerstate = PST_LIVE;
 	p->panim = PA_STILL; // standing animation
-
-	// Check to make sure their color didn't change somehow...
-	if (G_GametypeHasTeams())
-	{
-		if (p->ctfteam == 1 && p->skincolor != skincolor_redteam)
-		{
-			for (i = 0; i <= splitscreen; i++)
-			{
-				if (p == &players[g_localplayers[i]])
-				{
-					CV_SetValue(&cv_playercolor[i], skincolor_redteam);
-					break;
-				}
-			}
-		}
-		else if (p->ctfteam == 2 && p->skincolor != skincolor_blueteam)
-		{
-			for (i = 0; i <= splitscreen; i++)
-			{
-				if (p == &players[g_localplayers[i]])
-				{
-					CV_SetValue(&cv_playercolor[i], skincolor_blueteam);
-					break;
-				}
-			}
-		}
-	}
 
 	if (p->spectator == false && !betweenmaps)
 	{
@@ -2669,56 +2870,78 @@ void G_MovePlayerToSpawnOrCheatcheck(INT32 playernum)
 
 mapthing_t *G_FindTeamStart(INT32 playernum)
 {
-	const boolean doprints = P_IsPartyPlayer(&players[playernum]);
-	INT32 i,j;
+	const boolean do_prints = P_IsPartyPlayer(&players[playernum]);
+	INT32 i, j;
 
-	if (!numredctfstarts && !numbluectfstarts) //why even bother, eh?
+	for (i = 0; i < TEAM__MAX; i++)
 	{
-		if ((gametyperules & GTR_TEAMSTARTS) && doprints)
-			CONS_Alert(CONS_WARNING, M_GetText("No CTF starts in this map!\n"));
+		if (numteamstarts[i] > 0)
+		{
+			break;
+		}
+	}
+
+	if (i == TEAM__MAX)
+	{
+		// No team starts are counted?
+		// Why even bother, eh?
+
+		if (do_prints == true && (gametyperules & GTR_TEAMSTARTS) == GTR_TEAMSTARTS)
+		{
+			CONS_Alert(CONS_WARNING, M_GetText("No team starts in this map!\n"));
+		}
+
 		return NULL;
 	}
 
-	if ((!players[playernum].ctfteam && numredctfstarts && (!numbluectfstarts || P_RandomChance(PR_PLAYERSTARTS, FRACUNIT/2))) || players[playernum].ctfteam == 1) //red
+	UINT8 use_team = players[playernum].team;
+	if (players[playernum].spectator == true)
 	{
-		if (!numredctfstarts)
+		// Spawn at any team start as a spectator.
+		i = P_RandomKey(PR_PLAYERSTARTS, TEAM__MAX);
+
+		for (j = 0; j < TEAM__MAX; j++)
 		{
-			if (doprints)
-				CONS_Alert(CONS_WARNING, M_GetText("No Red Team starts in this map!\n"));
-			return NULL;
+			if (numteamstarts[i] > 0)
+			{
+				break;
+			}
+
+			i++;
+			if (i >= TEAM__MAX)
+			{
+				i = 0;
+			}
 		}
 
-		for (j = 0; j < 32; j++)
+		use_team = i;
+	}
+
+	if (numteamstarts[use_team] <= 0)
+	{
+		if (do_prints == true)
 		{
-			i = P_RandomKey(PR_PLAYERSTARTS, numredctfstarts);
-			if (G_CheckSpot(playernum, redctfstarts[i]))
-				return redctfstarts[i];
+			CONS_Alert(CONS_WARNING, M_GetText("No %s Team starts in this map!\n"), g_teaminfo[use_team].name);
 		}
 
-		if (doprints)
-			CONS_Alert(CONS_WARNING, M_GetText("Could not spawn at any Red Team starts!\n"));
 		return NULL;
 	}
-	else if (!players[playernum].ctfteam || players[playernum].ctfteam == 2) //blue
-	{
-		if (!numbluectfstarts)
-		{
-			if (doprints)
-				CONS_Alert(CONS_WARNING, M_GetText("No Blue Team starts in this map!\n"));
-			return NULL;
-		}
 
-		for (j = 0; j < 32; j++)
+	for (j = 0; j < 32; j++)
+	{
+		i = P_RandomKey(PR_PLAYERSTARTS, numteamstarts[use_team]);
+
+		if (G_CheckSpot(playernum, teamstarts[use_team][i]))
 		{
-			i = P_RandomKey(PR_PLAYERSTARTS, numbluectfstarts);
-			if (G_CheckSpot(playernum, bluectfstarts[i]))
-				return bluectfstarts[i];
+			return teamstarts[use_team][i];
 		}
-		if (doprints)
-			CONS_Alert(CONS_WARNING, M_GetText("Could not spawn at any Blue Team starts!\n"));
-		return NULL;
 	}
-	//should never be reached but it gets stuff to shut up
+
+	if (do_prints == true)
+	{
+		CONS_Alert(CONS_WARNING, M_GetText("Could not spawn at any %s Team starts!\n"), g_teaminfo[use_team].name);
+	}
+
 	return NULL;
 }
 
@@ -2948,7 +3171,7 @@ mapthing_t *G_FindMapStart(INT32 playernum)
 
 	// -- CTF --
 	// Order: CTF->DM->Race
-	else if ((gametyperules & GTR_TEAMSTARTS) && players[playernum].ctfteam)
+	else if ((gametyperules & GTR_TEAMSTARTS) && players[playernum].spectator == false)
 		spawnpoint = G_FindTeamStartOrFallback(playernum);
 
 	// -- DM/Tag/CTF-spectator/etc --
@@ -2997,7 +3220,7 @@ void G_ChangePlayerReferences(mobj_t *oldmo, mobj_t *newmo)
 
 		mo2 = (mobj_t *)th;
 
-		if (!(mo2->flags & MF_MISSILE))
+		if (!((mo2->flags & MF_MISSILE) || P_IsRelinkItem(mo2->type)))
 			continue;
 
 		if (mo2->target == oldmo)
@@ -3060,7 +3283,7 @@ void G_SpectatePlayerOnJoin(INT32 playernum)
 	// This is only ever called shortly after the above.
 	// That calls CL_ClearPlayer, so spectator is false by default
 
-	if (!netgame && !G_GametypeHasTeams() && !G_GametypeHasSpectators())
+	if (!netgame && !G_GametypeHasSpectators())
 		return;
 
 	// These are handled automatically elsewhere
@@ -3092,7 +3315,7 @@ void G_BeginLevelExit(void)
 	g_exit.losing = true;
 	g_exit.retry = false;
 
-	if (!G_GametypeAllowsRetrying() || skipstats != 0)
+	if (!G_GametypeAllowsRetrying() || skipstats != 0 || (grandprixinfo.gp && grandprixinfo.gamespeed == KARTSPEED_EASY))
 	{
 		g_exit.losing = false; // never force a retry
 	}
@@ -3190,14 +3413,6 @@ void G_FinishExitLevel(void)
 		gameaction = ga_completed;
 		lastdraw = true;
 
-		// If you want your teams scrambled on map change, start the process now.
-		// The teams will scramble at the start of the next round.
-		if (cv_scrambleonchange.value && G_GametypeHasTeams())
-		{
-			if (server)
-				CV_SetValue(&cv_teamscramble, cv_scrambleonchange.value);
-		}
-
 		CON_LogMessage(M_GetText("The round has ended.\n"));
 
 		// Remove CEcho text on round end.
@@ -3233,7 +3448,7 @@ static gametype_t defaultgametypes[] =
 	{
 		"Battle",
 		"GT_BATTLE",
-		GTR_SPHERES|GTR_BUMPERS|GTR_PAPERITEMS|GTR_POWERSTONES|GTR_KARMA|GTR_ITEMARROWS|GTR_PRISONS|GTR_BATTLESTARTS|GTR_POINTLIMIT|GTR_TIMELIMIT|GTR_OVERTIME|GTR_CLOSERPLAYERS,
+		GTR_SPHERES|GTR_BUMPERS|GTR_PAPERITEMS|GTR_POWERSTONES|GTR_KARMA|GTR_PRISONS|GTR_BATTLESTARTS|GTR_POINTLIMIT|GTR_TIMELIMIT|GTR_OVERTIME|GTR_CLOSERPLAYERS,
 		TOL_BATTLE,
 		int_scoreortimeattack,
 		KARTSPEED_EASY,
@@ -3461,7 +3676,7 @@ boolean G_GametypeUsesLives(void)
 	if (modeattacking) // NOT in Record Attack
 		return false;
 
-	if (grandprixinfo.gp == true) // In Grand Prix
+	if (grandprixinfo.gp == true && grandprixinfo.gamespeed != KARTSPEED_EASY) // In Grand Prix
 		return true;
 
 	return false;
@@ -3496,19 +3711,20 @@ boolean G_GametypeAllowsRetrying(void)
 //
 boolean G_GametypeHasTeams(void)
 {
-	if (gametyperules & GTR_TEAMS)
+	const UINT32 rules = (gametyperules & (GTR_TEAMS|GTR_NOTEAMS));
+	if (rules == GTR_TEAMS)
 	{
 		// Teams forced on by this gametype
 		return true;
 	}
-	else if (gametyperules & GTR_NOTEAMS)
+	else if (rules == GTR_NOTEAMS)
 	{
 		// Teams forced off by this gametype
 		return false;
 	}
 
-	// Teams are determined by the "teamplay" modifier!
-	return false; // teamplay
+	// Teams are determined by the server's preference!
+	return g_teamplay;
 }
 
 //
@@ -3739,6 +3955,16 @@ tryAgain:
 			continue;
 		}
 
+		// TODO - We don't have guaranteed access to gametype/rules of TOL.
+		// If revising in future and willing to break this function open,
+		// this should be checking for GTR_CIRCUIT and not cooperative
+		// (but K_Cooperative also won't be correct inside this func).
+		if (numPlayers == 2 && gametype != GT_SPECIAL && ((mapheaderinfo[i]->levelflags & LF_SECTIONRACE) == LF_SECTIONRACE))
+		{
+			// Duel doesn't support sprints.
+			continue;
+		}
+
 		// Only care about restrictions if the host is a listen server.
 		if (!dedicated)
 		{
@@ -3853,12 +4079,91 @@ UINT16 G_RandMap(UINT32 tolflags, UINT16 pprevmap, boolean ignoreBuffers, boolea
 
 void G_AddMapToBuffer(UINT16 map)
 {
+#if 0
+	// DEBUG: make nearly everything but four race levels full justPlayed
+	// to look into what happens when a dedicated runs for seven million years.
+	INT32 justplayedvalue = TOLMaps(gametype) - VOTE_NUM_LEVELS;
+	UINT32 tolflag = G_TOLFlag(gametype);
+
+	// Find all the maps that are ok
+	INT32 i;
+	for (i = 0; i < nummapheaders; i++)
+	{
+		if (mapheaderinfo[i] == NULL)
+		{
+			continue;
+		}
+
+		if (mapheaderinfo[i]->lumpnum == LUMPERROR)
+		{
+			continue;
+		}
+
+		if ((mapheaderinfo[i]->typeoflevel & tolflag) == 0)
+		{
+			continue;
+		}
+
+		if (mapheaderinfo[i]->menuflags & LF2_HIDEINMENU)
+		{
+			// Don't include hidden
+			continue;
+		}
+
+		// Only care about restrictions if the host is a listen server.
+		if (!dedicated)
+		{
+			if (!(mapheaderinfo[i]->menuflags & LF2_NOVISITNEEDED)
+			&& !(mapheaderinfo[i]->records.mapvisited & MV_VISITED)
+			&& !(
+				mapheaderinfo[i]->cup
+				&& mapheaderinfo[i]->cup->cachedlevels[0] == i
+			))
+			{
+				// Not visited OR head of cup
+				continue;
+			}
+
+			if ((mapheaderinfo[i]->menuflags & LF2_FINISHNEEDED)
+			&& !(mapheaderinfo[i]->records.mapvisited & MV_BEATEN))
+			{
+				// Not completed
+				continue;
+			}
+		}
+
+		if (M_MapLocked(i + 1) == true)
+		{
+			// We haven't earned this one.
+			continue;
+		}
+
+		mapheaderinfo[i]->justPlayed = justplayedvalue;
+		justplayedvalue -= 1;
+		if (justplayedvalue <= 0)
+			break;
+	}
+#else
+	if (dedicated && D_NumPlayers() == 0)
+		return;
+
+	const size_t upperJustPlayedLimit = TOLMaps(gametype) - VOTE_NUM_LEVELS - 1;
+
 	if (mapheaderinfo[map]->justPlayed == 0) // Started playing a new map.
 	{
 		// Decrement every maps' justPlayed value.
 		INT32 i;
 		for (i = 0; i < nummapheaders; i++)
 		{
+			// If the map's justPlayed value is higher
+			// than what it should be, clamp it.
+			// (Usually a result of SOC files
+			// manipulating which levels are hidden.)
+			if (mapheaderinfo[i]->justPlayed > upperJustPlayedLimit)
+			{
+				mapheaderinfo[i]->justPlayed = upperJustPlayedLimit;
+			}
+
 			if (mapheaderinfo[i]->justPlayed > 0)
 			{
 				mapheaderinfo[i]->justPlayed--;
@@ -3867,8 +4172,9 @@ void G_AddMapToBuffer(UINT16 map)
 	}
 
 	// Set our map's justPlayed value.
-	mapheaderinfo[map]->justPlayed = TOLMaps(gametype) - VOTE_NUM_LEVELS;
+	mapheaderinfo[map]->justPlayed = upperJustPlayedLimit;
 	mapheaderinfo[map]->anger = 0; // Reset voting anger now that we're playing it
+#endif
 }
 
 //
@@ -3961,6 +4267,7 @@ doremove:
 
 // Next map apparatus
 struct roundqueue roundqueue;
+struct menuqueue menuqueue;
 
 void G_MapSlipIntoRoundQueue(UINT8 position, UINT16 map, UINT8 setgametype, boolean setencore, boolean rankrestricted)
 {
@@ -3990,6 +4297,7 @@ void G_GPCupIntoRoundQueue(cupheader_t *cup, UINT8 setgametype, boolean setencor
 	UINT8 i, levelindex = 0, bonusindex = 0;
 	UINT8 bonusmodulo = max(1, (cup->numlevels+1)/(cup->numbonus+1));
 	UINT16 cupLevelNum;
+	INT32 bonusgt;
 
 	// Levels are added to the queue in the following pattern.
 	// For 5 Race rounds and 2 Bonus rounds, the most common case:
@@ -4031,9 +4339,17 @@ void G_GPCupIntoRoundQueue(cupheader_t *cup, UINT8 setgametype, boolean setencor
 			if (cupLevelNum < nummapheaders)
 			{
 				// In the case of Bonus rounds, we simply skip invalid maps.
+				if ((mapheaderinfo[cupLevelNum]->typeoflevel & TOL_BATTLE) == TOL_BATTLE)
+				{
+					bonusgt = GT_BATTLE;
+				}
+				else
+				{
+					bonusgt = G_GuessGametypeByTOL(mapheaderinfo[cupLevelNum]->typeoflevel);
+				}
 				G_MapIntoRoundQueue(
 					cupLevelNum,
-					G_GuessGametypeByTOL(mapheaderinfo[cupLevelNum]->typeoflevel),
+					bonusgt,
 					setencore, // if this isn't correct, Got_Mapcmd will fix it
 					false
 				);
@@ -4101,9 +4417,22 @@ void G_GPCupIntoRoundQueue(cupheader_t *cup, UINT8 setgametype, boolean setencor
 			cupLevelNum = emeraldcup->cachedlevels[CUPCACHE_SPECIAL];
 			if (cupLevelNum < nummapheaders)
 			{
+				// In case of multiple TOLs, prioritize Special, then Versus, then guess.
+				if ((mapheaderinfo[cupLevelNum]->typeoflevel & TOL_SPECIAL) == TOL_SPECIAL)
+				{
+					bonusgt = GT_SPECIAL;
+				}
+				else if ((mapheaderinfo[cupLevelNum]->typeoflevel & TOL_VERSUS) == TOL_VERSUS)
+				{
+					bonusgt = GT_VERSUS;
+				}
+				else
+				{
+					bonusgt = G_GuessGametypeByTOL(mapheaderinfo[cupLevelNum]->typeoflevel);
+				}
 				G_MapIntoRoundQueue(
 					cupLevelNum,
-					G_GuessGametypeByTOL(mapheaderinfo[cupLevelNum]->typeoflevel),
+					bonusgt,
 					setencore, // if this isn't correct, Got_Mapcmd will fix it
 					true // Rank-restricted!
 				);
@@ -4217,7 +4546,7 @@ void G_GetNextMap(void)
 			&& grandprixinfo.gamespeed >= KARTSPEED_NORMAL)
 		{
 			// On A rank pace? Then you get a chance for S rank!
-			permitrank = (K_CalculateGPGrade(&grandprixinfo.rank) >= GRADE_A);
+			permitrank = (K_CalculateGPPercent(&grandprixinfo.rank) >= K_SealedStarEntryRequirement(&grandprixinfo.rank));
 
 			// If you're on Master, a win floats you to rank-restricted levels for free.
 			// (This is a different class of challenge!)
@@ -4300,13 +4629,28 @@ void G_GetNextMap(void)
 
 	if (setalready == false)
 	{
+		UINT8 numPlayers = 0;
+
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			if (!playeringame[i] || players[i].spectator)
+			{
+				continue;
+			}
+			numPlayers++;
+		}
+
 		UINT32 tolflag = G_TOLFlag(gametype);
 		register INT16 cm;
 
-		if (!(gametyperules & GTR_NOCUPSELECT))
+		const boolean cupmode = (!(gametyperules & GTR_NOCUPSELECT));
+
+		nextmap = NEXTMAP_TITLE;
+
+		if (cupmode)
 		{
-			cupheader_t *cup = mapheaderinfo[gamemap-1]->cup;
-			UINT8 gettingresult = 0;
+			cupheader_t *cup = mapheaderinfo[prevmap]->cup;
+			boolean gettingresult = false;
 
 			while (cup)
 			{
@@ -4314,7 +4658,7 @@ void G_GetNextMap(void)
 				if (!marathonmode && M_CupLocked(cup))
 				{
 					cup = cup->next;
-					gettingresult = 1;
+					gettingresult = true;
 					continue;
 				}
 
@@ -4328,6 +4672,35 @@ void G_GetNextMap(void)
 						|| mapheaderinfo[cm]->lumpnum == LUMPERROR
 						|| !(mapheaderinfo[cm]->typeoflevel & tolflag))
 					{
+						continue;
+					}
+
+					// If the map is in multiple cups, only consider the first one valid.
+					if (mapheaderinfo[cm]->cup != cup)
+					{
+						continue;
+					}
+
+					if (!gettingresult)
+					{
+						// Not the map you're on?
+						if (cm == prevmap)
+						{
+							// Ok, this is the current map, time to get the next valid
+							gettingresult = true;
+						}
+						continue;
+					}
+
+					if ((mapheaderinfo[cm]->menuflags & LF2_HIDEINMENU) == LF2_HIDEINMENU)
+					{
+						// Not intended to be accessed in multiplayer.
+						continue;
+					}
+
+					if (numPlayers > mapheaderinfo[cm]->playerLimit)
+					{
+						// Too many players for this map.
 						continue;
 					}
 
@@ -4356,32 +4729,13 @@ void G_GetNextMap(void)
 						continue;
 					}
 
-					// If the map is in multiple cups, only consider the first one valid.
-					if (mapheaderinfo[cm]->cup != cup)
-					{
-						continue;
-					}
-
 					// Grab the first valid after the map you're on
-					if (gettingresult)
-					{
-						nextmap = cm;
-						gettingresult = 2;
-						break;
-					}
-
-					// Not the map you're on?
-					if (cm != prevmap)
-					{
-						continue;
-					}
-
-					// Ok, this is the current map, time to get the next
-					gettingresult = 1;
+					nextmap = cm;
+					break;
 				}
 
 				// We have a good nextmap?
-				if (gettingresult == 2)
+				if (nextmap < NEXTMAP_SPECIAL)
 				{
 					break;
 				}
@@ -4389,27 +4743,48 @@ void G_GetNextMap(void)
 				// Ok, iterate to the next
 				cup = cup->next;
 			}
-
-			// Didn't get a nextmap before reaching the end?
-			if (gettingresult != 2)
-			{
-				nextmap = NEXTMAP_CEREMONY; // ceremonymap
-			}
 		}
-		else
+
+		// Haven't grabbed a nextmap yet?
+		if (nextmap >= NEXTMAP_SPECIAL)
 		{
-			cm = prevmap;
-
-			do
+			if (cupmode && mapheaderinfo[prevmap]->cup)
 			{
-				if (++cm >= nummapheaders)
-					cm = 0;
+				// Special case - looking for Lost & Found #1.
+				// Could be anywhere in mapheaderinfo.
+				cm = 0;
+			}
+			else
+			{
+				// All subsequent courses in load order.
+				cm = prevmap+1;
+			}
 
+			for (; cm < nummapheaders; cm++)
+			{
 				if (!mapheaderinfo[cm]
 					|| mapheaderinfo[cm]->lumpnum == LUMPERROR
 					|| !(mapheaderinfo[cm]->typeoflevel & tolflag)
 					|| (mapheaderinfo[cm]->menuflags & LF2_HIDEINMENU))
 				{
+					continue;
+				}
+
+				if (cupmode && mapheaderinfo[cm]->cup)
+				{
+					// Only Lost & Found this loop around.
+					continue;
+				}
+
+				if ((mapheaderinfo[cm]->menuflags & LF2_HIDEINMENU) == LF2_HIDEINMENU)
+				{
+					// Not intended to be accessed in multiplayer.
+					continue;
+				}
+
+				if (numPlayers > mapheaderinfo[cm]->playerLimit)
+				{
+					// Too many players for this map.
 					continue;
 				}
 
@@ -4441,10 +4816,9 @@ void G_GetNextMap(void)
 					continue;
 				}
 
+				nextmap = cm;
 				break;
-			} while (cm != prevmap);
-
-			nextmap = cm;
+			}
 		}
 
 		if (K_CanChangeRules(true))
@@ -4457,24 +4831,14 @@ void G_GetNextMap(void)
 					nextmap = prevmap;
 					break;
 				case 3: // Voting screen.
+					if (numPlayers != 0)
 					{
-						for (i = 0; i < MAXPLAYERS; i++)
-						{
-							if (!playeringame[i])
-								continue;
-							if (players[i].spectator)
-								continue;
-							break;
-						}
-						if (i != MAXPLAYERS)
-						{
-							nextmap = NEXTMAP_VOTING;
-							break;
-						}
+						nextmap = NEXTMAP_VOTING;
+						break;
 					}
 					/* FALLTHRU */
 				case 2: // Go to random map.
-					nextmap = G_RandMap(G_TOLFlag(gametype), prevmap, false, false, NULL);
+					nextmap = G_RandMapPerPlayerCount(G_TOLFlag(gametype), prevmap, false, false, NULL, numPlayers);
 					break;
 				default:
 					if (nextmap >= NEXTMAP_SPECIAL) // Loop back around
@@ -4538,14 +4902,14 @@ static void G_DoCompleted(void)
 			}
 		}
 
-		if (grandprixinfo.gp == true && grandprixinfo.wonround == true && player->exiting && !retrying)
+		if (grandprixinfo.gp == true && grandprixinfo.wonround == true && player->exiting && (!retrying || !G_GametypeUsesLives()))
 		{
 			if (player->bot == true)
 			{
 				// Bots are going to get harder... :)
 				K_IncreaseBotDifficulty(player);
 			}
-			else if (K_IsPlayerLosing(player) == false)
+			else if (K_IsPlayerLosing(player) == false || !G_GametypeUsesLives())
 			{
 				// Increase your total rings
 				INT32 ringtotal = player->hudrings;
@@ -4559,8 +4923,8 @@ static void G_DoCompleted(void)
 
 				if (grandprixinfo.eventmode == GPEVENT_NONE)
 				{
-					grandprixinfo.rank.winPoints += K_CalculateGPRankPoints(player->position, grandprixinfo.rank.totalPlayers);
-					grandprixinfo.rank.laps += player->lapPoints;
+					grandprixinfo.rank.winPoints += K_CalculateGPRankPoints(player->exp, grandprixinfo.rank.position, grandprixinfo.rank.totalPlayers);
+					grandprixinfo.rank.exp += player->exp;
 				}
 				else if (grandprixinfo.eventmode == GPEVENT_SPECIAL)
 				{
@@ -4690,9 +5054,13 @@ static void G_DoCompleted(void)
 	{
 		Y_StartIntermission();
 	}
-	else if (grandprixinfo.gp == true)
+	else
 	{
-		K_UpdateGPRank(&grandprixinfo.rank);
+		//Y_MidIntermission(); -- we don't want bots retired or teams wiped
+		if (grandprixinfo.gp == true)
+		{
+			K_UpdateGPRank(&grandprixinfo.rank);
+		}
 	}
 
 	G_UpdateVisited();
@@ -4724,7 +5092,10 @@ void G_AfterIntermission(void)
 		return;
 	}
 	else if (demo.recording && (modeattacking || demo.willsave))
+	{
+		demo.willsave = false;
 		G_SaveDemo();
+	}
 	else if (demo.recording)
 		G_ResetDemoRecording();
 
@@ -4862,6 +5233,9 @@ static void G_DoContinued(void)
 // when something new is added.
 void G_EndGame(void)
 {
+	// Clean up ACS music remaps.
+	Music_TuneReset();
+
 	// Handle voting
 	if (nextmap == NEXTMAP_VOTING)
 	{
@@ -4872,7 +5246,7 @@ void G_EndGame(void)
 	// Only do evaluation and credits in singleplayer contexts
 	if (!netgame)
 	{
-		if (gametype == GT_TUTORIAL)
+		if (gametype == GT_TUTORIAL && gamedata->gonerlevel < GDGONER_DONE)
 		{
 			// Tutorial was finished
 			gamedata->tutorialdone = true;
@@ -4922,6 +5296,13 @@ void G_EndGame(void)
 			COM_BufAddText(va("map %s\n", G_BuildMapName(map)));
 		}
 
+		return;
+	}
+
+	if (gametype == GT_TUTORIAL && M_GameAboutToStart() && restoreMenu == NULL)
+	{
+		 // Playground Hack
+		F_StartIntro();
 		return;
 	}
 
@@ -4992,7 +5373,7 @@ void G_DirtyGameData(void)
 // Can be called by the startup code or the menu task.
 //
 
-#define SAV_VERSIONMINOR 6
+#define SAV_VERSIONMINOR 7
 
 void G_LoadGame(void)
 {
@@ -5179,7 +5560,7 @@ void G_DeferedInitNew(boolean pencoremode, INT32 map, INT32 pickedchar, UINT8 ss
 	}
 
 	SetPlayerSkinByNum(consoleplayer, pickedchar);
-	CV_StealthSet(&cv_skin[0], skins[pickedchar].name);
+	CV_StealthSet(&cv_skin[0], skins[pickedchar]->name);
 
 	if (color != SKINCOLOR_NONE)
 	{
@@ -5205,7 +5586,7 @@ void G_InitNew(UINT8 pencoremode, INT32 map, boolean resetplayer, boolean skippr
 		S_ResumeAudio();
 	}
 
-	prevencoremode = ((!Playing()) ? false : encoremode);
+	prevencoremode = encoremode;
 	encoremode = pencoremode;
 
 	legitimateexit = false; // SRB2Kart
@@ -5226,8 +5607,13 @@ void G_InitNew(UINT8 pencoremode, INT32 map, boolean resetplayer, boolean skippr
 	}
 
 	// Clear a bunch of variables
-	redscore = bluescore = lastmap = 0;
+	lastmap = 0;
 	racecountdown = exitcountdown = musiccountdown = mapreset = exitfadestarted = 0;
+
+	for (i = 0; i < TEAM__MAX; i++)
+	{
+		g_teamscores[i] = 0;
+	}
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
@@ -5242,11 +5628,14 @@ void G_InitNew(UINT8 pencoremode, INT32 map, boolean resetplayer, boolean skippr
 			players[i].xtralife = 0;
 			players[i].totalring = 0;
 			players[i].score = 0;
+			if (roundqueue.position == 0) // Don't unassign teams in tournament play
+				players[i].team = TEAM_UNASSIGNED;
 		}
 
-		if (resetplayer || map != gamemap)
+		if (resetplayer || !(gametyperules & GTR_CHECKPOINTS && map == gamemap))
 		{
 			players[i].checkpointId = 0;
+			players[i].gradingpointnum = 0;
 		}
 	}
 
@@ -5649,9 +6038,11 @@ boolean G_GetExitGameFlag(void)
 // Same deal with retrying.
 void G_SetRetryFlag(void)
 {
-	if (retrying == false)
+	if (retrying == false && grandprixinfo.gp)
 	{
-		grandprixinfo.rank.continuesUsed++;
+		if (grandprixinfo.eventmode != GPEVENT_SPECIAL)
+			grandprixinfo.rank.continuesUsed++;
+		grandprixinfo.rank.levels[grandprixinfo.rank.numLevels].continues++;
 	}
 
 	retrying = true;
@@ -5700,3 +6091,204 @@ INT32 G_TicsToMilliseconds(tic_t tics)
 {
 	return (INT32)((tics%TICRATE) * (1000.00f/TICRATE));
 }
+
+teaminfo_t g_teaminfo[TEAM__MAX] =
+{
+	// TEAM_UNASSIGNED
+	// These values should not be reached most of the time,
+	// but it is a necessary evil for this to exist.
+	{
+		"Unassigned",
+		SKINCOLOR_NONE,
+		0,
+	},
+	// TEAM_ORANGE
+	{
+		"Orange",
+		SKINCOLOR_TANGERINE,
+		V_ORANGEMAP,
+	},
+	// TEAM_BLUE
+	{
+		"Blue",
+		SKINCOLOR_SAPPHIRE,
+		V_BLUEMAP,
+	},
+};
+
+void G_AssignTeam(player_t *const p, UINT8 new_team)
+{
+	if (p->team != new_team)
+	{
+		CONS_Debug(DBG_TEAMS, "%s >> Changed from team %s to team %s.\n", player_names[p - players], g_teaminfo[p->team].name, g_teaminfo[new_team].name);
+	}
+
+	p->team = new_team;
+
+	if (new_team && p->skincolor != g_teaminfo[new_team].color)
+	{
+		p->skincolor = g_teaminfo[new_team].color;
+		if (G_GamestateUsesLevel())
+		{
+			K_KartResetPlayerColor(p);
+		}
+	}
+}
+
+boolean G_SameTeam(const player_t *a, const player_t *b)
+{
+	if (a == NULL || b == NULL)
+	{
+		return false;
+	}
+
+	if (G_GametypeHasTeams() == true)
+	{
+		if (a->team == TEAM_UNASSIGNED || b->team == TEAM_UNASSIGNED)
+		{
+			// Unassigned is not a real team.
+			// Treat them as lone wolves.
+			return false;
+		}
+
+		// You share a team!
+		return (a->team == b->team);
+	}
+
+	// Free for all.
+	return false;
+}
+
+UINT8 G_CountTeam(UINT8 team)
+{
+	UINT8 count = 0;
+
+	for (UINT8 i = 0; i < MAXPLAYERS; i++)
+	{
+		if (playeringame[i] == false || players[i].spectator == true)
+		{
+			continue;
+		}
+
+		if (players[i].team == team)
+		{
+			count++;
+		}
+	}
+
+	return count;
+}
+
+void G_AutoAssignTeam(player_t *const p)
+{
+	if (G_GametypeHasTeams() == false)
+	{
+		CONS_Debug(DBG_TEAMS, "%s >> Teams are disabled.\n", player_names[p - players]);
+		G_AssignTeam(p, TEAM_UNASSIGNED);
+		return;
+	}
+
+	if (p->spectator == true)
+	{
+		CONS_Debug(DBG_TEAMS, "%s >> Why are you giving a spectator a team?\n", player_names[p - players]);
+		G_AssignTeam(p, TEAM_UNASSIGNED);
+		return;
+	}
+
+	if (p->team != TEAM_UNASSIGNED)
+	{
+		CONS_Debug(DBG_TEAMS, "%s >> Already assigned a team.\n", player_names[p - players]);
+		return;
+	}
+
+	const UINT8 orange_count = G_CountTeam(TEAM_ORANGE);
+	const UINT8 blue_count = G_CountTeam(TEAM_BLUE);
+
+	if (orange_count == blue_count)
+	{
+		CONS_Debug(DBG_TEAMS, "%s >> Team assigned randomly.\n", player_names[p - players]);
+		G_AssignTeam(p, (P_Random(PR_TEAMS) & 1) ? TEAM_BLUE : TEAM_ORANGE);
+		return;
+	}
+
+	CONS_Debug(DBG_TEAMS, "%s >> Team imbalance.\n", player_names[p - players]);
+
+	if (blue_count < orange_count)
+	{
+		G_AssignTeam(p, TEAM_BLUE);
+	}
+	else
+	{
+		G_AssignTeam(p, TEAM_ORANGE);
+	}
+}
+
+void G_AddTeamScore(UINT8 team, INT32 amount, player_t *source)
+{
+	if (team == TEAM_UNASSIGNED || G_GametypeHasTeams() == false)
+	{
+		return;
+	}
+
+	if ((gametyperules & GTR_POINTLIMIT) == 0)
+	{
+		return;
+	}
+
+#if 1
+	if (amount <= 0)
+	{
+		// Don't allow players to intentionally
+		// tank the team score. Might not be necessary?
+		return;
+	}
+#endif
+
+	(void)source; // Just included in case we need the scorer later.
+
+	// Don't underflow.
+	// Don't go above MAXSCORE.
+	if (amount < 0 && (UINT32)-amount > g_teamscores[team])
+	{
+		g_teamscores[team] = 0;
+	}
+	else if (g_teamscores[team] + amount < MAXSCORE)
+	{
+		if (g_teamscores[team] < g_pointlimit
+			&& g_pointlimit <= g_teamscores[team] + amount)
+		{
+			INT32 i;
+			for (i = 0; i < MAXPLAYERS; i++)
+			{
+				player_t *const p = &players[i];
+
+				if (playeringame[i] == false || p->spectator == true)
+				{
+					continue;
+				}
+
+				if (p->team == team)
+				{
+					HU_DoTitlecardCEchoForDuration(p, "K.O. READY!", true, 5*TICRATE/2);
+				}
+			}
+		}
+
+		g_teamscores[team] += amount;
+	}
+	else
+	{
+		g_teamscores[team] = MAXSCORE;
+	}
+}
+
+UINT32 G_TeamOrIndividualScore(const player_t *player)
+{
+	if (G_GametypeHasTeams() == true && player->team != TEAM_UNASSIGNED)
+	{
+		return g_teamscores[player->team];
+	}
+
+	return player->roundscore;
+}
+

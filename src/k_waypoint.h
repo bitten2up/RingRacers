@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sean "Sryder" Ryder
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sean "Sryder" Ryder
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -114,6 +114,18 @@ boolean K_GetWaypointIsShortcut(waypoint_t *waypoint);
 
 boolean K_GetWaypointIsEnabled(waypoint_t *waypoint);
 
+
+/*--------------------------------------------------
+	boolean K_SetWaypointIsEnabled(waypoint_t *waypoint, boolean enabled)
+
+		Sets whether the waypoint is enabled or not.
+
+	Input Arguments:-
+		waypoint - The waypoint to set its enabled status to.
+		enabled - Boolean that sets the waypoint's enabled status.
+--------------------------------------------------*/
+
+void K_SetWaypointIsEnabled(waypoint_t *waypoint, boolean enabled);
 
 /*--------------------------------------------------
 	boolean K_GetWaypointIsSpawnpoint(waypoint_t *waypoint)

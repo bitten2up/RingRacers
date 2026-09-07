@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -36,6 +36,9 @@ menuitem_t OPTIONS_Video[] =
 
 	{IT_STRING | IT_CVAR, "Screen Effect", "Uses a special effect when displaying the game.",
 		NULL, {.cvar = &cv_scr_effect}, 0, 0},
+		
+	{IT_STRING | IT_SUBMENU, "Color Profile...", "Adjust the color profile of the game's display.",
+		NULL, {.submenu = &OPTIONS_VideoColorProfileDef}, 0, 0},
 
 	{IT_NOTHING|IT_SPACE, NULL, NULL,
 		NULL, {NULL}, 0, 0},

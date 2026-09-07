@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -15,6 +15,7 @@
 
 #include <string.h>
 
+#include "r_fps.h"
 #include "v_video.h"
 #include "z_zone.h"
 
@@ -30,6 +31,8 @@ enum drawitem_e {
 	DI_FadeScreen,
 	DI_DrawTitleCardString,
 	DI_DrawKartString,
+	DI_SetClipRect,
+	DI_ClearClipRect,
 	DI_MAX,
 };
 
@@ -63,6 +66,7 @@ typedef struct drawitem_s {
 	INT32 threshold;
 	boolean bossmode;
 	boolean p4;
+	enum viewcontext_e splitnum; // save view number to account for splitscreen
 } drawitem_t;
 
 // The internal structure of a drawlist.
@@ -200,6 +204,7 @@ void LUA_HUD_AddDraw(
 	item->patch = patch;
 	item->flags = flags;
 	item->colormap = colormap;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawScaled(
@@ -221,6 +226,7 @@ void LUA_HUD_AddDrawScaled(
 	item->patch = patch;
 	item->flags = flags;
 	item->colormap = colormap;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawStretched(
@@ -244,6 +250,7 @@ void LUA_HUD_AddDrawStretched(
 	item->patch = patch;
 	item->flags = flags;
 	item->colormap = colormap;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawNum(
@@ -261,6 +268,7 @@ void LUA_HUD_AddDrawNum(
 	item->y = y;
 	item->num = num;
 	item->flags = flags;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawPaddedNum(
@@ -280,6 +288,7 @@ void LUA_HUD_AddDrawPaddedNum(
 	item->num = num;
 	item->digits = digits;
 	item->flags = flags;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawPingNum(
@@ -299,6 +308,7 @@ void LUA_HUD_AddDrawPingNum(
 	item->flags = flags;
 	item->num = num;
 	item->colormap = colormap;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawFill(
@@ -318,6 +328,7 @@ void LUA_HUD_AddDrawFill(
 	item->w = w;
 	item->h = h;
 	item->c = c;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawString(
@@ -337,6 +348,7 @@ void LUA_HUD_AddDrawString(
 	item->stroffset = CopyString(list, str);
 	item->flags = flags;
 	item->align = align;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddFadeScreen(
@@ -350,6 +362,7 @@ void LUA_HUD_AddFadeScreen(
 	item->type = DI_FadeScreen;
 	item->color = color;
 	item->strength = strength;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawTitleCardString(
@@ -375,6 +388,7 @@ void LUA_HUD_AddDrawTitleCardString(
 	item->timer = timer;
 	item->threshold = threshold;
 	item->p4 = p4;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_AddDrawKartString(
@@ -392,6 +406,37 @@ void LUA_HUD_AddDrawKartString(
 	item->y = y;
 	item->stroffset = CopyString(list, str);
 	item->flags = flags;
+	item->splitnum = R_GetViewNumber();
+}
+
+void LUA_HUD_AddSetClipRect(
+	huddrawlist_h list,
+	fixed_t x,
+	fixed_t y,
+	fixed_t w,
+	fixed_t h,
+	INT32 flags
+)
+{
+	size_t i = AllocateDrawItem(list);
+	drawitem_t *item = &list->items[i];
+	item->type = DI_SetClipRect;
+	item->x = x;
+	item->y = y;
+	item->w = w;
+	item->h = h;
+	item->flags = flags;
+	item->splitnum = R_GetViewNumber();
+}
+
+void LUA_HUD_AddClearClipRect(
+	huddrawlist_h list
+)
+{
+	size_t i = AllocateDrawItem(list);
+	drawitem_t *item = &list->items[i];
+	item->type = DI_ClearClipRect;
+	item->splitnum = R_GetViewNumber();
 }
 
 void LUA_HUD_DrawList(huddrawlist_h list)
@@ -406,6 +451,10 @@ void LUA_HUD_DrawList(huddrawlist_h list)
 	{
 		drawitem_t *item = &list->items[i];
 		const char *itemstr = &list->strbuf[item->stroffset];
+		enum viewcontext_e old_viewcontext = viewcontext;
+
+		// Set view context to account for V_SPLITSCREEN
+		R_SetViewContext(item->splitnum);
 
 		switch (item->type)
 		{
@@ -474,9 +523,18 @@ void LUA_HUD_DrawList(huddrawlist_h list)
 			case DI_DrawKartString:
 				V_DrawTimerString(item->x, item->y, item->flags, itemstr);
 				break;
+			case DI_SetClipRect:
+				V_SetClipRect(item->x, item->y, item->w, item->h, item->flags);
+				break;
+			case DI_ClearClipRect:
+				V_ClearClipRect();
+				break;
 			default:
 				I_Error("can't draw draw list item: invalid draw list item type");
 				continue;
 		}
+
+		// Reset view context back, just incase of some stupid shenanigans
+		R_SetViewContext(old_viewcontext);
 	}
 }

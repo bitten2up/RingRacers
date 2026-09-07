@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -33,7 +33,7 @@ typedef enum
 {
 	TALLY_BONUS_NA,
 	TALLY_BONUS_RING,
-	TALLY_BONUS_LAP,
+	TALLY_BONUS_EXP,
 	TALLY_BONUS_PRISON,
 	TALLY_BONUS_SCORE,
 	TALLY_BONUS_POWERSTONES,
@@ -57,6 +57,8 @@ typedef enum
 	TALLY_ST_GAMEOVER_DONE,
 } tally_state_e;
 
+#define TALLY_DIRECTOR_TIME (4 * TICRATE)
+
 struct level_tally_t
 {
 	boolean active;
@@ -77,7 +79,7 @@ struct level_tally_t
 	// Possible grade metrics
 	UINT8 position, numPlayers;
 	UINT8 rings;
-	UINT16 laps, totalLaps;
+	UINT16 exp, totalExp;
 	UINT16 prisons, totalPrisons;
 	INT32 points, pointLimit;
 	UINT8 powerStones;
@@ -97,6 +99,7 @@ struct level_tally_t
 	boolean showGrade;
 	boolean done;
 	boolean releasedFastForward;
+	INT32 directorWait;
 
 #ifdef __cplusplus
 	boolean UseBonuses(void);

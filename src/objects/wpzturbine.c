@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'"
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by "Lat'"
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -213,7 +213,14 @@ void Obj_playerWPZTurbine(player_t *p)
 		return;	// wtf happened
 	}
 
+	if (t->type != MT_WATERPALACETURBINE)
+	{
+		p->turbine = false;
+		return;
+	}
+
 	mt = t->spawnpoint;
+	pmo->flags &= ~MF_NOGRAVITY;
 
 	opt1 = (mt->thing_args[0] != 0);
 
@@ -231,7 +238,6 @@ void Obj_playerWPZTurbine(player_t *p)
 	if (mode && !distreached)
 		p->turbineangle = (INT32)R_PointToAngle2(t->x, t->y, pmo->x, pmo->y);
 
-	p->spinouttimer = TICRATE;
 	pmo->pitch = 0;
 
 	// determine target x/y/z
@@ -338,7 +344,6 @@ void Obj_playerWPZTurbine(player_t *p)
 				pmo->momy = (pmo->momy*17)/10;
 			}
 
-			p->spinouttimer = 0;
 			pmo->flags &= ~MF_NOCLIP;
 		}
 	}

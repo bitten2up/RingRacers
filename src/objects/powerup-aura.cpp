@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -17,6 +17,7 @@
 #include "../p_local.h"
 #include "../p_mobj.h"
 #include "../tables.h"
+#include "../k_kart.h"
 
 // copied from objects/monitor.c
 #define FINE90 (FINEANGLES/4)
@@ -93,6 +94,7 @@ struct Aura : mobj_t
 		}
 
 		P_MoveOrigin(this, origin()->x, origin()->y, origin()->z);
+		K_FlipFromObject(this, origin());
 		P_InstaScale(this, 11 * origin()->scale / 10);
 
 		translate();

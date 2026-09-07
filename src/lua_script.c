@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -60,6 +60,13 @@ static lua_CFunction liblist[] = {
 	LUA_PolyObjLib, // polyobj_t
 	LUA_BlockmapLib, // blockmap stuff
 	LUA_HudLib, // HUD stuff
+	LUA_FollowerLib, // follower_t, followers[]
+	LUA_ItemRouletteLib, // itemroulette_t
+	LUA_BotVarsLib, // botvars_t
+	LUA_TerrainLib, // t_splash_t, t_footstep_t, t_overlay_t, terrain_t
+	LUA_RespawnVarsLib, // respawnvars_t
+	LUA_WaypointLib, // waypoint_t
+	LUA_GrandPrixLib, // grandprixinfo, cupheader_t, gprank_t, skinrecord_t, etc.
 	NULL
 };
 
@@ -196,12 +203,6 @@ int LUA_PushGlobals(lua_State *L, const char *word)
 	} else if (fastcmp(word,"paused")) {
 		lua_pushboolean(L, paused);
 		return 1;
-	} else if (fastcmp(word,"bluescore")) {
-		lua_pushinteger(L, bluescore);
-		return 1;
-	} else if (fastcmp(word,"redscore")) {
-		lua_pushinteger(L, redscore);
-		return 1;
 	} else if (fastcmp(word,"timelimit")) {
 		lua_pushinteger(L, timelimitintics);
 		return 1;
@@ -221,24 +222,13 @@ int LUA_PushGlobals(lua_State *L, const char *word)
 	} else if (fastcmp(word,"podiummap")) {
 		lua_pushstring(L, podiummap);
 		return 1;
+	} else if (fastcmp(word,"tutorialplaygroundmap")) {
+		lua_pushstring(L, tutorialplaygroundmap);
+		return 1;
 	} else if (fastcmp(word,"tutorialchallengemap")) {
 		lua_pushstring(L, tutorialchallengemap);
 		return 1;
 	// end map vars
-	// begin CTF colors
-	} else if (fastcmp(word,"skincolor_redteam")) {
-		lua_pushinteger(L, skincolor_redteam);
-		return 1;
-	} else if (fastcmp(word,"skincolor_blueteam")) {
-		lua_pushinteger(L, skincolor_blueteam);
-		return 1;
-	} else if (fastcmp(word,"skincolor_redring")) {
-		lua_pushinteger(L, skincolor_redring);
-		return 1;
-	} else if (fastcmp(word,"skincolor_bluering")) {
-		lua_pushinteger(L, skincolor_bluering);
-		return 1;
-	// end CTF colors
 	// begin timers
 	} else if (fastcmp(word,"invulntics")) {
 		lua_pushinteger(L, invulntics);
@@ -350,6 +340,9 @@ int LUA_PushGlobals(lua_State *L, const char *word)
 	} else if (fastcmp(word,"franticitems")) {
 		lua_pushboolean(L, franticitems);
 		return 1;
+	} else if (fastcmp(word,"teamplay")) {
+		lua_pushboolean(L, g_teamplay);
+		return 1;
 	} else if (fastcmp(word,"wantedcalcdelay")) {
 		lua_pushinteger(L, wantedcalcdelay);
 		return 1;
@@ -391,19 +384,7 @@ int LUA_PushGlobals(lua_State *L, const char *word)
 // See the above.
 int LUA_WriteGlobals(lua_State *L, const char *word)
 {
-	if (fastcmp(word, "redscore"))
-		redscore = (UINT32)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "bluescore"))
-		bluescore = (UINT32)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "skincolor_redteam"))
-		skincolor_redteam = (UINT16)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "skincolor_blueteam"))
-		skincolor_blueteam = (UINT16)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "skincolor_redring"))
-		skincolor_redring = (UINT16)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "skincolor_bluering"))
-		skincolor_bluering = (UINT16)luaL_checkinteger(L, 2);
-	else if (fastcmp(word, "gravity"))
+	if (fastcmp(word, "gravity"))
 		gravity = (fixed_t)luaL_checkinteger(L, 2);
 	else if (fastcmp(word, "stoppedclock"))
 		stoppedclock = luaL_checkboolean(L, 2);
@@ -648,7 +629,7 @@ void LUA_DumpFile(const char *filename)
 
 		// If findfile finds the file, the full path will be returned
 		// in filenamebuf == filename.
-		if (findfile(filenamebuf, NULL, true))
+		if (findfile(filenamebuf, NULL, NULL, true))
 		{
 			if ((handle = fopen(filename, "rb")) == NULL)
 			{
@@ -896,6 +877,10 @@ void LUA_InvalidateLevel(void)
 		LUA_InvalidateUserdata(nodes[i].children);
 	}
 #endif
+	for (i = 0; i < K_GetNumWaypoints(); i++)
+	{
+		LUA_InvalidateUserdata(K_GetWaypointFromIndex(i));
+	}
 }
 
 void LUA_InvalidateMapthings(void)
@@ -919,6 +904,7 @@ void LUA_InvalidatePlayer(player_t *player)
 	LUA_InvalidateUserdata(player);
 	LUA_InvalidateUserdata(player->karthud);
 	LUA_InvalidateUserdata(&player->cmd);
+	LUA_InvalidateUserdata(&player->itemRoulette.itemList);
 }
 
 enum
@@ -1667,7 +1653,7 @@ void LUA_Archive(savebuffer_t *save, boolean network)
 				ArchiveExtVars(&save->p, th, "mobj");
 			}
 		}
-		
+
 		WRITEUINT32(save->p, UINT32_MAX); // end of mobjs marker, replaces mobjnum.
 
 		LUA_HookNetArchive(NetArchive, save); // call the NetArchive hook in archive mode

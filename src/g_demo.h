@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -21,10 +21,9 @@
 
 #ifdef __cplusplus
 
-#include <string>
-#include <vector>
-
-#include <nlohmann/json.hpp>
+#include "core/json.hpp"
+#include "core/string.h"
+#include "core/vector.hpp"
 
 // Modern json formats
 namespace srb2
@@ -32,12 +31,12 @@ namespace srb2
 struct StandingJson
 {
 	uint8_t ranking;
-	std::string name;
-	uint8_t demoskin;
-	std::string skincolor;
+	String name;
+	uint16_t demoskin;
+	String skincolor;
 	uint32_t timeorscore;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		StandingJson,
 		ranking,
 		name,
@@ -48,9 +47,9 @@ struct StandingJson
 };
 struct StandingsJson
 {
-	std::vector<StandingJson> standings;
+	Vector<StandingJson> standings;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(StandingsJson, standings)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(StandingsJson, standings)
 };
 
 void write_current_demo_standings(const StandingsJson& standings);
@@ -72,7 +71,7 @@ extern tic_t demostarttime;
 struct democharlist_t {
 	char name[SKINNAMESIZE+1];
 	UINT32 namehash;
-	UINT8 mapping; // No, this isn't about levels. It maps to loaded character ID.
+	UINT16 mapping; // No, this isn't about levels. It maps to loaded character ID.
 	UINT8 kartspeed;
 	UINT8 kartweight;
 	UINT32 flags;
@@ -85,7 +84,7 @@ struct demovars_s {
 	boolean recording, playback, timing;
 	UINT16 version; // Current file format of the demo being played
 	UINT8 attract; // Attract demo can be cancelled by any key
-	boolean rewinding; // Rewind in progress
+	UINT8 simplerewind;
 
 	boolean loadfiles, ignorefiles; // Demo file loading options
 	boolean quitafterplaying; // quit after playing a demo from cmdline
@@ -98,9 +97,9 @@ struct demovars_s {
 
 	boolean freecam;
 
-	UINT8 numskins;
+	UINT16 numskins;
 	democharlist_t *skinlist;
-	UINT8 currentskinid[MAXPLAYERS];
+	UINT16 currentskinid[MAXPLAYERS];
 
 	const savebuffer_t *buffer; // debug, valid only if recording or playback
 };
@@ -130,7 +129,7 @@ struct menudemo_t {
 	struct {
 		UINT8 ranking;
 		char name[MAXPLAYERNAME+1];
-		UINT8 skin, color;
+		UINT16 skin, color;
 		UINT32 timeorscore;
 	} standings[MAXPLAYERS];
 };
@@ -160,7 +159,6 @@ extern UINT8 demo_writerng;
 #define DXD_NAME       0x08 // name changed
 #define DXD_COLOR      0x10 // color changed
 #define DXD_FOLLOWER   0x20 // follower was changed
-#define DXD_START      0x40 // Crossed the line in TA
 
 #define DXD_ADDPLAYER (DXD_JOINDATA|DXD_PLAYSTATE|DXD_COLOR|DXD_NAME|DXD_SKIN|DXD_FOLLOWER)
 
@@ -170,9 +168,13 @@ extern UINT8 demo_writerng;
 #define DXD_PST_SPECTATING 0x02
 #define DXD_PST_LEFT       0x03
 
+#define MAXSPLITS (32)
+
 boolean G_CompatLevel(UINT16 level);
 
 // Record/playback tics
+boolean G_ConsiderEndingDemoRead(void);
+boolean G_ConsiderEndingDemoWrite(void);
 void G_ReadDemoExtraData(void);
 void G_WriteDemoExtraData(void);
 void G_ReadDemoTiccmd(ticcmd_t *cmd, INT32 playernum);
@@ -187,16 +189,12 @@ void G_ConsAllGhostTics(void);
 void G_ConsGhostTic(INT32 playernum);
 void G_GhostTicker(void);
 
-void G_InitDemoRewind(void);
-void G_StoreRewindInfo(void);
-void G_PreviewRewind(tic_t previewtime);
-void G_ConfirmRewind(tic_t rewindtime);
-
 struct DemoBufferSizes
 {
 	size_t player_name;
 	size_t skin_name;
 	size_t color_name;
+	size_t availability;
 };
 
 // Your naming conventions are stupid and useless.
@@ -204,10 +202,13 @@ struct DemoBufferSizes
 struct demoghost {
 	UINT8 checksum[16];
 	UINT8 *buffer, *p, color;
+	UINT16 initialskin;
+	UINT16 initialcolor;
 	UINT8 fadein;
 	UINT16 version;
-	UINT8 numskins;
-	boolean linecrossed;
+	UINT16 numskins;
+	tic_t attackstart;
+	tic_t splits[MAXSPLITS];
 	boolean done;
 	democharlist_t *skinlist;
 	mobj_t oldmo, *mo;
@@ -242,6 +243,9 @@ void G_DeferedPlayDemo(const char *demo);
 void G_SaveDemo(void);
 void G_ResetDemoRecording(void);
 
+void G_SetDemoAttackTiming(tic_t time);
+void G_SetDemoCheckpointTiming(player_t *player, tic_t time, UINT8 checkpoint);
+
 boolean G_CheckDemoTitleEntry(void);
 
 typedef enum
@@ -250,6 +254,13 @@ typedef enum
 	DEMO_ATTRACT_TITLE,
 	DEMO_ATTRACT_CREDITS
 } demoAttractMode_t;
+
+typedef enum
+{
+	DEMO_REWIND_OFF = 0,
+	DEMO_REWIND_RESUME,
+	DEMO_REWIND_PAUSE
+} demoRewindMode_t;
 
 void G_SyncDemoParty(INT32 rem, INT32 newsplitscreen);
 

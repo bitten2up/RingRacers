@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -11,6 +11,7 @@
 #include "../doomdef.h"
 #include "../doomstat.h"
 #include "../info.h"
+#include "../g_game.h"
 #include "../k_objects.h"
 #include "../p_local.h"
 #include "../r_state.h"
@@ -216,10 +217,15 @@ spawn_shard
 	const UINT16 rad = (monitor->radius / monitor->scale) / 4;
 	const UINT16 tall = (half / FRACUNIT) / 4;
 
+
+	// note: determinate random argument eval order
+	fixed_t rand_z = P_RandomKey(PR_ITEM_DEBRIS, tall + 1);
+	fixed_t rand_y = P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad);
+	fixed_t rand_x = P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad);
 	mobj_t *p = P_SpawnMobjFromMobj(monitor,
-			P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad) * 8 * FRACUNIT,
-			P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad) * 8 * FRACUNIT,
-			(half / 4) + P_RandomKey(PR_ITEM_DEBRIS, tall + 1) * 4 * FRACUNIT,
+			rand_x * 8 * FRACUNIT,
+			rand_y * 8 * FRACUNIT,
+			(half / 4) + rand_z * 4 * FRACUNIT,
 			MT_MONITOR_SHARD);
 
 	angle_t th = (part->angle + ANGLE_90);
@@ -283,9 +289,9 @@ spawn_monitor_explosion (mobj_t *monitor)
 		mobj_t *x = P_SpawnMobjFromMobj(monitor, 0, 0, 0, MT_BOOMEXPLODE);
 		x->hitlag = 0;
 		x->color = SKINCOLOR_WHITE;
-		x->momx = P_RandomRange(PR_EXPLOSION, -5, 5) * monitor->scale,
-			x->momy = P_RandomRange(PR_EXPLOSION, -5, 5) * monitor->scale,
-			x->momz = P_RandomRange(PR_EXPLOSION, 0, 6) * monitor->scale * P_MobjFlip(monitor);
+		x->momx = P_RandomRange(PR_EXPLOSION, -5, 5) * monitor->scale;
+		x->momy = P_RandomRange(PR_EXPLOSION, -5, 5) * monitor->scale;
+		x->momz = P_RandomRange(PR_EXPLOSION, 0, 6) * monitor->scale * P_MobjFlip(monitor);
 		P_SetScale(x, (x->destscale *= 3));
 	}
 }
@@ -325,10 +331,10 @@ kill_monitor_part (mobj_t *part)
 static inline UINT32
 restore_item_rng (UINT32 seed)
 {
-	const UINT32 oldseed = P_GetRandSeed(PR_ITEM_ROULETTE);
+	const UINT32 oldseed = P_GetRandSeed(PR_ITEM_SPAWNER);
 
-	P_SetRandSeedNet(PR_ITEM_ROULETTE,
-			P_GetInitSeed(PR_ITEM_ROULETTE), seed);
+	P_SetRandSeedNet(PR_ITEM_SPAWNER,
+			P_GetInitSeed(PR_ITEM_SPAWNER), seed);
 
 	return oldseed;
 }
@@ -408,7 +414,7 @@ project_icon (mobj_t *part)
 
 		K_UpdateMobjItemOverlay(part,
 				K_ItemResultToType(result),
-				K_ItemResultToAmount(result));
+				K_ItemResultToAmount(result, NULL));
 
 		center_item_sprite(part, 5*FRACUNIT/4);
 	}
@@ -462,7 +468,7 @@ adjust_monitor_drop
 		drop->momz *= 8;
 	}
 
-	K_FlipFromObject(drop, monitor);
+	K_FlipFromObjectNoInterp(drop, monitor);
 
 	return drop;
 }
@@ -478,7 +484,7 @@ Obj_MonitorSpawnParts (mobj_t *monitor)
 	P_SetScale(monitor, (monitor->destscale *= 2));
 
 	monitor_itemcount(monitor) = 0;
-	monitor_rngseed(monitor) = P_GetRandSeed(PR_ITEM_ROULETTE);
+	monitor_rngseed(monitor) = P_GetRandSeed(PR_ITEM_SPAWNER);
 	monitor_spawntic(monitor) = leveltime;
 	monitor_emerald(monitor) = 0;
 
@@ -703,7 +709,7 @@ Obj_MonitorOnDeath
 					monitor->x, monitor->y, monitor->z + (128 * mapobjectscale * flip),
 					i * ang, flip,
 					K_ItemResultToType(result),
-					K_ItemResultToAmount(result)));
+					K_ItemResultToAmount(result, NULL)));
 
 		drop->momz /= 2; // This is player-locked, so no need to throw it high
 

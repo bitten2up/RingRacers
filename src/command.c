@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -100,6 +100,20 @@ CV_PossibleValue_t gpdifficulty_cons_t[] = {
 	{KARTSPEED_NORMAL, "Intense"},
 	{KARTSPEED_HARD, "Vicious"},
 	{KARTGP_MASTER, "Master"},
+	{0, NULL}
+};
+CV_PossibleValue_t descriptiveinput_cons_t[] = {
+	{0, "\"Emulator\""},
+	{1, "Modern"},
+	{2, "Modern Flip"},
+	{3, "6Bt. (Auto)"},
+	{4, "6Bt. (A)"},
+	{5, "6Bt. (B)"},
+	{6, "6Bt. (C)"},
+	{7, "6Bt. (D)"},
+	{8, "6Bt. (E)"},
+	{9, "6Bt. (F)"},
+	{10, "6Bt. (G)"},
 	{0, NULL}
 };
 
@@ -841,7 +855,7 @@ static void COM_Exec_f(void)
 		// Now try by searching the file path
 		// filename is modified with the full found path
 		strcpy(filename, COM_Argv(1));
-		if (findfile(filename, NULL, true) != FS_NOTFOUND)
+		if (findfile(filename, NULL, NULL, true) != FS_NOTFOUND)
 			FIL_ReadFile(filename, &buf);
 
 		if (!buf)
@@ -855,8 +869,19 @@ static void COM_Exec_f(void)
 	if (!COM_CheckParm("-silent"))
 		CONS_Printf(M_GetText("executing %s\n"), COM_Argv(1));
 
-	// insert text file into the command buffer
-	COM_ImmedExecute((char *)buf);
+	if (COM_CheckParm("-immediate"))
+	{
+		// immediately parses and executes all lines
+		// sidesteps wait from all sources, even self
+		COM_ImmedExecute((char *)buf);
+	}
+	else
+	{
+		// insert text file into the command buffer
+		// delays execution if interpreting wait cmd
+		COM_BufAddTextEx((char *)buf, com_flags);
+		COM_BufAddTextEx("\n", com_flags);
+	}
 
 	// free buffer
 	Z_Free(buf);
@@ -2115,7 +2140,7 @@ static void CV_SetValueMaybeStealth(consvar_t *var, INT32 value, boolean stealth
 		if ((value < 0) || (value >= numskins))
 			tmpskin = "None";
 		else
-			tmpskin = skins[value].name;
+			tmpskin = skins[value]->name;
 		strlcpy(val, tmpskin, SKINNAMESIZE+1);
 	}
 	else

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -135,6 +135,10 @@ typedef enum
 
 	PT_SAY,				// "Hey server, please send this chat message to everyone via XD_SAY"
 
+	PT_REQMAPQUEUE,		// Client requesting a roundqueue operation
+
+	PT_VOICE,           // Voice packet for either side
+
 	NUMPACKETTYPE
 } packettype_t;
 
@@ -161,6 +165,7 @@ struct clientcmd_pak
 	UINT8 client_tic;
 	UINT8 resendfrom;
 	INT16 consistancy;
+	UINT8 wantdelay;
 	ticcmd_t cmd;
 } ATTRPACK;
 
@@ -171,6 +176,7 @@ struct client2cmd_pak
 	UINT8 client_tic;
 	UINT8 resendfrom;
 	INT16 consistancy;
+	UINT8 wantdelay;
 	ticcmd_t cmd, cmd2;
 } ATTRPACK;
 
@@ -181,6 +187,7 @@ struct client3cmd_pak
 	UINT8 client_tic;
 	UINT8 resendfrom;
 	INT16 consistancy;
+	UINT8 wantdelay;
 	ticcmd_t cmd, cmd2, cmd3;
 } ATTRPACK;
 
@@ -191,6 +198,7 @@ struct client4cmd_pak
 	UINT8 client_tic;
 	UINT8 resendfrom;
 	INT16 consistancy;
+	UINT8 wantdelay;
 	ticcmd_t cmd, cmd2, cmd3, cmd4;
 } ATTRPACK;
 
@@ -223,6 +231,7 @@ struct serverconfig_pak
 
 	UINT8 gametype;
 	UINT8 modifiedgame;
+	boolean dedicated;
 
 	char server_context[8]; // Unique context id, generated at server startup.
 
@@ -265,6 +274,19 @@ struct fileack_pak
 
 #define MAXAPPLICATION 16
 
+struct player_config_t
+{
+	char name[MAXPLAYERNAME+1];
+	UINT16 skin;
+	UINT16 color;
+	INT16 follower;
+	UINT16 follower_color;
+	UINT8 weapon_prefs;
+	UINT8 min_delay;
+	uint8_t key[PUBKEYLENGTH];
+	UINT16 pwr[PWRLV_NUMTYPES];
+} ATTRPACK;
+
 struct clientconfig_pak
 {
 	UINT8 _255;/* see serverinfo_pak */
@@ -274,13 +296,15 @@ struct clientconfig_pak
 	UINT8 subversion; // Contains build version
 	UINT8 localplayers;	// number of splitscreen players
 	UINT8 mode;
-	char names[MAXSPLITSCREENPLAYERS][MAXPLAYERNAME];
+	char _names_outdated[MAXSPLITSCREENPLAYERS][MAXPLAYERNAME];
 	UINT8 availabilities[MAXAVAILABILITY];
 	uint8_t challengeResponse[MAXSPLITSCREENPLAYERS][SIGNATURELENGTH];
+	player_config_t player_configs[MAXSPLITSCREENPLAYERS];
 } ATTRPACK;
 
 #define SV_SPEEDMASK 0x03		// used to send kartspeed
 #define SV_DEDICATED 0x40		// server is dedicated
+#define SV_VOICEENABLED 0x80    // voice_mute is off/voice chat is enabled
 #define SV_LOTSOFADDONS 0x20	// flag used to ask for full file list in d_netfil
 
 #define MAXFILENEEDED 915
@@ -343,21 +367,10 @@ struct plrinfo
 	char name[MAXPLAYERNAME+1];
 	UINT8 address[4]; // sending another string would run us up against MAXPACKETLENGTH
 	UINT8 team;
-	UINT8 skin;
+	UINT8 deprecated_skin;
 	UINT8 data; // Color is first four bits, hasflag, isit and issuper have one bit each, the last is unused.
 	UINT32 score;
 	UINT16 timeinserver; // In seconds.
-} ATTRPACK;
-
-// Shortest player information for join during intermission.
-struct plrconfig
-{
-	char name[MAXPLAYERNAME+1];
-	UINT8 skin;
-	UINT16 color;
-	UINT32 pflags;
-	UINT32 score;
-	UINT8 ctfteam;
 } ATTRPACK;
 
 struct filesneededconfig_pak
@@ -395,8 +408,16 @@ struct resultsall_pak
 
 struct say_pak
 {
-	char message[HU_MAXMSGLEN];
+	char message[HU_MAXMSGLEN + 1];
 	UINT8 target;
+	UINT8 flags;
+	UINT8 source;
+} ATTRPACK;
+
+struct reqmapqueue_pak
+{
+	UINT16 newmapnum;
+	UINT16 newgametype;
 	UINT8 flags;
 	UINT8 source;
 } ATTRPACK;
@@ -407,6 +428,22 @@ struct netinfo_pak
 	UINT32 packetloss[MAXPLAYERS+1];
 	UINT32 delay[MAXPLAYERS+1];
 } ATTRPACK;
+
+// Sent by both sides. Contains Opus-encoded voice packet
+// flags bitset map (left to right, low to high)
+// | PPPPPTRR | -- P = Player num, T = Terminal, R = Reserved (0)
+// Data following voice header is a single Opus frame
+struct voice_pak
+{
+	UINT64 frame;
+	UINT8 flags;
+} ATTRPACK;
+
+#define VOICE_PAK_FLAGS_PLAYERNUM_BITS 0x1F
+#define VOICE_PAK_FLAGS_TERMINAL_BIT 0x20
+#define VOICE_PAK_FLAGS_RESERVED0_BIT 0x40
+#define VOICE_PAK_FLAGS_RESERVED1_BIT 0x80
+#define VOICE_PAK_FLAGS_RESERVED_BITS (VOICE_PAK_FLAGS_RESERVED0_BIT | VOICE_PAK_FLAGS_RESERVED1_BIT)
 
 //
 // Network packet data
@@ -429,19 +466,18 @@ struct doomdata_t
 		client3cmd_pak client3pak;          //         264 bytes(?)
 		client4cmd_pak client4pak;          //         324 bytes(?)
 		servertics_pak serverpak;           //      132495 bytes (more around 360, no?)
-		serverconfig_pak servercfg;         //         773 bytes
+		serverconfig_pak servercfg;         //         777 bytes
 		UINT8 textcmd[MAXTEXTCMD+2];        //       66049 bytes (wut??? 64k??? More like 258 bytes...)
 		char filetxpak[sizeof (filetx_pak)];//         139 bytes
 		char fileack[sizeof (fileack_pak)];
 		UINT8 filereceived;
-		clientconfig_pak clientcfg;         //         136 bytes
+		clientconfig_pak clientcfg;         //         650 bytes
 		UINT8 md5sum[16];
 		serverinfo_pak serverinfo;          //        1024 bytes
 		serverrefuse_pak serverrefuse;      //       65025 bytes (somehow I feel like those values are garbage...)
 		askinfo_pak askinfo;                //          61 bytes
 		msaskinfo_pak msaskinfo;            //          22 bytes
 		plrinfo playerinfo[MSCOMPAT_MAXPLAYERS];//         576 bytes(?)
-		plrconfig playerconfig[MAXPLAYERS]; // (up to) 528 bytes(?)
 		INT32 filesneedednum;               //           4 bytes
 		filesneededconfig_pak filesneededcfg; //       ??? bytes
 		netinfo_pak netinfo;					// Don't believe their lies
@@ -451,6 +487,8 @@ struct doomdata_t
 		responseall_pak responseall;			// 256 bytes
 		resultsall_pak resultsall;				// 1024 bytes. Also, you really shouldn't trust anything here.
 		say_pak say;							// I don't care anymore.
+		reqmapqueue_pak reqmapqueue;			// Formerly XD_REQMAPQUEUE
+		voice_pak voice;                        // Unreliable voice data, variable length
 	} u; // This is needed to pack diff packet types data together
 } ATTRPACK;
 
@@ -471,6 +509,7 @@ struct serverelem_t
 
 extern serverelem_t serverlist[MAXSERVERLIST];
 extern UINT32 serverlistcount, serverlistultimatecount;
+extern boolean serverlistmode;
 extern INT32 mapchangepending;
 
 // Points inside doomcom
@@ -520,6 +559,7 @@ extern boolean server;
 extern boolean serverrunning;
 #define client (!server)
 extern boolean dedicated; // For dedicated server
+extern boolean connectedtodedicated; // Client that is connected to a dedicated server.
 extern UINT16 software_MAXPACKETLENGTH;
 extern boolean acceptnewnode;
 extern SINT8 servernode;
@@ -554,7 +594,7 @@ extern boolean server_lagless;
 extern consvar_t cv_mindelay;
 
 extern consvar_t cv_netticbuffer, cv_allownewplayer, cv_maxconnections, cv_joindelay;
-extern consvar_t cv_pingtimeout, cv_resynchattempts, cv_blamecfail;
+extern consvar_t cv_pingtimeout, cv_blamecfail;
 extern consvar_t cv_maxsend, cv_noticedownload, cv_downloadspeed;
 
 #ifdef VANILLAJOINNEXTROUND
@@ -595,6 +635,7 @@ void SendKick(UINT8 playernum, UINT8 msg);
 // Create any new ticcmds and broadcast to other players.
 void NetKeepAlive(void);
 void NetUpdate(void);
+void NetVoiceUpdate(void);
 
 void SV_StartSinglePlayerServer(INT32 dogametype, boolean donetgame);
 boolean SV_SpawnServer(void);
@@ -602,7 +643,7 @@ void SV_StopServer(void);
 void SV_ResetServer(void);
 
 /*--------------------------------------------------
-	boolean K_AddBotFromServer(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *newplayernum);
+	boolean K_AddBotFromServer(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *newplayernum);
 
 		Adds a new bot, using a server-sided packet sent to all clients.
 		Using regular K_AddBot wherever possible is better, but this is kept
@@ -619,7 +660,7 @@ void SV_ResetServer(void);
 		true if a bot can be added via a packet later, otherwise false.
 --------------------------------------------------*/
 
-boolean K_AddBotFromServer(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
+boolean K_AddBotFromServer(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
 
 void CL_AddSplitscreenPlayer(void);
 void CL_RemoveSplitscreenPlayer(UINT8 p);
@@ -631,6 +672,7 @@ void CL_UpdateServerList(void);
 void CL_TimeoutServerList(void);
 // Is there a game running
 boolean Playing(void);
+boolean InADedicatedServer(void);
 
 // Advance client-to-client pubkey verification flow
 void UpdateChallenges(void);
@@ -657,6 +699,7 @@ extern UINT8 playernode[MAXPLAYERS];
 extern UINT8 playerconsole[MAXPLAYERS];
 
 INT32 D_NumPlayers(void);
+INT32 D_NumPlayersInRace(void);
 boolean D_IsPlayerHumanAndGaming(INT32 player_number);
 
 void D_ResetTiccmds(void);
@@ -679,25 +722,11 @@ extern boolean hu_stopped;
 // SRB2Kart
 //
 
-struct rewind_t {
-	UINT8 savebuffer[NETSAVEGAMESIZE];
-	tic_t leveltime;
-	size_t demopos;
-
-	ticcmd_t oldcmd[MAXPLAYERS];
-	mobj_t oldghost[MAXPLAYERS];
-
-	rewind_t *next;
-};
-
-void CL_ClearRewinds(void);
-rewind_t *CL_SaveRewindPoint(size_t demopos);
-rewind_t *CL_RewindToTime(tic_t time);
-
 void HandleSigfail(const char *string);
 
 void DoSayPacket(SINT8 target, UINT8 flags, UINT8 source, char *message);
 void DoSayPacketFromCommand(SINT8 target, size_t usedargs, UINT8 flags);
+void DoVoicePacket(SINT8 target, UINT64 frame, const UINT8* opusdata, size_t len);
 void SendServerNotice(SINT8 target, char *message);
 
 #ifdef __cplusplus

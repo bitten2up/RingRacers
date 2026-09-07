@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -106,19 +106,19 @@ extern "C" consvar_t cv_lua_profile, cv_menuframeskip;
 
 /* Manually defined asset hashes
  */
-
-#define ASSET_HASH_BIOS_PK3						"2f3d5ac37fccd77a2bf7376f60a70ab1"
-#define ASSET_HASH_SCRIPTS_PK3					"15e65f7f6d5460f9362c646714f57578"
-#define ASSET_HASH_GFX_PK3						"142df1ca805fd80a688a318cc4d24ca0"
-#define ASSET_HASH_TEXTURES_GENERAL_PK3			"1c91e9d6f407ba8350f7c2dce0035936"
-#define ASSET_HASH_TEXTURES_SEGAZONES_PK3		"a029a0993e5f04056eb6c139b1ffa924"
-#define ASSET_HASH_TEXTURES_ORIGINALZONES_PK3	"ee5c04df39386e6cd93d346769b37693"
-#define ASSET_HASH_CHARS_PK3					"bf014478cdda5e9208e3dea3c51f58c5"
-#define ASSET_HASH_FOLLOWERS_PK3				"a37b8796fc1d83d3398f79767aa0de47"
-#define ASSET_HASH_MAPS_PK3						"a8bd1f924531c483f500d96583b7b837"
-#define ASSET_HASH_UNLOCKS_PK3					"ebc06ff46c2cc80e93dadf5f7099d7b8"
-#define ASSET_HASH_STAFFGHOSTS_PK3				"9cb77f6c0e801c1bc61ca84870b65707"
-#define ASSET_HASH_SHADERS_PK3					"7aefd2aa55129b31210aa094cf782695"
+ 
+#define ASSET_HASH_BIOS_PK3						"36201c4690256d133dff7d3879436dff"
+#define ASSET_HASH_SCRIPTS_PK3					"56be3c47192870c3265f19cf024e860e"
+#define ASSET_HASH_GFX_PK3						"76c824a221bd4745e002a8b7d0520621"
+#define ASSET_HASH_TEXTURES_GENERAL_PK3			"4f3d2665bb6d734df320e9c34fe9bdcb"
+#define ASSET_HASH_TEXTURES_SEGAZONES_PK3		"05ecca580606e4e631b3149570a7ff78"
+#define ASSET_HASH_TEXTURES_ORIGINALZONES_PK3	"d78b0c80f5128f1ae83b6d7d1058eac8"
+#define ASSET_HASH_CHARS_PK3					"5c8c34c5623acf984e3f654da4509126"
+#define ASSET_HASH_FOLLOWERS_PK3				"4b61428e5f2ec806de398de8a5fba5f0"
+#define ASSET_HASH_MAPS_PK3						"97ded03bb428f32e55fbf1df7b1dd6e9"
+#define ASSET_HASH_UNLOCKS_PK3					"a4de35ba9f83829ced44dfc1316ba33e"
+#define ASSET_HASH_STAFFGHOSTS_PK3				"54078aba0e42bfee54640a94c295dd65"
+#define ASSET_HASH_SHADERS_PK3					"bc0b47744d457956db2ee9ea00f59eff"
 #ifdef USE_PATCH_FILE
 #define ASSET_HASH_PATCH_PK3					"00000000000000000000000000000000"
 #endif
@@ -141,8 +141,10 @@ INT32 window_y;
 //
 // DEMO LOOP
 //
-static char *startupiwads[MAX_WADFILES];
-static char *startuppwads[MAX_WADFILES];
+static size_t num_startupiwads = 0;
+static initmultiplefilesentry_t startupiwads[MAX_WADFILES];
+static size_t num_startuppwads = 0;
+static initmultiplefilesentry_t startuppwads[MAX_WADFILES];
 
 boolean devparm = false; // started game with -devparm
 
@@ -161,6 +163,7 @@ INT32 postimgparam[MAXSPLITSCREENPLAYERS];
 
 boolean sound_disabled = false;
 boolean digital_disabled = false;
+boolean g_voice_disabled = false;
 
 #ifdef DEBUGFILE
 INT32 debugload = 0;
@@ -176,6 +179,7 @@ char srb2home[256] = ".";
 char srb2path[256] = ".";
 boolean usehome = true;
 const char *pandf = "%s" PATHSEP "%s";
+const char *spandf = "%s" PATHSEP "%s" PATHSEP "%s"; // subdirs wooo
 char addonsdir[MAX_WADPATH];
 char downloaddir[sizeof addonsdir + sizeof DOWNLOADDIR_PART] = "DOWNLOAD";
 
@@ -339,7 +343,7 @@ void D_ProcessEvents(boolean callresponders)
 	// Update menu CMD
 	for (i = 0; i < MAXSPLITSCREENPLAYERS; i++)
 	{
-		M_UpdateMenuCMD(i, false);
+		M_UpdateMenuCMD(i, false, chat_keydown);
 	}
 }
 
@@ -364,6 +368,11 @@ static bool D_Display(bool world)
 	UINT8 i;
 
 	ZoneScoped;
+
+	if (g_takemapthumbnail != TMT_NO)
+	{
+		forcerefresh = true;
+	}
 
 	if (!dedicated)
 	{
@@ -580,7 +589,7 @@ static bool D_Display(bool world)
 							HWR_RenderPlayerView();
 						else
 #endif
-						if (rendermode != render_none)
+						if (rendermode == render_soft)
 						{
 							if (i > 0) // Splitscreen-specific
 							{
@@ -638,6 +647,7 @@ static bool D_Display(bool world)
 
 			// rhi: display the software framebuffer to the screen
 			//if (rendermode == render_soft)
+			if (g_takemapthumbnail == TMT_NO)
 			{
 				// TODO: THIS SHOULD IDEALLY BE IN REGULAR HUD CODE !!
 				// (st_stuff.c ST_Drawer, also duplicated in k_podium.c)
@@ -671,11 +681,11 @@ static bool D_Display(bool world)
 						V_DrawCustomFadeScreen("FADEMAP0", fade);
 					}
 				}
+			}
 
-				if (rendermode == render_soft)
-				{
-					VID_DisplaySoftwareScreen();
-				}
+			if (rendermode == render_soft)
+			{
+				VID_DisplaySoftwareScreen();
 			}
 
 			if (lastdraw)
@@ -731,9 +741,6 @@ static bool D_Display(bool world)
 	// (GS_LEVEL handles this already due to level-specific palettes)
 	if (forcerefresh && G_GamestateUsesLevel() == false)
 		V_SetPalette(0);
-
-	if (demo.rewinding)
-		V_DrawFadeScreen(TC_RAINBOW, (leveltime & 0x20) ? SKINCOLOR_PASTEL : SKINCOLOR_MOONSET);
 
 	// vid size change is now finished if it was on...
 	vid.recalc = 0;
@@ -836,6 +843,8 @@ static bool D_Display(bool world)
 
 tic_t rendergametic;
 
+extern "C" consvar_t cv_skiprender;
+
 void D_SRB2Loop(void)
 {
 	tic_t entertic = 0, oldentertics = 0, realtics = 0, rendertimeout = INFTICS;
@@ -855,6 +864,7 @@ void D_SRB2Loop(void)
 
 	if (dedicated)
 		server = true;
+	connectedtodedicated = dedicated;
 
 	// Pushing of + parameters is now done back in D_SRB2Main, not here.
 
@@ -886,6 +896,12 @@ void D_SRB2Loop(void)
 	LMFAO this was showing garbage under OpenGL
 	because I_FinishUpdate was called afterward
 	*/
+
+	// Make sure audio volume is initialized since S_UpdateSounds won't be called during the
+	// initial wipe.
+	S_SetMasterVolume();
+	S_SetMusicVolume();
+	S_SetSfxVolume();
 
 	for (;;)
 	{
@@ -920,7 +936,7 @@ void D_SRB2Loop(void)
 		realtics = entertic - oldentertics;
 		oldentertics = entertic;
 
-		if (demo.playback && gamestate == GS_LEVEL)
+		if (demo.playback && gamestate == GS_LEVEL && demo.simplerewind == DEMO_REWIND_OFF)
 		{
 			// Nicer place to put this.
 			realtics = realtics * cv_playbackspeed.value;
@@ -1066,6 +1082,7 @@ void D_SRB2Loop(void)
 
 		// consoleplayer -> displayplayers (hear sounds from viewpoint)
 		S_UpdateSounds(); // move positional sounds
+		NetVoiceUpdate(); // update voice recording whenever possible
 		if (realtics > 0 || singletics)
 		{
 			S_UpdateClosedCaptions();
@@ -1082,6 +1099,7 @@ void D_SRB2Loop(void)
 #endif
 
 		Music_Tick();
+		S_UpdateVoicePositionalProperties();
 
 		// Fully completed frame made.
 		finishprecise = I_GetPreciseTime();
@@ -1099,14 +1117,34 @@ void D_SRB2Loop(void)
 		//
 		// Wipes run an inner loop and artificially increase
 		// the measured time.
-		if (!ranwipe && frameskip < 3 && deltatics > 1.0)
+		if (staffsync)
 		{
-			frameskip++;
+			// SPECIAL: When checking staff demos for sync,
+			// draw as little as possible for speeeeeeed
+			if (frameskip < TICRATE*10)
+				frameskip++;
+			else
+				frameskip = 0;
+		}
+		else if (cv_skiprender.value > 1)
+		{
+			if (frameskip < cv_skiprender.value)
+				frameskip++;
+			else
+				frameskip = 0;
 		}
 		else
 		{
-			frameskip = 0;
+			if (!ranwipe && frameskip < 3 && deltatics > 1.0)
+			{
+				frameskip++;
+			}
+			else
+			{
+				frameskip = 0;
+			}
 		}
+
 
 		if (world)
 		{
@@ -1177,9 +1215,11 @@ void D_ClearState(void)
 
 	// okay, stop now
 	// (otherwise the game still thinks we're playing!)
+	CURLAbortFile();
 	SV_StopServer();
 	SV_ResetServer();
 	serverlistultimatecount = 0;
+	serverlistmode = false;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 		CL_ClearPlayer(i);
@@ -1198,6 +1238,7 @@ void D_ClearState(void)
 	// Reset GP and roundqueue
 	memset(&grandprixinfo, 0, sizeof(struct grandprixinfo));
 	memset(&roundqueue, 0, sizeof(struct roundqueue));
+	memset(&menuqueue, 0, sizeof(struct menuqueue));
 
 	// empty some other semi-important state
 	maptol = 0;
@@ -1230,10 +1271,13 @@ void D_ClearState(void)
 	if (gamedata && gamedata->deferredsave)
 		G_SaveGameData();
 
-	K_UnsetDialogue();
+	P_FreeLevelState();
+	P_InvalidateThinkersWithoutInit();
 
 	G_SetGamestate(GS_NULL);
 	wipegamestate = GS_NULL;
+
+	demo.waitingfortally = false;
 }
 
 static boolean g_deferredtitle = false;
@@ -1266,31 +1310,37 @@ boolean D_IsDeferredStartTitle(void)
 //
 // D_AddFile
 //
-static void D_AddFile(char **list, const char *file)
+static void D_AddFile(initmultiplefilesentry_t *list, size_t index, const char *file, const char *md5sum)
 {
-	size_t pnumwadfiles;
-	char *newfile;
-
-	for (pnumwadfiles = 0; list[pnumwadfiles]; pnumwadfiles++)
-		;
-
-	newfile = static_cast<char*>(malloc(strlen(file) + 1));
-	if (!newfile)
+	char *filecopy = NULL;
+	if (file)
 	{
-		I_Error("No more free memory to AddFile %s",file);
+		size_t len = strlen(file) + 1;
+		filecopy = (char*)malloc(len);
+		memcpy(filecopy, file, len);
 	}
-	strcpy(newfile, file);
-
-	list[pnumwadfiles] = newfile;
+	char *md5copy = NULL;
+	if (md5sum)
+	{
+		size_t len = strlen(md5sum) + 1;
+		md5copy = (char*)malloc(len);
+		memcpy(md5copy, md5sum, len);
+	}
+	list[index].filename = filecopy;
+	list[index].md5sum = md5copy;
 }
 
-static inline void D_CleanFile(char **list)
+static inline void D_CleanFile(initmultiplefilesentry_t *list, size_t count)
 {
-	size_t pnumwadfiles;
-	for (pnumwadfiles = 0; list[pnumwadfiles]; pnumwadfiles++)
+	size_t i;
+	for (i = 0; i < count; ++i)
 	{
-		free(list[pnumwadfiles]);
-		list[pnumwadfiles] = NULL;
+		if (list[i].filename != NULL)
+			free((void*)list[i].filename);
+		list[i].filename = NULL;
+		if (list[i].md5sum != NULL)
+			free((void*)list[i].md5sum);
+		list[i].md5sum = NULL;
 	}
 }
 
@@ -1338,7 +1388,7 @@ static boolean AddIWAD(void)
 
 	if (FIL_ReadFileOK(path))
 	{
-		D_AddFile(startupiwads, path);
+		D_AddFile(startupiwads, num_startupiwads++, path, ASSET_HASH_BIOS_PK3);
 		return true;
 	}
 	else
@@ -1356,17 +1406,23 @@ static void IdentifyVersion(void)
 	srb2waddir = I_LocateWad();
 #endif
 
+	char tempsrb2path[256] = ".";
+	getcwd(tempsrb2path, 256);
+
 	// get the current directory (possible problem on NT with "." as current dir)
-	if (srb2waddir)
+	if (!srb2waddir)
 	{
-		strlcpy(srb2path,srb2waddir,sizeof (srb2path));
-	}
-	else
-	{
-		if (getcwd(srb2path, 256) != NULL)
-			srb2waddir = srb2path;
+		if (tempsrb2path[0])
+			srb2waddir = tempsrb2path;
 		else
 			srb2waddir = ".";
+	}
+
+#if (1) // reduce the amount of findfile by only using full cwd in this func
+	if (strcmp(tempsrb2path, srb2waddir))
+#endif
+	{
+		strlcpy(srb2path, srb2waddir, sizeof (srb2path));
 	}
 
 	// Load the IWAD
@@ -1379,40 +1435,44 @@ static void IdentifyVersion(void)
 	snprintf(configfile, sizeof configfile, "%s" PATHSEP CONFIGFILENAME, srb2waddir);
 	configfile[sizeof configfile - 1] = '\0';
 
-	// if you change the ordering of this or add/remove a file, be sure to update the md5
-	// checking in D_SRB2Main
-
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"scripts.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"gfx.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"textures_general.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"textures_segazones.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"textures_originalzones.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"chars.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"followers.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"maps.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"unlocks.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"staffghosts.pk3"));
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"shaders.pk3"));
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","scripts.pk3"), ASSET_HASH_SCRIPTS_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","gfx.pk3"), ASSET_HASH_GFX_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","textures_general.pk3"), ASSET_HASH_TEXTURES_GENERAL_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","textures_segazones.pk3"), ASSET_HASH_TEXTURES_SEGAZONES_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","textures_originalzones.pk3"), ASSET_HASH_TEXTURES_ORIGINALZONES_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","chars.pk3"), ASSET_HASH_CHARS_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","followers.pk3"), ASSET_HASH_FOLLOWERS_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","maps.pk3"), ASSET_HASH_MAPS_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","unlocks.pk3"), ASSET_HASH_UNLOCKS_PK3);
+	D_AddFile(startupiwads, num_startupiwads++, va(spandf,srb2waddir,"data","staffghosts.pk3"), ASSET_HASH_STAFFGHOSTS_PK3);
 #ifdef USE_PATCH_FILE
-	D_AddFile(startupiwads, va(pandf,srb2waddir,"patch.pk3"));
+	D_AddFile(startupiwads, num_startupiwads++, va(pandf,srb2waddir,"patch.pk3"), ASSET_HASH_PATCH_PK3);
 #endif
 
 #define MUSICTEST(str) \
-	{\
-		const char *musicpath = va(pandf,srb2waddir,str);\
-		int ms = W_VerifyNMUSlumps(musicpath, false); \
-		if (ms == 1) \
+		musicpath = va(spandf,srb2waddir,"data",str);\
+		handle = W_OpenWadFile(&musicpath, NULL, false); \
+		if (handle) \
 		{ \
-			D_AddFile(startupiwads, musicpath); \
-			musicwads++; \
-		} \
-		else if (ms == 0) \
-			I_Error("File " str " has been modified with non-music/sound lumps"); \
-	}
+			int ms = W_VerifyNMUSlumps(musicpath, handle, false); \
+			fclose(handle); \
+			if (ms == 0) \
+				I_Error("File " str " has been modified with non-music/sound lumps"); \
+			if (ms == 1) \
+			{ \
+				D_AddFile(startupiwads, num_startupiwads++, musicpath, NULL); \
+				musicwads++; \
+			} \
+		}
 
-	MUSICTEST("sounds.pk3")
-	MUSICTEST("music.pk3")
-	MUSICTEST("altmusic.pk3")
+	{
+		const char *musicpath;
+		FILE *handle;
+
+		MUSICTEST("sounds.pk3")
+		MUSICTEST("music.pk3")
+		MUSICTEST("altmusic.pk3")
+	}
 
 #undef MUSICTEST
 }
@@ -1533,7 +1593,7 @@ void D_SRB2Main(void)
 	// Print GPL notice for our console users (Linux)
 	CONS_Printf(
 	"\n\nDr. Robotnik's Ring Racers\n"
-	"Copyright (C) 2024 by Kart Krew\n\n"
+	"Copyright (C) 2025 by Kart Krew\n\n"
 	"This program comes with ABSOLUTELY NO WARRANTY.\n\n"
 	"This is free software, and you are welcome to redistribute it\n"
 	"and/or modify it under the terms of the GNU General Public License\n"
@@ -1585,6 +1645,7 @@ void D_SRB2Main(void)
 
 	// for dedicated server
 	dedicated = M_CheckParm("-dedicated") != 0;
+	connectedtodedicated = dedicated;
 	if (dedicated)
 	{
 		usedTourney = true;
@@ -1723,7 +1784,7 @@ void D_SRB2Main(void)
 				const char *s = M_GetNextParm();
 
 				if (s) // Check for NULL?
-					D_AddFile(startuppwads, s);
+					D_AddFile(startuppwads, num_startuppwads++, s, NULL);
 			}
 		}
 	}
@@ -1749,46 +1810,10 @@ void D_SRB2Main(void)
 
 	// load wad, including the main wad file
 	CONS_Printf("W_InitMultipleFiles(): Adding IWAD and main PWADs.\n");
-	W_InitMultipleFiles(startupiwads, false);
-	D_CleanFile(startupiwads);
-
-	mainwads = 0;
-
-#ifndef DEVELOP
-	// Check MD5s of autoloaded files
-	// Note: Do not add any files that ignore MD5!
-	W_VerifyFileMD5(mainwads, ASSET_HASH_BIOS_PK3);									// bios.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_SCRIPTS_PK3);					// scripts.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_GFX_PK3);						// gfx.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_TEXTURES_GENERAL_PK3);			// textures_general.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_TEXTURES_SEGAZONES_PK3);		// textures_segazones.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_TEXTURES_ORIGINALZONES_PK3);	// textures_originalzones.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_CHARS_PK3);					// chars.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_FOLLOWERS_PK3);				// followers.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_MAPS_PK3);						// maps.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_UNLOCKS_PK3);					// unlocks.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_STAFFGHOSTS_PK3);				// staffghosts.pk3
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_SHADERS_PK3);					// shaders.pk3
-#ifdef USE_PATCH_FILE
-	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_PATCH_PK3);					// patch.pk3
-#endif
-#else
-	mainwads++;	// scripts.pk3
-	mainwads++;	// gfx.pk3
-	mainwads++;	// textures_general.pk3
-	mainwads++;	// textures_segazones.pk3
-	mainwads++;	// textures_originalzones.pk3
-	mainwads++;	// chars.pk3
-	mainwads++; // followers.pk3
-	mainwads++;	// maps.pk3
-	mainwads++; // unlocks.pk3
-	mainwads++; // staffghosts.pk3
-	mainwads++; // shaders.pk3
-#ifdef USE_PATCH_FILE
-	mainwads++; // patch.pk3
-#endif
-
-#endif //ifndef DEVELOP
+	W_InitMultipleFiles(startupiwads, num_startupiwads, false);
+	mainwads = num_startupiwads - musicwads;
+	D_CleanFile(startupiwads, num_startupiwads);
+	num_startupiwads = 0;
 
 	// Load credits_def lump
 	F_LoadCreditsDefinitions();
@@ -1806,18 +1831,9 @@ void D_SRB2Main(void)
 
 	CON_SetLoadingProgress(LOADED_IWAD);
 
-	CONS_Printf("W_InitMultipleFiles(): Adding external PWADs.\n");
-	W_InitMultipleFiles(startuppwads, true);
-	D_CleanFile(startuppwads);
-
-	//
-	// search for pwad maps
-	//
-	P_InitMapData();
-
-	CON_SetLoadingProgress(LOADED_PWAD);
-
 	M_PasswordInit();
+
+	W_InitShaderLookup(va(spandf, srb2path, "data", "shaders.pk3"));
 
 	//---------------------------------------------------- READY SCREEN
 	// we need to check for dedicated before initialization of some subsystems
@@ -1849,14 +1865,36 @@ void D_SRB2Main(void)
 
 	CON_Init();
 
-	CON_SetLoadingProgress(LOADED_HUINIT);
-
 	D_RegisterServerCommands();
 	D_RegisterClientCommands(); // be sure that this is called before D_CheckNetGame
 	R_RegisterEngineStuff();
 	S_RegisterSoundStuff();
 
 	I_RegisterSysCommands();
+
+	CON_SetLoadingProgress(LOADED_HUINIT);
+
+	CONS_Printf("W_InitMultipleFiles(): Adding external PWADs.\n");
+
+	// HACK: Refer to https://git.do.srb2.org/KartKrew/RingRacers/-/merge_requests/29#note_61574
+	partadd_earliestfile = numwadfiles;
+	W_InitMultipleFiles(startuppwads, num_startuppwads, true);
+
+	// Only search for pwad maps and reload graphics if we actually have a pwad added
+	if (num_startuppwads > 0)
+	{
+		//
+		// search for pwad maps
+		//
+		P_InitMapData();
+		HU_LoadGraphics();
+	}
+
+	D_CleanFile(startuppwads, num_startuppwads);
+	num_startuppwads = 0;
+	partadd_earliestfile = UINT16_MAX;
+
+	CON_SetLoadingProgress(LOADED_PWAD);
 
 	M_Init();
 
@@ -1913,12 +1951,14 @@ void D_SRB2Main(void)
 	{
 		sound_disabled = true;
 		digital_disabled = true;
+		g_voice_disabled = true;
 	}
 
 	if (M_CheckParm("-noaudio")) // combines -nosound and -nomusic
 	{
 		sound_disabled = true;
 		digital_disabled = true;
+		g_voice_disabled = true;
 	}
 	else
 	{
@@ -1933,9 +1973,13 @@ void D_SRB2Main(void)
 			if (M_CheckParm("-nodigmusic"))
 				digital_disabled = true; // WARNING: DOS version initmusic in I_StartupSound
 		}
+		if (M_CheckParm("-novoice"))
+		{
+			g_voice_disabled = true;
+		}
 	}
 
-	if (!( sound_disabled && digital_disabled ))
+	if (!( sound_disabled && digital_disabled && g_voice_disabled ))
 	{
 		CONS_Printf("S_InitSfxChannels(): Setting up sound channels.\n");
 		I_StartupSound();
@@ -2118,7 +2162,7 @@ void D_SRB2Main(void)
 				INT32 importskin = R_SkinAvailableEx(pr->skinname, false);
 				if (importskin != -1)
 				{
-					skins[importskin].records.wins = pr->wins;
+					skins[importskin]->records.wins = pr->wins;
 
 					cupheader_t *cup;
 					for (cup = kartcupheaders; cup; cup = cup->next)
@@ -2144,7 +2188,7 @@ void D_SRB2Main(void)
 						}
 					}
 
-					CONS_Printf(" Wins for profile \"%s\" imported onto character \"%s\"\n", pr->profilename, skins[importskin].name);
+					CONS_Printf(" Wins for profile \"%s\" imported onto character \"%s\"\n", pr->profilename, skins[importskin]->name);
 				}
 			}
 
@@ -2370,3 +2414,59 @@ const char *D_Home(void)
 	if (usehome) return userhome;
 	else return NULL;
 }
+
+void D_TakeMapSnapshots(void)
+{
+	// This function sucks ass!
+
+	const INT32 old_mode = vid.modenum;
+	player_t *const player = &players[consoleplayer];
+	mobj_t *newViewMobj = NULL;
+
+	newViewMobj = P_FindObjectTypeFromTag(MT_ALTVIEWMAN, 0);
+	if (newViewMobj == NULL)
+	{
+		// No camera? Skip.
+		CONS_Alert(CONS_WARNING, M_GetText("Map %s does not have an Alternate View Point with tag 0. Unable to create thumbnails.\n"), G_BuildMapName(gamemap));
+		return;
+	}
+
+	P_SetTarget(&player->awayview.mobj, newViewMobj);
+	player->awayview.tics = -1;
+	R_ResetViewInterpolation(0);
+
+	camera[0].x = player->awayview.mobj->x;
+	camera[0].y = player->awayview.mobj->y;
+	camera[0].z = player->awayview.mobj->z;
+	camera[0].angle = player->awayview.mobj->angle;
+	camera[0].aiming = player->awayview.mobj->pitch;
+	camera[0].subsector = player->awayview.mobj->subsector;
+
+	// Force Software mode
+	if (rendermode != 0)
+	{
+		setrenderneeded = 0;
+		D_Display(true);
+	}
+
+	// Render snapshot at game resolution (level select)
+	g_takemapthumbnail = TMT_PICTURE;
+	setmodeneeded = VID_GetModeForSize(BASEVIDWIDTH, BASEVIDHEIGHT) + 1;
+	D_Display(true);
+	I_CaptureVideoFrame();
+
+	// Render snapshot at 1024x1024 (rich presence)
+	g_takemapthumbnail = TMT_RICHPRES;
+	setmodeneeded = VID_GetModeForSize(1024, 1024) + 1;
+	D_Display(true);
+	I_CaptureVideoFrame();
+
+	// Revert mode to user preference
+	if (vid.modenum != old_mode)
+	{
+		setmodeneeded = old_mode + 1;
+		D_Display(true);
+	}
+	g_takemapthumbnail = TMT_NO;
+}
+

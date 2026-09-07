@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -12,14 +12,13 @@
 #define __SRB2_AUDIO_OGG_HPP__
 
 #include <exception>
-#include <stdexcept>
 #include <vector>
 
 #include <stb_vorbis.h>
 #include <tcb/span.hpp>
 
 #include "../io/streams.hpp"
-#include "source.hpp"
+#include "sample.hpp"
 
 namespace srb2::audio
 {
@@ -36,19 +35,19 @@ public:
 
 struct OggComment
 {
-	std::string vendor;
-	std::vector<std::string> comments;
+	String vendor;
+	Vector<String> comments;
 };
 
 class Ogg final
 {
-	std::vector<std::byte> memory_data_;
+	Vector<std::byte> memory_data_;
 	stb_vorbis* instance_;
 
 public:
 	Ogg() noexcept;
 
-	explicit Ogg(std::vector<std::byte> data);
+	explicit Ogg(Vector<std::byte> data);
 	explicit Ogg(tcb::span<std::byte> data);
 
 	Ogg(const Ogg&) = delete;
@@ -78,7 +77,7 @@ private:
 template <typename I, typename std::enable_if_t<srb2::io::IsInputStreamV<I>, int> = 0>
 inline Ogg load_ogg(I& stream)
 {
-	std::vector<std::byte> data = srb2::io::read_to_vec(stream);
+	srb2::Vector<std::byte> data = srb2::io::read_to_vec(stream);
 	return Ogg {std::move(data)};
 }
 

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -59,6 +59,25 @@ static void K_MidVoteKick(void)
 }
 
 /*--------------------------------------------------
+	static void K_MidVoteMute(void)
+
+		MVT_MUTE's success function.
+--------------------------------------------------*/
+static void K_MidVoteMute(void)
+{
+	UINT8 buf[2];
+
+	if (g_midVote.victim == NULL)
+	{
+		return;
+	}
+
+	buf[0] = g_midVote.victim - players;
+	buf[1] = 1;
+	SendNetXCmd(XD_SERVERMUTEPLAYER, &buf, 2);
+}
+
+/*--------------------------------------------------
 	static void K_MidVoteRockTheVote(void)
 
 		MVT_RTV's success function.
@@ -99,6 +118,13 @@ static midVoteTypeDef_t g_midVoteTypeDefs[MVT__MAX] =
 		K_MidVoteKick
 	},
 
+	{ // MVT_MUTE
+		"MUTE",
+		"Mute Player?",
+		CVAR_INIT ("zvote_mute_allowed", "Yes", CV_SAVE|CV_NETVAR, CV_YesNo, NULL),
+		K_MidVoteMute
+	},
+
 	{ // MVT_RTV
 		"RTV",
 		"Skip Level?",
@@ -124,6 +150,10 @@ boolean K_MidVoteTypeUsesVictim(midVoteType_e voteType)
 	switch (voteType)
 	{
 		case MVT_KICK:
+		{
+			return true;
+		}
+		case MVT_MUTE:
 		{
 			return true;
 		}
@@ -707,6 +737,14 @@ void K_InitNewMidVote(player_t *caller, midVoteType_e type, INT32 variable, play
 	g_midVote.variable = variable;
 	g_midVote.victim = victim;
 
+	if (server || IsPlayerAdmin(consoleplayer))
+	{
+		if (victim)
+			HU_AddChatText(va("%s called a vote to %s %s\n", player_names[caller-players], g_midVoteTypeDefs[type].name, player_names[victim-players]), true);
+		else
+			HU_AddChatText(va("%s called a vote to %s\n", player_names[caller-players], g_midVoteTypeDefs[type].name), true);
+	}
+
 	S_StartSound(NULL, sfx_cdfm67);
 
 	g_midVote.votes[caller - players] = true;
@@ -1095,12 +1133,19 @@ void K_DrawMidVote(void)
 			V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_SPLITSCREEN,
 			exc, NULL
 		);
+		K_DrawGameControl(
+			x/FRACUNIT - 4, y/FRACUNIT + exc->height - 8,
+			id, pressed ? "<z_pressed>" : "<z>",
+			0, MENU_FONT, V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_SPLITSCREEN
+		);
+		/*
 		K_drawButton(
 			x - (4 * FRACUNIT),
 			y + ((exc->height - kp_button_z[1][0]->height) * FRACUNIT),
 			V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_SPLITSCREEN,
 			kp_button_z[1], pressed
 		);
+		*/
 	}
 	else
 	{
@@ -1171,6 +1216,7 @@ void K_DrawMidVote(void)
 		switch (g_midVote.type)
 		{
 			case MVT_KICK:
+			case MVT_MUTE:
 			{
 				// Draw victim name
 				if (g_midVote.victim != NULL)
@@ -1211,12 +1257,19 @@ void K_DrawMidVote(void)
 
 		if (drawButton == true)
 		{
+			K_DrawGameControl(
+				x/FRACUNIT-20, y/FRACUNIT + 2, id,
+				pressed ? "<z_pressed>" : "<z>",
+				0, MENU_FONT, V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_SPLITSCREEN
+			);
+			/*
 			K_drawButton(
 				x - (20 * FRACUNIT),
 				y - (2 * FRACUNIT),
 				V_SNAPTOBOTTOM|V_SNAPTORIGHT|V_SPLITSCREEN,
 				kp_button_z[0], pressed
 			);
+			*/
 		}
 
 		// Vote count

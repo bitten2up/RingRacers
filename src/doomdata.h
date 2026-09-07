@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -159,6 +159,9 @@ enum
 
 	// Transfers FOF properties.
 	ML_TFERLINE			= 0x00008000,
+
+	// Like ML_WRAPMIDTEX, but invisible wall style instead
+	ML_MIDTEXINVISWALL	= 0x00010000,
 };
 
 enum

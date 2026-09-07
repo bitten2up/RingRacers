@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,9 +21,12 @@ extern "C" {
 #endif
 
 #define MAXHITLAGTICS (30)
-#define HITLAGJITTERS (FRACUNIT / 20)
+#define HITLAGDIV (20)	// define this so we arent using a magic number
+#define HITLAGJITTERS (FRACUNIT / HITLAGDIV)
 #define NUM_HITLAG_STATES (9)
 #define NUM_HITLAG_SOUNDS (4)
+
+void K_AddHitLagFromCollision(mobj_t *mo, INT32 tics);
 
 /*--------------------------------------------------
 	void K_AddHitLag(mobj_t *mo, INT32 tics, boolean fromDamage);

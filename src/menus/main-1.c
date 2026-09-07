@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -101,7 +101,7 @@ void M_QuitSRB2(INT32 choice)
 
 	(void)choice;
 
-	if (M_GameTrulyStarted())
+	if (!M_GameAboutToStart() && M_GameTrulyStarted())
 	{
 		INT32 mrand = M_RandomKey(sizeof(quitsounds) / sizeof(INT32));
 		if (quitsounds[mrand])

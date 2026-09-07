@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -23,48 +23,20 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-//#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 #define RPC_NO_WINDOWS_H
 #include <windows.h>
+// win32 sucks
+#undef min
+#undef max
 #endif
 
 /* 7.18.1.1  Exact-width integer types */
-#ifdef _MSC_VER
-// libopenmpt.h will include stdint.h later;
-// include it now so that INT8_MAX etc. don't get redefined
-#ifdef HAVE_OPENMPT
-#include <stdint.h>
-#endif
-
-#define UINT8 unsigned __int8
-#define SINT8 signed __int8
-
-#define UINT16 unsigned __int16
-#define INT16 __int16
-
-#define INT32 __int32
-#define UINT32 unsigned __int32
-
-#define INT64  __int64
-#define UINT64 unsigned __int64
-
-typedef long ssize_t;
-
-/* Older Visual C++ headers don't have the Win64-compatible typedefs... */
-#if (_MSC_VER <= 1200)
-	#ifndef DWORD_PTR
-		#define DWORD_PTR DWORD
-	#endif
-	#ifndef PDWORD_PTR
-		#define PDWORD_PTR PDWORD
-	#endif
-#endif
-#else
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 
+#ifndef _MSC_VER
 #define UINT8 uint8_t
-#define SINT8 int8_t
 
 #define UINT16 uint16_t
 #define INT16 int16_t
@@ -74,6 +46,8 @@ typedef long ssize_t;
 #define INT64  int64_t
 #define UINT64 uint64_t
 #endif
+
+#define SINT8 int8_t
 
 #ifdef __APPLE_CC__
 #define DIRECTFULLSCREEN 1
@@ -258,13 +232,14 @@ enum {false = 0, true = 1};
 		#endif
 	#endif
 
-	#if defined (__MINGW32__) && ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)) // MinGW, >= GCC 3.4
+	#if defined (__MINGW32__) && ((__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)) && !defined(__clang__) // MinGW, >= GCC 3.4, not Clang
 		#define ATTRPACK __attribute__((packed, gcc_struct))
 	#else
 		#define ATTRPACK __attribute__((packed))
 	#endif
 
 	#define ATTRUNUSED __attribute__((unused))
+	#define ATTRUNOPTIMIZE __attribute__((optimize("O0")))
 #elif defined (_MSC_VER)
 	#define ATTRNORETURN __declspec(noreturn)
 	#define ATTRINLINE __forceinline
@@ -407,8 +382,12 @@ typedef UINT64 precise_t;
 // that struct and it's fine...
 
 // Cast function pointer to (void*)
-#define FUNCPTRCAST(p) ((union{void(*f)(void);void*v;})\
-		{(void(*)(void))p}).v
+typedef union {
+    void (*f)(void);
+    void *v;
+} func_ptr_cast_union;
+
+#define FUNCPTRCAST(p) (((func_ptr_cast_union){(void(*)(void))(p)}).v)
 
 #include "typedef.h"
 

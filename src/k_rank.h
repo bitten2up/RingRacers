@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,7 +21,7 @@ struct gpRank_level_perplayer_t
 {
 	UINT8 position;
 	UINT8 rings;
-	UINT16 lapPoints;
+	UINT16 exp;
 	UINT16 prisons;
 	boolean gotSpecialPrize;
 	gp_rank_e grade;
@@ -32,8 +32,9 @@ struct gpRank_level_t
 	UINT16 id;
 	INT32 event;
 	UINT32 time;
-	UINT16 totalLapPoints;
+	UINT16 totalExp;
 	UINT16 totalPrisons;
+	UINT16 continues;
 	gpRank_level_perplayer_t perPlayer[MAXSPLITSCREENPLAYERS];
 };
 
@@ -44,13 +45,13 @@ struct gpRank_t
 	UINT8 totalPlayers;
 
 	UINT8 position;
-	UINT8 skin;
+	UINT16 skin;
 
 	UINT32 winPoints;
 	UINT32 totalPoints;
 
-	UINT32 laps;
-	UINT32 totalLaps;
+	UINT32 exp;
+	UINT32 totalExp;
 
 	UINT32 continuesUsed;
 
@@ -64,7 +65,7 @@ struct gpRank_t
 
 	INT32 scorePosition;
 	INT32 scoreGPPoints;
-	INT32 scoreLaps;
+	INT32 scoreExp;
 	INT32 scorePrisons;
 	INT32 scoreRings;
 	INT32 scoreContinues;
@@ -91,12 +92,12 @@ extern "C" {
 
 #define RANK_WEIGHT_POSITION (150)
 #define RANK_WEIGHT_SCORE (100)
-#define RANK_WEIGHT_LAPS (100)
+#define RANK_WEIGHT_EXP (100)
 #define RANK_WEIGHT_PRISONS (100)
 #define RANK_WEIGHT_RINGS (50)
 
-#define RANK_CONTINUE_PENALTY_DIV (20) // 5% of the total grade
-#define RANK_CONTINUE_PENALTY_START (2)
+#define RANK_CONTINUE_PENALTY_DIV (10) // 10% of the total grade
+#define RANK_CONTINUE_PENALTY_START (0)
 
 /*--------------------------------------------------
 	void K_InitGrandPrixRank(gpRank_t *rankData);
@@ -158,6 +159,8 @@ void K_UpdateGPRank(gpRank_t *rankData);
 --------------------------------------------------*/
 
 gp_rank_e K_CalculateGPGrade(gpRank_t *rankData);
+fixed_t K_SealedStarEntryRequirement(gpRank_t *rankData);
+fixed_t K_CalculateGPPercent(gpRank_t *rankData);
 
 
 /*--------------------------------------------------

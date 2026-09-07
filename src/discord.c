@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -37,6 +37,11 @@
 
 // Feel free to provide your own, if you care enough to create another Discord app for this :P
 #define DISCORD_APPID "977470696852684833"
+
+// An undocumented feature of Discord RPC is the ability to host images on your own URL.
+// We use this to avoid the asset count restrictions on Discord apps.
+#define IMAGE_REPO "https://www.kartkrew.org/theme/images/drpc-rr/"
+#define IMAGE_EXT ".png"
 
 #ifdef DEVELOP
 #define DISCORD_SECRETIVE
@@ -519,7 +524,7 @@ void DRPC_UpdatePresence(void)
 
 #ifdef DISCORD_SECRETIVE
 	// This way, we can use the invite feature in-dev, but not have snoopers seeing any potential secrets! :P
-	discordPresence.largeImageKey = "misc_develop";
+	discordPresence.largeImageKey = IMAGE_REPO "misc_develop" IMAGE_EXT;
 	discordPresence.largeImageText = "No peeking!";
 	discordPresence.state = "Development EXE";
 
@@ -559,10 +564,11 @@ void DRPC_UpdatePresence(void)
 	char detailstr[128];
 	char localstr[128];
 
-	char charimg[32];
+	char charimg[128];
 	char charname[128];
 
-	char gtname[128];
+	char largeimg[128];
+	char largename[128];
 
 	UINT8 gs = DISCORD_GS_UNKNOWN;
 	if (DRPC_DisplayGonerSetup())
@@ -778,7 +784,7 @@ void DRPC_UpdatePresence(void)
 		// Gametype info
 		discordPresence.details = "Setup";
 
-		discordPresence.largeImageKey = "gs_goner";
+		discordPresence.largeImageKey = IMAGE_REPO "gs_goner" IMAGE_EXT;
 		discordPresence.largeImageText = "NO SIGNAL";
 	}
 	else
@@ -866,84 +872,98 @@ void DRPC_UpdatePresence(void)
 		}
 
 		// Gametype image
-		// I am REALLY REALLY sad that there isn't enough room in a
-		// single Rich Presence app to handle enough images for all
-		// of the maps...
+		// Use these when there's no map image available!
 		switch (gs)
 		{
 			case DISCORD_GS_CUSTOM:
 			{
-				discordPresence.largeImageKey = "custom_gs";
-				snprintf(gtname, 128, "%s", gametypes[gametype]->name);
-				discordPresence.largeImageText = gtname;
+				discordPresence.largeImageKey = IMAGE_REPO "custom_gs" IMAGE_EXT;
+				snprintf(largename, 128, "%s", gametypes[gametype]->name);
+				discordPresence.largeImageText = largename;
 				break;
 			}
 			case DISCORD_GS_RACE:
 			{
-				discordPresence.largeImageKey = "gs_race";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_race" IMAGE_EXT;
 				discordPresence.largeImageText = "Race";
 				break;
 			}
 			case DISCORD_GS_BATTLE:
 			{
-				discordPresence.largeImageKey = "gs_battle";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_battle" IMAGE_EXT;
 				discordPresence.largeImageText = "Battle";
 				break;
 			}
 			case DISCORD_GS_TUTORIAL:
 			{
-				discordPresence.largeImageKey = "gs_tutorial";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_tutorial" IMAGE_EXT;
 				discordPresence.largeImageText = "Tutorial";
 				break;
 			}
 			case DISCORD_GS_TIMEATTACK:
 			{
-				discordPresence.largeImageKey = "gs_timeattack";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_timeattack" IMAGE_EXT;
 				discordPresence.largeImageText = "Time Attack";
 				break;
 			}
 			case DISCORD_GS_GRANDPRIX:
 			{
-				discordPresence.largeImageKey = "gs_grandprix";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_grandprix" IMAGE_EXT;
 				discordPresence.largeImageText = "Grand Prix";
 				break;
 			}
 			case DISCORD_GS_VOTING:
 			{
-				discordPresence.largeImageKey = "gs_voting";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_voting" IMAGE_EXT;
 				discordPresence.largeImageText = "Voting";
 				break;
 			}
 			case DISCORD_GS_MENU:
 			{
-				discordPresence.largeImageKey = "gs_menu";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_menu" IMAGE_EXT;
 				discordPresence.largeImageText = "Menu";
 				break;
 			}
 			case DISCORD_GS_REPLAY:
 			{
-				discordPresence.largeImageKey = "gs_replay";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_replay" IMAGE_EXT;
 				discordPresence.largeImageText = "Watching Replays";
 				break;
 			}
 			case DISCORD_GS_TITLE:
 			{
-				discordPresence.largeImageKey = "gs_title";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_title" IMAGE_EXT;
 				discordPresence.largeImageText = "Title Screen";
 				break;
 			}
 			case DISCORD_GS_CREDITS:
 			{
-				discordPresence.largeImageKey = "gs_credits";
+				discordPresence.largeImageKey = IMAGE_REPO "gs_credits" IMAGE_EXT;
 				discordPresence.largeImageText = "Credits";
 				break;
 			}
 			default:
 			{
-				discordPresence.largeImageKey = "misc_develop";
+				discordPresence.largeImageKey = IMAGE_REPO "misc_develop" IMAGE_EXT;
 				discordPresence.largeImageText = "Invalid DRPC state?";
 				break;
 			}
+		}
+
+		if ((gamestate == GS_LEVEL || gamestate == GS_INTERMISSION || gamestate == GS_CEREMONY) && !demo.attract)
+		{
+			// Try a map image, if it exists!
+			if (gamemap-1 < basenummapheaders)
+			{
+				snprintf(largeimg, 128, "%smap_%s%s", IMAGE_REPO, G_BuildMapName(gamemap), IMAGE_EXT);
+				discordPresence.largeImageKey = largeimg; // Map image
+			}
+
+			// Map name on tool tip
+			char *title = G_BuildMapTitle(gamemap);
+			snprintf(largename, 128, "Map: %s", title);
+			discordPresence.largeImageText = largename;
+			Z_Free(title);
 		}
 
 		// Character info
@@ -952,16 +972,16 @@ void DRPC_UpdatePresence(void)
 			// Character image
 			if ((unsigned)players[consoleplayer].skin < g_discord_skins) // Supported skins
 			{
-				snprintf(charimg, 32, "char_%s", skins[ players[consoleplayer].skin ].name);
+				snprintf(charimg, 128, "%schar_%s%s", IMAGE_REPO, skins[ players[consoleplayer].skin ]->name, IMAGE_EXT);
 				discordPresence.smallImageKey = charimg;
 			}
 			else
 			{
 				// Use the custom character icon!
-				discordPresence.smallImageKey = "custom_char";
+				discordPresence.smallImageKey = IMAGE_REPO "custom_char" IMAGE_EXT;
 			}
 
-			snprintf(charname, 128, "Character: %s", skins[players[consoleplayer].skin].realname);
+			snprintf(charname, 128, "Character: %s", skins[players[consoleplayer].skin]->realname);
 			discordPresence.smallImageText = charname; // Character name
 		}
 	}

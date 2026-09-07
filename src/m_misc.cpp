@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -21,16 +21,21 @@
 #pragma GCC diagnostic ignored "-Wclobbered"
 #endif
 
-#include <filesystem>
-
 #include <unistd.h>
 #endif
 
+
 #include <algorithm>
+#include <filesystem>
 #include <errno.h>
 
 // Extended map support.
 #include <ctype.h>
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+#include <immintrin.h>
+#define NEED_INTEL_DENORMAL_BIT 1
+#endif
 
 #include "doomdef.h"
 #include "g_game.h"
@@ -115,14 +120,17 @@ typedef off_t off64_t;
  #endif
 #endif
 
+extern "C" CV_PossibleValue_t lossless_recorder_cons_t[];
 CV_PossibleValue_t lossless_recorder_cons_t[] = {{MM_GIF, "GIF"}, {MM_APNG, "aPNG"}, {MM_SCREENSHOT, "Screenshots"}, {0, NULL}};
 
+extern "C" CV_PossibleValue_t zlib_mem_level_t[];
 CV_PossibleValue_t zlib_mem_level_t[] = {
 	{1, "(Min Memory) 1"},
 	{2, "2"}, {3, "3"}, {4, "4"}, {5, "5"}, {6, "6"}, {7, "7"},
 	{8, "(Optimal) 8"}, //libpng Default
 	{9, "(Max Memory) 9"}, {0, NULL}};
 
+extern "C" CV_PossibleValue_t zlib_level_t[];
 CV_PossibleValue_t zlib_level_t[] = {
 	{0, "No Compression"},  //Z_NO_COMPRESSION
 	{1, "(Fastest) 1"}, //Z_BEST_SPEED
@@ -132,6 +140,7 @@ CV_PossibleValue_t zlib_level_t[] = {
 	{9, "(Maximum) 9"}, //Z_BEST_COMPRESSION
 	{0, NULL}};
 
+extern "C" CV_PossibleValue_t zlib_strategy_t[];
 CV_PossibleValue_t zlib_strategy_t[] = {
 	{0, "Normal"}, //Z_DEFAULT_STRATEGY
 	{1, "Filtered"}, //Z_FILTERED
@@ -140,6 +149,7 @@ CV_PossibleValue_t zlib_strategy_t[] = {
 	{4, "Fixed"}, //Z_FIXED
 	{0, NULL}};
 
+extern "C" CV_PossibleValue_t zlib_window_bits_t[];
 CV_PossibleValue_t zlib_window_bits_t[] = {
 #ifdef WBITS_8_OK
 	{8, "256"},
@@ -155,6 +165,8 @@ static boolean apng_downscale = false; // So nobody can do something dumb like c
 boolean takescreenshot = false; // Take a screenshot this tic
 
 moviemode_t moviemode = MM_OFF;
+
+g_takemapthumbnail_t g_takemapthumbnail = TMT_NO;
 
 char joinedIPlist[NUMLOGIP][2][MAX_LOGIP];
 char joinedIP[MAX_LOGIP];
@@ -337,6 +349,12 @@ boolean FIL_ConvertTextFileToBinary(const char *textfilename, const char *binfil
 	fclose(binfile);
 
 	return success;
+}
+
+boolean FIL_RenameFile(char const *old_name, char const *new_name)
+{
+	int result = rename(old_name, new_name);
+	return (result == 0);
 }
 
 /** Check if the filename exists
@@ -587,7 +605,7 @@ void Command_LoadConfig_f(void)
 	CV_InitFilterVar();
 
 	// exec the config
-	COM_BufInsertText(va("exec \"%s\"\n", configfile));
+	COM_BufInsertText(va("exec \"%s\" -immediate\n", configfile));
 
 	// don't filter anymore vars and don't let this convsvar be changed
 	COM_BufInsertText(va("%s \"%d\"\n", cv_execversion.name, EXECVERSION));
@@ -609,6 +627,8 @@ void Command_ChangeConfig_f(void)
 	COM_BufAddText(va("saveconfig \"%s\"\n", configfile));
 	COM_BufAddText(va("loadconfig \"%s\"\n", COM_Argv(1)));
 }
+
+extern "C" struct CVarList* cvlist_execversion;
 
 /** Loads the default config file.
   *
@@ -637,7 +657,6 @@ void M_FirstLoadConfig(void)
 
 	// register execversion here before we load any configs
 	{
-		extern struct CVarList *cvlist_execversion;
 		CV_RegisterList(cvlist_execversion);
 	}
 
@@ -648,7 +667,7 @@ void M_FirstLoadConfig(void)
 	CV_InitFilterVar();
 
 	// load config, make sure those commands doesnt require the screen...
-	COM_BufInsertText(va("exec \"%s\"\n", configfile));
+	COM_BufInsertText(va("exec \"%s\" -immediate\n", configfile));
 	// no COM_BufExecute() needed; that does it right away
 
 	// don't filter anymore vars and don't let this convsvar be changed
@@ -909,7 +928,7 @@ static void M_PNGText(png_structp png_ptr, png_infop png_info_ptr, PNG_CONST png
 	 "Unknown";
 #endif
 	char rendermodetxt[9];
-	char maptext[8];
+	char maptext[MAXMAPLUMPNAME];
 	char lvlttltext[48];
 	char locationtxt[40];
 	char ctrevision[40];
@@ -929,12 +948,16 @@ static void M_PNGText(png_structp png_ptr, png_infop png_info_ptr, PNG_CONST png
 			break;
 	}
 
-#if 0
 	if (gamestate == GS_LEVEL)
-		snprintf(maptext, 8, "%s", G_BuildMapName(gamemap));
+	{
+		const char* mapname = G_BuildMapName(gamemap);
+		if (mapname)
+			snprintf(maptext, sizeof(maptext), "%s", mapname);
+		else
+			snprintf(maptext, sizeof(maptext), "Unknown");
+	}
 	else
-#endif
-		snprintf(maptext, 8, "Unknown");
+		snprintf(maptext, sizeof(maptext), "Unknown");
 
 	if (gamestate == GS_LEVEL && mapheaderinfo[gamemap-1]->lvlttl[0] != '\0')
 		snprintf(lvlttltext, 48, "%s%s%s",
@@ -1454,7 +1477,7 @@ void M_LegacySaveFrame(void)
 #endif
 				M_PNGFrame(apng_ptr, apng_info_ptr, (png_bytep)linear);
 #ifdef HWRENDER
-				if (rendermode != render_soft && linear)
+				if (rendermode == render_opengl && linear)
 					free(linear);
 #endif
 
@@ -1852,6 +1875,46 @@ failure:
 			M_StopMovie();
 	}
 #endif
+}
+
+void M_SaveMapThumbnail(UINT32 width, UINT32 height, tcb::span<const std::byte> data)
+{
+#ifdef USE_PNG
+#if NUMSCREENS > 2
+
+	char *filepath;
+	switch (g_takemapthumbnail)
+	{
+		case TMT_PICTURE:
+		default:
+		{
+			filepath = va("%s" PATHSEP "PICTURE_%s.png", srb2home, G_BuildMapName(gamemap));
+			break;
+		}
+		case TMT_RICHPRES:
+		{
+			filepath = va("%s" PATHSEP "map_%s.png", srb2home, G_BuildMapName(gamemap));
+			break;
+		}
+	}
+
+	// save the file
+	const void* pixel_data = static_cast<const void*>(data.data());
+	boolean ret = M_SavePNG(filepath, pixel_data, width, height, NULL);
+
+	if (ret)
+	{
+		CONS_Printf(M_GetText("Created thumbnail at \"%s\"\n"), filepath);
+	}
+	else
+	{
+		CONS_Alert(CONS_ERROR, M_GetText("Couldn't create %s\n"), filepath);
+	}
+
+	g_takemapthumbnail = TMT_NO;
+
+#endif // #ifdef USE_PNG
+#endif // #if NUMSCREENS > 2
 }
 
 void M_ScreenshotTicker(void)
@@ -2746,4 +2809,45 @@ const char * M_Ftrim (double f)
 		dig[i + 1] = '\0';
 		return &dig[1];/* skip the 0 */
 	}
+}
+
+/** Enable floating point denormal-to-zero section, if necessary */
+floatdenormalstate_t M_EnterFloatDenormalToZero(void)
+{
+#ifdef NEED_INTEL_DENORMAL_BIT
+	floatdenormalstate_t state = 0;
+	state |= _MM_GET_FLUSH_ZERO_MODE() == _MM_FLUSH_ZERO_ON ? 1 : 0;
+	state |= _MM_GET_DENORMALS_ZERO_MODE() == _MM_DENORMALS_ZERO_ON ? 2 : 0;
+
+	if ((state & 1) == 0)
+	{
+		_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+	}
+	if ((state & 2) == 0)
+	{
+		_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+	}
+	return state;
+#else
+	return 0;
+#endif
+}
+
+/** Exit floating point denormal-to-zero section, if necessary, restoring previous state */
+void M_ExitFloatDenormalToZero(floatdenormalstate_t previous)
+{
+#ifdef NEED_INTEL_DENORMAL_BIT
+	if ((previous & 1) == 0)
+	{
+		_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_OFF);
+	}
+	if ((previous & 2) == 0)
+	{
+		_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_OFF);
+	}
+	return;
+#else
+	(void)previous;
+	return;
+#endif
 }

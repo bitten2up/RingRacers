@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -45,10 +45,9 @@ extern UINT8 spectateGriefed;
 
 SINT8 K_UsingPowerLevels(void);
 void K_ClearClientPowerLevels(void);
-INT16 K_CalculatePowerLevelInc(INT16 diff);
 INT16 K_PowerLevelPlacementScore(player_t *player);
 INT16 K_CalculatePowerLevelAvg(void);
-void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit);
+void K_UpdatePowerLevels(player_t *player, UINT8 gradingpoint, boolean forfeit);
 void K_UpdatePowerLevelsFinalize(player_t *player, boolean onForfeit);
 INT16 K_FinalPowerIncrement(player_t *player, INT16 yourPower, INT16 increment);
 void K_CashInPowerLevels(void);

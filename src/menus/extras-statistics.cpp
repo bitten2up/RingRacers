@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -10,6 +10,8 @@
 //-----------------------------------------------------------------------------
 /// \file  menus/extras-challenges.c
 /// \brief Statistics menu
+
+#include <algorithm>
 
 #include "../k_menu.h"
 #include "../z_zone.h"
@@ -24,7 +26,20 @@ static boolean M_StatisticsAddMap(UINT16 map, cupheader_t *cup, boolean *headere
 	if (!mapheaderinfo[map])
 		return false;
 
-	if (mapheaderinfo[map]->cup != cup)
+	if (mapheaderinfo[map]->typeoflevel & TOL_SPECIAL)
+	{
+		if (gamedata->sealedswaps[GDMAX_SEALEDSWAPS-1] != NULL // all found
+		|| (mapheaderinfo[map]->cup
+			&& mapheaderinfo[map]->cup->id >= basenumkartcupheaders) // custom content
+		|| M_SecretUnlocked(SECRET_SPECIALATTACK, true)) // true order
+		{
+			if (mapheaderinfo[map]->cup != cup)
+				return false;
+		}
+		else if (cup) // Appear under Lost & Found until you've ordered them.
+			return false;
+	}
+	else if (mapheaderinfo[map]->cup != cup)
 		return false;
 
 	if (((mapheaderinfo[map]->typeoflevel & TOL_TUTORIAL) == TOL_TUTORIAL) != tutorial)
@@ -131,16 +146,16 @@ static void M_StatisticsChars(void)
 
 		statisticsmenu.maplist[statisticsmenu.nummaps++] = i;
 
-		if (skins[i].records.wins == 0)
+		if (skins[i]->records.wins == 0)
 			continue;
 
 		// The following is a partial duplication of R_GetEngineClass
 		{
-			if (skins[i].flags & SF_IRONMAN)
+			if (skins[i]->flags & SF_IRONMAN)
 				continue; // does not add to any engine class
 
-			INT32 s = (skins[i].kartspeed - 1);
-			INT32 w = (skins[i].kartweight - 1);
+			INT32 s = (skins[i]->kartspeed - 1);
+			INT32 w = (skins[i]->kartweight - 1);
 
 			#define LOCKSTAT(stat) \
 				if (stat < 0) { continue; } \
@@ -150,12 +165,12 @@ static void M_StatisticsChars(void)
 			#undef LOCKSTAT
 
 			if (
-				statisticsmenu.statgridplayed[s][w] > skins[i].records.wins
-				&& (UINT32_MAX - statisticsmenu.statgridplayed[s][w]) < skins[i].records.wins
+				statisticsmenu.statgridplayed[s][w] > skins[i]->records.wins
+				&& (UINT32_MAX - statisticsmenu.statgridplayed[s][w]) < skins[i]->records.wins
 			)
 				continue; // overflow protection
 
-			statisticsmenu.statgridplayed[s][w] += skins[i].records.wins;
+			statisticsmenu.statgridplayed[s][w] += skins[i]->records.wins;
 
 			if (beststat >= statisticsmenu.statgridplayed[s][w])
 				continue;
@@ -170,9 +185,9 @@ static void M_StatisticsChars(void)
 		statisticsmenu.maplist,
 		statisticsmenu.maplist + statisticsmenu.nummaps,
 		[](UINT16 a, UINT16 b) {
-			if (skins[a].records.rounds > skins[b].records.rounds)
+			if (skins[a]->records.rounds > skins[b]->records.rounds)
 				return true;
-			if (skins[a].records.rounds != skins[b].records.rounds)
+			if (skins[a]->records.rounds != skins[b]->records.rounds)
 				return false;
 			// Stable for skin ID
 			return (a < b);
@@ -260,7 +275,7 @@ static void M_StatisticsPageInit(void)
 			M_StatisticsChars();
 			break;
 		}
-	
+
 		case statisticspage_gp:
 		{
 			M_StatisticsGP();
@@ -288,9 +303,21 @@ void M_Statistics(INT32 choice)
 {
 	(void)choice;
 
+	UINT16 i;
+
 	statisticsmenu.gotmedals = M_CountMedals(false, false);
 	statisticsmenu.nummedals = M_CountMedals(true, false);
 	statisticsmenu.numextramedals = M_CountMedals(true, true);
+
+	statisticsmenu.numcanbonus = 0;
+	for (i = 0; i < basenummapheaders; i++)
+	{
+		if (!mapheaderinfo[i])
+			continue;
+		if (mapheaderinfo[i]->records.spraycan != MCAN_BONUS)
+			continue;
+		statisticsmenu.numcanbonus++;
+	}
 
 	M_StatisticsPageInit();
 

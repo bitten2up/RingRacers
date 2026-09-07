@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -206,6 +206,13 @@ struct Mobj : mobj_t
 	FIXED_METHOD(sprxoff)
 	FIXED_METHOD(spryoff)
 	FIXED_METHOD(sprzoff)
+
+	FIXED_METHOD(bakexoff)
+	FIXED_METHOD(bakeyoff)
+	FIXED_METHOD(bakezoff)
+	FIXED_METHOD(bakexpiv)
+	FIXED_METHOD(bakeypiv)
+	FIXED_METHOD(bakezpiv)
 
 	vec2 spritescale() const { return {spritexscale(), spriteyscale()}; }
 	void spritescale(const vec2& v)

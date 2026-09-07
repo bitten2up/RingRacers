@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -55,16 +55,32 @@ struct Particle : Mobj
 
 	bool is_shrapnel() const { return sprite == SPR_KRBM; }
 
-	static void spew(Mobj* source)
+	static void spew(Mobj* source,int pskin)
 	{
-		auto generic = [&](spritenum_t sprite, int degr, Fixed scale, int momx, const Vec2<int>& momz)
+		auto generic = [&](spritenum_t sprite, int pskinn, statenum_t spr2state, int degr, Fixed scale, int momx, const Vec2<int>& momz)
 		{
 			Particle* x = source->spawn_from<Particle>({}, MT_KART_PARTICLE);
 			if (x)
 			{
-				x->sprite = sprite;
+				if(pskinn >= 0 && pskinn < numskins
+					&& spr2state > S_NULL && spr2state < NUMSTATES &&
+					states[spr2state].frame >= 0 && states[spr2state].frame < NUMPLAYERSPRITES * 2 && //'NUMPLAYERSPRITES * 2' being the length of the 'skin_t.sprites' array member
+					skins[pskinn]->sprites[states[spr2state].frame].numframes > 0)
+				{		
+
+					x->skin = (void*)(skins[pskinn]);
+					x->state(spr2state);
+					//frame will be set by state()
+				}
+				else{
+					//state will be set by mapthing definition
+					x->sprite = sprite;
+					x->frame = 0;
+				}
+
+				x->frame |=FF_SEMIBRIGHT;
+
 				x->color = source->color;
-				x->frame = FF_SEMIBRIGHT;
 				x->lightlevel = 112;
 				x->scale(scale * x->scale());
 
@@ -79,34 +95,34 @@ struct Particle : Mobj
 			return x;
 		};
 
-		auto part = [&](spritenum_t sprite, int degr, Fixed scale)
+		auto part = [&](spritenum_t sprite, int pskinn, statenum_t spr2state,  int degr, Fixed scale)
 		{
-			return generic(sprite, degr, scale, 2, {8, 16});
+			return generic(sprite, pskinn, spr2state, degr, scale, 2, {8, 16});
 		};
 
-		auto radial = [&](spritenum_t sprite, int ofs, int spokes, Fixed scale)
+		auto radial = [&](spritenum_t sprite, int pskinn, statenum_t spr2state, int ofs, int spokes, Fixed scale)
 		{
-			radial_generic(ofs, spokes, [&](int ang) { part(sprite, ang, scale); });
+			radial_generic(ofs, spokes, [&](int ang) { part(sprite, pskinn, spr2state, ang, scale); });
 		};
 
 		constexpr Fixed kSmall = 3*FRACUNIT/2;
 		constexpr Fixed kMedium = 7*FRACUNIT/4;
 		constexpr Fixed kLarge = 2*FRACUNIT;
 
-		part(SPR_DIEE, 0, kLarge); // steering wheel
-		part(SPR_DIEK, 180 + 45, kLarge); // engine
+		part(SPR_DIEE, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_E, 0, kLarge); // steering wheel
+		part(SPR_DIEK, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_K, 180 + 45, kLarge); // engine
 
-		part(SPR_DIEG, 90, kLarge); // left pedal base
-		part(SPR_DIED, -90, kLarge); // right pedal base
+		part(SPR_DIEG, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_G, 90, kLarge); // left pedal base
+		part(SPR_DIED, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_D, -90, kLarge); // right pedal base
 
-		radial(SPR_DIEI, 90, 2, kLarge); // wheel axle bars
-		radial(SPR_DIEC, 90, 2, kLarge); // pedal tips
-		radial(SPR_DIEA, 45, 4, kMedium); // tires
-		radial(SPR_DIEH, 45, 4, kMedium); // struts / springs
-		radial(SPR_DIEB, 360/12, 6, kSmall); // pipeframe bars
-		radial(SPR_DIEJ, 360/16, 8, kSmall); // screws
+		radial(SPR_DIEI, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_I, 90, 2, kLarge); // wheel axle bars
+		radial(SPR_DIEC, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_C, 90, 2, kLarge); // pedal tips
+		radial(SPR_DIEA, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_A, 45, 4, kMedium); // tires
+		radial(SPR_DIEH, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_H, 45, 4, kMedium); // struts / springs
+		radial(SPR_DIEB, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_B, 360/12, 6, kSmall); // pipeframe bars
+		radial(SPR_DIEJ, pskin, S_KART_LEFTOVER_PARTICLE_CUSTOM_J, 360/16, 8, kSmall); // screws
 
-		radial_generic(0, 6, [&](int degr) { generic(SPR_KRBM, degr, kSmall, 8, {22, 28}); }); // shrapnel
+		radial_generic(0, 6, [&](int degr) { generic(SPR_KRBM, -1, S_NULL, degr, kSmall, 8, {22, 28}); }); // shrapnel
 
 		// explosion
 		radial_generic(
@@ -215,9 +231,12 @@ struct Particle : Mobj
 
 		if (!is_shrapnel() && fuse > 7 && (bounces() & 1)) // 7 = 0.2/(1/35)
 		{
+			// note: determinate random argument eval order
+			int32_t rand_volume = P_RandomRange(PR_ITEM_DEBRIS, 20, 40);
+			int32_t rand_sound = P_RandomRange(PR_ITEM_DEBRIS, sfx_die01, sfx_die03);
 			voice(
-				static_cast<sfxenum_t>(P_RandomRange(PR_ITEM_DEBRIS, sfx_die01, sfx_die03)),
-				P_RandomRange(PR_ITEM_DEBRIS, 20, 40) * 255 / 100
+				static_cast<sfxenum_t>(rand_sound),
+				rand_volume * 255 / 100
 			);
 		}
 
@@ -309,15 +328,34 @@ struct Kart : Mobj
 			return true;
 		}
 
+
 		if (health <= 1)
 		{
 			return false;
 		}
 
-		Particle::spew(this);
-		scale(3 * scale() / 2);
+		Mobj* p = player();
+		bool pValid = Mobj::valid(p) && p->player;
+		int pSkin = pValid ? p->player->skin : -1; //rip lyman lineface :-1
+		bool hasCustomHusk = pSkin >=0 && pSkin < numskins && skins[pSkin]->sprites[SPR2_DKRF].numframes;
+
+		if(hasCustomHusk)
+		{
+			skin = (void*)(skins[pSkin]);
+		}
+
+		Particle::spew(this,pSkin);
+		scale(3*scale()/2);
+
+		if(hasCustomHusk){
+			flags |= MF_NOSQUISH; //K_Squish() automates spritexscale/spriteyscale & this flag prevents that at the cost of no squish visual when the kart husk hits the ground
+			fixed_t huskScale = FixedDiv(mapobjectscale, scale());
+			spritexscale(FixedMul(spritexscale(), huskScale));
+			spriteyscale(FixedMul(spriteyscale(), huskScale));
+		}
+
 		health = 1;
-		state(S_KART_LEFTOVER_NOTIRES);
+		state(!hasCustomHusk ? S_KART_LEFTOVER_NOTIRES : S_KART_LEFTOVER_PARTICLE_CUSTOM_F);
 		cooldown(20);
 		burning(burn_duration());
 
@@ -326,9 +364,9 @@ struct Kart : Mobj
 			voice(sfx_die00);
 		}
 
-		if (Mobj* p = player(); Mobj::valid(p))
+		if(pValid)
 		{
-			if (p->player && skins[p->player->skin].flags & SF_BADNIK)
+			if((skins[p->player->skin]->flags & SF_BADNIK))
 			{
 				P_SpawnBadnikExplosion(p);
 				p->spritescale({2*FRACUNIT, 2*FRACUNIT});
@@ -446,7 +484,7 @@ private:
 			P_PlayDeathSound(p);
 		}
 
-		// First tick after hitlag: destroyed kart appears!
+		// First tick after hitlag: destroyed kart appears! State will change away from S_INVISIBLE inside destroy() where S_INVISIBLE was set in static spawn()
 		if (state()->num() == S_INVISIBLE)
 		{
 			destroy();
@@ -461,11 +499,19 @@ private:
 		fixed_t spd = 8 * mapobjectscale;
 		for (UINT8 i = 0; i < count; ++i)
 		{
+			fixed_t rand_x;
+			fixed_t rand_y;
+			fixed_t rand_z;
+
+			// note: determinate random argument eval order
+			rand_z = P_RandomRange(PR_EXPLOSION, -48, 48);
+			rand_y = P_RandomRange(PR_EXPLOSION, -48, 48);
+			rand_x = P_RandomRange(PR_EXPLOSION, -48, 48);
 			mobj_t *x = P_SpawnMobjFromMobjUnscaled(
 				target,
-				P_RandomRange(PR_EXPLOSION, -48, 48) * target->scale,
-				P_RandomRange(PR_EXPLOSION, -48, 48) * target->scale,
-				P_RandomRange(PR_EXPLOSION, -48, 48) * target->scale,
+				rand_x * target->scale,
+				rand_y * target->scale,
+				rand_z * target->scale,
 				MT_THOK
 			);
 			x->hitlag = 0;

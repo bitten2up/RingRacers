@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -44,6 +44,8 @@ extern int       ps_checkposition_calls;
 
 extern precise_t ps_lua_thinkframe_time;
 extern int       ps_lua_mobjhooks;
+
+extern precise_t ps_voiceupdatetime;
 
 struct ps_hookinfo_t
 {

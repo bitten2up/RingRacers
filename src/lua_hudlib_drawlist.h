@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2022 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -121,6 +121,17 @@ void LUA_HUD_AddDrawKartString(
 	fixed_t y,
 	const char *str,
 	INT32 flags
+);
+void LUA_HUD_AddSetClipRect(
+	huddrawlist_h list,
+	fixed_t x,
+	fixed_t y,
+	fixed_t w,
+	fixed_t h,
+	INT32 flags
+);
+void LUA_HUD_AddClearClipRect(
+	huddrawlist_h list
 );
 
 // Draws the given draw list

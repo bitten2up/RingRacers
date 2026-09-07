@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -534,7 +534,7 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"s3k81",  false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Burst"},
   {"s3k82",  false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Burst"},
   {"s3k83",  false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Collapsing"},
-  {"s3k84",  false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Powering up"},
+  {"s3k84",  false,  64,  8, -1, NULL, 0,        -1,  -1, LUMPERROR, "Powering up"}, // Lightning Shield Charge
   {"s3k85",  false,  64, 24, -1, NULL, 0,        -1,  -1, LUMPERROR, "Powering down"},
   {"s3k86",  false, 128,  8, -1, NULL, 0,        -1,  -1, LUMPERROR, "Alarm"},
   {"s3k87",  false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Bounce"},
@@ -778,7 +778,7 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"kc30",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc31",   false,  64, 64, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc32",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"kc33",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"kc33",   false,  64,  16, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away
   {"kc34",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc35",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc36",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -805,7 +805,7 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"kc4b",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc4c",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Pop-shot"},
   {"kc4d",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Power up"},
-  {"kc4e",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"kc4e",   false,  64,  8, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away
   {"kc4f",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc50",   false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"kc51",   false,  64, 64, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -1164,11 +1164,17 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"gate04", false,  32, 64, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gate05", false,  32, 64, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
 
+  // Wavedash
   {"waved1", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"waved2", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"waved3", false,  32, 64, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"waved4", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"waved5", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+
+  // Sonic Boom & Subsonic
+  {"sonbo1", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"sonbo2", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"sonbo3", false,  32, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
 
   // Passing sounds
   {"pass01", false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -1266,6 +1272,9 @@ sfxinfo_t S_sfx[NUMSFX] =
 
   {"hint",    false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "Hint Ring"},
 
+  {"exp",    false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, "EXP Crystal"}, // When it gets sucked in
+
+
   // Damage sounds
   {"dmga1",  false, 255, 8, -1, NULL, 0,         -1,  -1, LUMPERROR, "Damaged"},
   {"dmga2",  false, 255, 8, -1, NULL, 0,         -1,  -1, LUMPERROR, "Damaged"},
@@ -1283,6 +1292,9 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"bpwrud",  false, 255, 16, -1, NULL, 0,         -1,  -1, LUMPERROR, "Rhythm Badge"},
   {"bpwrue",  false, 255, 16, -1, NULL, 0,         -1,  -1, LUMPERROR, "Super Flicky"},
   {"bpwruf",  false, 255, 16, -1, NULL, 0,         -1,  -1, LUMPERROR, "Bonus"},
+
+  // Misc announcer calls
+  {"duelmb",  false, 255, 16, -1, NULL, 0,         -1,  -1, LUMPERROR, "Margin Boost"},
 
   // SRB2Kart - Engine sounds
   // Engine class A
@@ -1432,18 +1444,18 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"gshaf", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb0", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb1", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"gshb2", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"gshb2", false,  64, 16, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away
   {"gshb3", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb4", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb5", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb6", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb7", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshb8", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"gshb9", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"gshb9", false,  64, 8, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x4away
   {"gshba", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshbb", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshbc", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"gshbd", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"gshbd", false,  64, 16, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away
   {"gshbe", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshbf", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshc0a", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -1457,7 +1469,7 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"gshc2", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshc3", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshc4", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"gshc5", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"gshc5", false,  64, 16, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away, ProxMineBOOM!
   {"gshc6", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshc7", false,  64, 16, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //x8away
   {"gshc8", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -1481,7 +1493,7 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"gshda", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshdb", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshdc", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
-  {"gshdd", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+  {"gshdd", false,  96, 8, -1, NULL, 0,        -1,  -1, LUMPERROR, ""}, //New ballhog explosion
   {"gshde", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshdf", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"gshe0", false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
@@ -1536,6 +1548,15 @@ sfxinfo_t S_sfx[NUMSFX] =
   {"die01",  false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"die02",  false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
   {"die03",  false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+
+  // Walltransfer
+  {"ggfall",  false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+
+  // :apple:
+  {"aple",  false,  64, 0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
+
+  // Ancient Gear
+  {"gotgea", false,  64,  0, -1, NULL, 0,        -1,  -1, LUMPERROR, ""},
 
   // SRB2kart - Skin sounds
   {"kwin",   false,  64, 96, -1, NULL, 0,   SKSKWIN,  -1, LUMPERROR, ""},

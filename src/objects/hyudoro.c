@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -111,7 +111,10 @@ sine_bob
 		fixed_t sineofs)
 {
 	hyu->sprzoff = FixedMul(HYU_VISUAL_HEIGHT * hyu->scale,
-			sineofs + FINESINE(a >> ANGLETOFINESHIFT));
+			sineofs + FINESINE(a >> ANGLETOFINESHIFT)) * P_MobjFlip(hyu);
+			
+	if (P_IsObjectFlipped(hyu))
+		hyu->sprzoff -= hyu->height;
 }
 
 static void
@@ -155,11 +158,6 @@ project_hyudoro (mobj_t *hyu)
 
 	hyu->z = P_GetZAt(center->standingslope, hyu->x, hyu->y,
 			P_GetMobjGround(center));
-
-	if (P_IsObjectFlipped(hyu))
-	{
-		hyu->z -= hyu->height;
-	}
 }
 
 static void
@@ -327,7 +325,7 @@ move_to_player (mobj_t *hyu)
 
 	// For first place only: cap hyudoro speed at 50%
 	// target player's kart speed
-	if (target->player && target->player->position == 1)
+	if (target->player && target->player->leaderpenalty)
 	{
 		const fixed_t normalspeed =
 			K_GetKartSpeed(target->player, false, false) / 2;
@@ -584,7 +582,7 @@ hyudoro_patrol_hit_player
 	S_StartSound(toucher, sfx_s3k92);
 
 	/* do not make 1st place invisible */
-	if (player->position != 1)
+	if (player->leaderpenalty == 0)
 	{
 		player->hyudorotimer = hyudorotime;
 	}
@@ -600,6 +598,9 @@ hyudoro_patrol_hit_player
 	}
 
 	P_SetTarget(&hyudoro_target(hyu), master);
+
+	if (master && !P_MobjWasRemoved(master))
+		K_SpawnAmps(master->player, K_PvPAmpReward(20, master->player, player), toucher);
 
 	if (center)
 		P_RemoveMobj(center);
@@ -624,12 +625,12 @@ award_immediately (mobj_t *hyu)
 
 	if (player)
 	{
-		if (player->position == 1)
+		if (player->leaderpenalty)
 		{
 			return false;
 		}
 
-		if (!P_CanPickupItem(player, 1))
+		if (!P_CanPickupItem(player, PICKUP_ITEMBOX))
 			return false;
 
 		// Prevent receiving any more items or even stacked
@@ -741,7 +742,7 @@ blend_hover_hyudoro (mobj_t *hyu)
 
 	/* 1st place: Hyudoro stack is unusable, so make a visual
 	   indication */
-	if (player->position == 1)
+	if (player->leaderpenalty)
 	{
 		hyu->renderflags |= RF_MODULATE;
 		trail_glow(hyu);

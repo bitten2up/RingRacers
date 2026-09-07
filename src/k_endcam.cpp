@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -131,6 +131,11 @@ struct EndCam : endcam_t
 
 	}
 
+	void Stop()
+	{
+		active = false;
+	}
+
 	template <typename T>
 	void Archive(T&& ar)
 	{
@@ -203,7 +208,7 @@ void K_LoadEndCamera(savebuffer_t *save)
 	endcam_cast().Archive(srb2::UnArchiveWrapper(save));
 }
 
-void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadius, tic_t panDuration, fixed_t panSpeed)
+void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadius, tic_t panDuration, fixed_t panSpeed, tic_t swirlDuration)
 {
 	const fixed_t angF = AngleFixed(focusAngle);
 
@@ -211,7 +216,7 @@ void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadi
 	g_endcam.startRadius = {2400*mapobjectscale, 800*mapobjectscale};
 	g_endcam.endRadius = {finalRadius, finalRadius / 2};
 
-	g_endcam.swirlDuration = 3*TICRATE;
+	g_endcam.swirlDuration = swirlDuration;
 	g_endcam.startAngle = angF + (90*FRACUNIT);
 	g_endcam.endAngle = angF + (720*FRACUNIT);
 
@@ -223,4 +228,9 @@ void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadi
 
 	g_darkness.start = leveltime;
 	g_darkness.end = leveltime + g_endcam.swirlDuration + DARKNESS_FADE_TIME;
+}
+
+void K_StopRoundWinCamera(void)
+{
+	endcam_cast().Stop();
 }

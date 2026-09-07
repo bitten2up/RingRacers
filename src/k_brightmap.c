@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -112,7 +112,7 @@ static boolean K_BRIGHTLumpParser(char *data, size_t size)
 			tkn = M_GetToken(NULL);
 			pos = M_GetTokenPos();
 
-			if (tkn && pos < size)
+			if (tkn && pos <= size)
 			{
 				brightmapStorage_t *bms = K_GetBrightmapStorageByTextureName(tkn);
 
@@ -127,7 +127,7 @@ static boolean K_BRIGHTLumpParser(char *data, size_t size)
 				tkn = M_GetToken(NULL);
 				pos = M_GetTokenPos();
 
-				if (tkn && pos < size)
+				if (tkn && pos <= size)
 				{
 					strncpy(bms->brightmapName, tkn, 8);
 					bms->brightmapHash = quickncasehash(tkn, 8);

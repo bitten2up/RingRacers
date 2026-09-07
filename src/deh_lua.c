@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -143,7 +143,7 @@ static inline int lib_freeslot(lua_State *L)
 					CONS_Printf("Skincolor SKINCOLOR_%s allocated.\n",word);
 					FREE_SKINCOLORS[i] = Z_Malloc(strlen(word)+1, PU_STATIC, NULL);
 					strcpy(FREE_SKINCOLORS[i],word);
-					skincolors[i].cache_spraycan = UINT16_MAX;
+					skincolors[SKINCOLOR_FIRSTFREESLOT+i].cache_spraycan = UINT16_MAX;
 					numskincolors++;
 					lua_pushinteger(L, SKINCOLOR_FIRSTFREESLOT + i);
 					r++;
@@ -314,6 +314,16 @@ static inline int lib_getenum(lua_State *L)
 		if (mathlib) return luaL_error(L, "playerflag '%s' could not be found.\n", word);
 		return 0;
 	}
+	else if (fastncmp("PF2_", word, 4)) {
+		p = word+4;
+		for (i = 0; PLAYERFLAG2_LIST[i]; i++)
+			if (fastcmp(p, PLAYERFLAG2_LIST[i])) {
+				lua_pushinteger(L, ((lua_Integer)1<<i));
+				return 1;
+			}
+		if (mathlib) return luaL_error(L, "playerflag2 '%s' could not be found.\n", word);
+		return 0;
+	}
 	else if (fastncmp("GT_", word, 3)) {
 		p = word;
 		i = 0;
@@ -380,6 +390,11 @@ static inline int lib_getenum(lua_State *L)
 		if (fastcmp(p, "EFFECT5"))
 		{
 			lua_pushinteger(L, (lua_Integer)ML_WRAPMIDTEX);
+			return 1;
+		}
+		if (fastcmp(p, "EFFECT6"))
+		{
+			lua_pushinteger(L, (lua_Integer)ML_MIDTEXINVISWALL);
 			return 1;
 		}
 		if (mathlib) return luaL_error(L, "linedef flag '%s' could not be found.\n", word);

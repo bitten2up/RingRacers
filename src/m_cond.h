@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 //
@@ -68,6 +68,7 @@ typedef enum
 	UC_CRASH,			// Hee ho !
 	UC_TUTORIALSKIP,	// Complete the Tutorial Challenge
 	UC_TUTORIALDONE,	// Complete the Tutorial at all
+	UC_PLAYGROUND,		// Go to the playground instead..?
 
 	UC_PASSWORD,		// Type in something funny
 
@@ -147,6 +148,7 @@ typedef enum
 	UCRP_HITDRAFTERLOOKBACK, // Hit a player that's behind you, while looking back at them, and they're drafting off you
 	UCRP_GIANTRACERSHRUNKENORBI, // Hit a giant racer with a shrunken Orbinaut
 	UCRP_RETURNMARKTOSENDER, // Hit the player responsible for Eggman Marking you with that explosion
+	UCRP_ALLANCIENTGEARS, // Collect all Ancient Gears in a map
 
 	UCRP_TRACKHAZARD, // (Don't) get hit by a track hazard (maybe specific lap)
 
@@ -301,7 +303,7 @@ typedef enum {
 
 #define GDCONVERT_ROUNDSTOKEY 5
 
-#define GDINIT_CHAOKEYS 10 // Start with 10 Chao Keys !!
+#define GDINIT_CHAOKEYS 0 // Start with ZERO Chao Keys. You get NONE. fizzy lifting dink
 #define GDINIT_PRISONSTOPRIZE 15 // 15 Prison Eggs to your [Wild Prize] !!
 
 typedef enum {
@@ -395,6 +397,7 @@ struct gamedata_t
 	boolean finishedtutorialchallenge;
 	boolean sealedswapalerted;
 	boolean tutorialdone;
+	boolean playgroundroute;
 	gdmusic_t musicstate;
 
 	UINT8 gonerlevel;
@@ -470,6 +473,7 @@ extern UINT16 gamestartchallenge;
 boolean M_CheckNetUnlockByID(UINT16 unlockid);
 boolean M_SecretUnlocked(INT32 type, boolean local);
 boolean M_GameTrulyStarted(void);
+boolean M_GameAboutToStart(void);
 boolean M_CupLocked(cupheader_t *cup);
 boolean M_CupSecondRowLocked(void);
 boolean M_MapLocked(UINT16 mapnum);

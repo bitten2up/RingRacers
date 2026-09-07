@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,6 +21,7 @@
 #include "../../k_podium.h" // K_StartCeremony
 #include "../../m_misc.h" // FIL_FileExists
 #include "../../d_main.h" // D_ClearState
+#include "../../m_cond.h" // Condition Sets
 
 menuitem_t PLAY_CupSelect[] =
 {
@@ -57,26 +58,7 @@ static void M_StartCup(UINT8 entry)
 		entry = UINT8_MAX;
 	}
 
-	S_StartSound(NULL, sfx_s3k63);
-
-	paused = false;
-
-	S_StopMusicCredit();
-
-	// Early fadeout to let the sound finish playing
-	F_WipeStartScreen();
-	V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
-	F_WipeEndScreen();
-	F_RunWipe(wipe_level_toblack, wipedefs[wipe_level_toblack], false, "FADEMAP0", false, false);
-
-	if (cv_maxconnections.value < ssplayers+1)
-		CV_SetValue(&cv_maxconnections, ssplayers+1);
-
-	if (splitscreen != ssplayers)
-	{
-		splitscreen = ssplayers;
-		SplitScreen_OnChange();
-	}
+	M_MenuToLevelPreamble(ssplayers, false);
 
 	if (entry == UINT8_MAX)
 	{
@@ -119,7 +101,7 @@ static void M_StartCup(UINT8 entry)
 			// finally, call the skin[x] console command.
 			// This will call SendNameAndColor which will synch everything we sent here and apply the changes!
 
-			CV_StealthSet(&cv_skin[0], skins[savedata.skin].name);
+			CV_StealthSet(&cv_skin[0], skins[savedata.skin]->name);
 
 			// ...actually, let's do this last - Skin_OnChange has some return-early occasions
 			// follower color
@@ -134,10 +116,6 @@ static void M_StartCup(UINT8 entry)
 			entry = roundqueue.position-1;
 		}
 	}
-
-	paused = false;
-
-	SV_StartSinglePlayerServer(levellist.newgametype, levellist.netgame);
 
 	M_ClearMenus(true);
 
@@ -184,6 +162,114 @@ static void M_StartCup(UINT8 entry)
 	}
 }
 
+static UINT16 cupselecttutorial_hack = NEXTMAP_INVALID;
+
+static void M_GPTutorialResponse(INT32 choice)
+{
+	if (choice != MA_YES)
+		return;
+
+	multiplayer = true;
+
+	restoreMenu = &PLAY_CupSelectDef;
+	restorelevellist = levellist;
+
+	// mild hack
+	levellist.newgametype = GT_TUTORIAL;
+	levellist.netgame = false;
+	M_MenuToLevelPreamble(0, false);
+
+	D_MapChange(
+		cupselecttutorial_hack+1,
+		levellist.newgametype,
+		false,
+		true,
+		1,
+		false,
+		false
+	);
+
+	M_ClearMenus(true);
+}
+
+static boolean M_GPTutorialRecommendation(cupheader_t *cup)
+{
+	// Only applies to GP.
+	if (levellist.levelsearch.grandprix == false)
+		return false;
+
+	// Does this not have a Tutorial Recommendation?
+	if (cup->cache_cuplock >= MAXUNLOCKABLES
+	|| cup->hintcondition == MAXCONDITIONSETS
+	|| !M_Achieved(cup->hintcondition))
+		return false;
+
+	// Does the thing have no condition?
+	const UINT16 condition = unlockables[cup->cache_cuplock].conditionset;
+	if (condition == 0)
+		return false;
+
+	const conditionset_t *c = &conditionSets[condition-1];
+	UINT32 i;
+	INT32 mapnum = NEXTMAP_INVALID;
+
+	// Identify the map to visit/beat.
+	for (i = 0; i < c->numconditions; ++i)
+	{
+		if (c->condition[i].type < UC_MAPVISITED || c->condition[i].type > UC_MAPBEATEN)
+			continue;
+		mapnum = c->condition[i].requirement;
+		if (mapnum < 0 || mapnum >= nummapheaders)
+			continue;
+		if (!mapheaderinfo[mapnum])
+			continue;
+		if (G_GuessGametypeByTOL(mapheaderinfo[mapnum]->typeoflevel) != GT_TUTORIAL)
+			continue;
+		break;
+	}
+
+	// Didn't find one?
+	if (i == c->numconditions)
+		return false;
+
+	// Not unlocked?
+	if (M_MapLocked(mapnum+1))
+	{
+		M_StartMessage(
+			"Recommended Learning",
+			"This Cup will test skills that\n"
+			"a ""\x86""currently locked ""\x87""Tutorial\x80 teaches.\n"
+			"\n"
+			"Come back when you've made progress elsewhere.",
+			NULL, MM_NOTHING, NULL, NULL
+		);
+		return true;
+	}
+
+	// This is kind of a hack.
+	cupselecttutorial_hack = mapnum;
+
+	M_StartMessage(
+		"Recommended Learning",
+		va(
+		"This Cup will test skills that\n"
+		"the ""\x87""%s Tutorial\x80 teaches.\n"
+		"\n"
+		"%s\n",
+		mapheaderinfo[mapnum]->menuttl,
+		(setup_numplayers > 1
+			? "You're encouraged to play it later."
+			: "Would you like to play it now?"
+		)),
+		setup_numplayers > 1 ? NULL : M_GPTutorialResponse,
+		setup_numplayers > 1 ? MM_NOTHING : MM_YESNO,
+		setup_numplayers > 1 ? NULL : "Yes, let's go",
+		setup_numplayers > 1 ? "Got it!" : "Not right now"
+	);
+
+	return true;
+}
+
 static void M_GPBackup(INT32 choice)
 {
 	if (choice == MA_YES)
@@ -199,6 +285,97 @@ static void M_GPBackup(INT32 choice)
 	}
 
 	M_StartCup(UINT8_MAX);
+}
+
+static boolean M_IsCupQueueable(cupheader_t *cup)
+{
+	levelsearch_t templevelsearch = levellist.levelsearch; // copy levellist so we don't mess with stuff I think
+	UINT16 ShownCount = 0;
+	UINT16 CupCount = 0;
+	UINT32 CheckGametype[2] = {TOL_RACE,TOL_BATTLE};
+	
+	templevelsearch.cup = cup;
+	
+	UINT8 e, i = 0;
+	for (e = 0; e < 2; e++)
+	{
+		templevelsearch.typeoflevel = CheckGametype[e];
+		ShownCount += M_CountLevelsToShowInList(&templevelsearch);
+	}
+	//CONS_Printf(M_GetText("ShownCount: %d\n"), ShownCount);
+	UINT16 checkmap = NEXTMAP_INVALID;
+	for (i = 0; i < CUPCACHE_SPECIAL; i++)
+	{
+		checkmap = templevelsearch.cup->cachedlevels[i];
+		if (checkmap == NEXTMAP_INVALID)
+		{
+			continue;
+		}
+		CupCount++;
+	}
+	//CONS_Printf(M_GetText("CupCount: %d\n"), CupCount);
+	if (ShownCount >= CupCount) // greater than is used to ensure multi-gametype maps don't accidentally cause this to return false.
+		return true;
+	
+	return false;
+}
+
+static void M_CupStartResponse(INT32 ch)
+{
+	if (ch != MA_YES)
+		return;
+
+	if (!(server || (IsPlayerAdmin(consoleplayer))))
+		return;
+	
+	M_LevelConfirmHandler();
+}
+
+static void M_CupQueueResponse(INT32 ch)
+{
+	if (ch != MA_YES)
+		return;
+
+	if (!(server || (IsPlayerAdmin(consoleplayer))))
+		return;
+	
+	cupheader_t *queuedcup = cupgrid.builtgrid[CUPMENU_CURSORID];
+	
+	M_CupQueueHandler(queuedcup);
+	
+	S_StartSound(NULL, sfx_gshe2);
+	
+	while ((menuqueue.size + roundqueue.size) > ROUNDQUEUE_MAX)
+		menuqueue.size--;
+	
+	if (!netgame)
+	{
+		M_StartMessage("Cup Queue",
+			va(M_GetText(
+			"You just queued %s CUP.\n"
+			"\n"
+			"Do you want to start the\n"
+			"cup immediately?\n"
+			), queuedcup->realname
+			), &M_CupStartResponse, MM_YESNO,
+			"Here we go!",
+			"On second thought..."
+		);
+	}
+	else
+	{
+		M_StartMessage("Cup Queue",
+			va(M_GetText(
+			"You just queued %s CUP.\n"
+			"\n"
+			"Do you want to queue it\n"
+			"for everyone?\n"
+			), queuedcup->realname
+			), &M_CupStartResponse, MM_YESNO,
+			"Queue em up!",
+			"Not yet"
+		);
+	}
 }
 
 void M_CupSelectHandler(INT32 choice)
@@ -294,7 +471,8 @@ void M_CupSelectHandler(INT32 choice)
 			)
 		)
 		{
-			S_StartSound(NULL, sfx_s3kb2);
+			if (!M_GPTutorialRecommendation(newcup))
+				S_StartSound(NULL, sfx_s3kb2);
 			return;
 		}
 
@@ -342,6 +520,63 @@ void M_CupSelectHandler(INT32 choice)
 			S_StartSound(NULL, sfx_s3k63);
 		}
 	}
+	// Queue a cup for match race and netgames. See levelselect.c for most of how this actually works.
+	else if (levellist.canqueue && M_MenuButtonPressed(pid, MBT_Z))
+	{
+		M_SetMenuDelay(pid);
+		
+		if ((cupgrid.builtgrid[CUPMENU_CURSORID] == &dummy_lostandfound) || (cupgrid.builtgrid[CUPMENU_CURSORID] == NULL))
+			S_StartSound(NULL, sfx_gshe7);
+			
+		else if (!M_IsCupQueueable(cupgrid.builtgrid[CUPMENU_CURSORID]))
+		{
+			S_StartSound(NULL, sfx_s3kb2);
+			M_StartMessage("Back to the Grand Prix!", "Can't queue a cup you haven't fully unlocked!", NULL, MM_NOTHING, NULL, NULL);
+		}
+		
+		// Better to avoid any headaches here - pass the buck to the Extra button.
+		else if (roundqueue.size)
+		{
+			S_StartSound(NULL, sfx_s3kb2);
+			M_StartMessage("Queue is not empty!", "Clear the queue before trying to queue a cup!", NULL, MM_NOTHING, NULL, NULL);
+			return;
+		}
+			
+		else
+		{
+			// We're not queueing Battle maps if we're in single-player Match Race.
+			if (!levellist.netgame && (cv_splitplayers.value == 1) && !netgame)
+			{
+				M_StartMessage("Cup Queue",
+					va(M_GetText(
+					"This will queue all Race courses in this cup.\n"
+					"\n"
+					"Any rounds already in the queue will be cleared out.\n"
+					"\n"
+					"Do you want to queue the cup?\n"
+					)), &M_CupQueueResponse, MM_YESNO,
+					"Let's do it!",
+					"Nah.");
+			}
+			else
+			{
+				M_StartMessage("Cup Queue",
+					va(M_GetText(
+					"This will queue the entire cup, including both Race and Battle courses.\n"
+					"\n"
+					"Any rounds already in the queue will be cleared out.\n"
+					"\n"
+					"Do you want to queue the cup?\n"
+					)), &M_CupQueueResponse, MM_YESNO,
+					"Let's do it!",
+					"Nah.");
+			}
+		}
+	}
+	else if (levellist.canqueue && M_MenuExtraPressed(pid))
+	{
+		M_ClearQueueHandler();
+	}
 	else if (M_MenuBackPressed(pid))
 	{
 		M_SetMenuDelay(pid);
@@ -356,4 +591,6 @@ void M_CupSelectHandler(INT32 choice)
 void M_CupSelectTick(void)
 {
 	cupgrid.previewanim++;
+	// Shoving this here for cup queue purposes.
+	M_LevelSelectTick();
 }

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -65,9 +65,10 @@ void K_GivePowerUp(player_t* player, kartitems_t powerup, tic_t time)
 	}
 
 	S_StartSound(NULL, sfx_gsha7l);
-	player->flashing = 2*TICRATE;
+	player->flashing = 3*TICRATE;
 	player->mo->hitlag += BATTLE_POWERUP_VFX_TIME;
 	player->powerupVFXTimer = BATTLE_POWERUP_VFX_TIME;
+	player->mo->flags |= MF_NOCLIPTHING;
 	Obj_SpawnPowerUpSpinner(player->mo, powerup, BATTLE_POWERUP_VFX_TIME);
 
 	g_darkness.start = leveltime;

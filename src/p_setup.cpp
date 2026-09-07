@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -13,8 +13,6 @@
 /// \brief Do all the WAD I/O, get map description, set up initial state and misc. LUTs
 
 #include <algorithm>
-#include <string>
-#include <vector>
 
 #include <fmt/format.h>
 
@@ -96,6 +94,8 @@
 #include "taglist.h"
 
 // SRB2Kart
+#include "core/string.h"
+#include "core/vector.hpp"
 #include "k_kart.h"
 #include "k_race.h"
 #include "k_battle.h" // K_BattleInit
@@ -118,6 +118,9 @@
 #include "k_hud.h" // K_ClearPersistentMessages
 #include "k_endcam.h"
 #include "k_credits.h"
+#include "k_objects.h"
+#include "p_deepcopy.h"
+#include "k_color.h" // K_ColorUsable
 
 // Replay names have time
 #if !defined (UNDER_CE)
@@ -141,7 +144,7 @@ unsigned char mapmd5[16];
 //
 
 boolean udmf;
-static INT32 udmf_version;
+INT32 udmf_version;
 size_t numvertexes, numsegs, numsectors, numsubsectors, numnodes, numlines, numsides, nummapthings;
 size_t num_orig_vertexes;
 vertex_t *vertexes;
@@ -195,13 +198,12 @@ precipmobj_t **precipblocklinks;
 UINT8 *rejectmatrix;
 
 // Maintain single and multi player starting spots.
-INT32 numdmstarts, numcoopstarts, numredctfstarts, numbluectfstarts;
+INT32 numdmstarts, numcoopstarts, numteamstarts[TEAM__MAX];
 INT32 numfaultstarts;
 
 mapthing_t *deathmatchstarts[MAX_DM_STARTS];
 mapthing_t *playerstarts[MAXPLAYERS];
-mapthing_t *bluectfstarts[MAXPLAYERS];
-mapthing_t *redctfstarts[MAXPLAYERS];
+mapthing_t *teamstarts[TEAM__MAX][MAXPLAYERS];
 mapthing_t *faultstart;
 
 // Global state for PartialAddWadFile/MultiSetupWadFiles
@@ -497,13 +499,12 @@ static void P_ClearSingleMapHeaderInfo(INT16 num)
 #endif
 
 	memset(&mapheaderinfo[num]->records, 0, sizeof(recorddata_t));
+	mapheaderinfo[num]->records.spraycan = MCAN_INVALID;
 
 	mapheaderinfo[num]->justPlayed = 0;
 	mapheaderinfo[num]->anger = 0;
 
 	mapheaderinfo[num]->destroyforchallenge_size = 0;
-
-	mapheaderinfo[num]->cache_spraycan = UINT16_MAX;
 
 	mapheaderinfo[num]->cache_maplock = MAXUNLOCKABLES;
 
@@ -525,6 +526,7 @@ static void P_ClearSingleMapHeaderInfo(INT16 num)
 	mapheaderinfo[num]->automedaltime[1] = 2;
 	mapheaderinfo[num]->automedaltime[2] = 3;
 	mapheaderinfo[num]->automedaltime[3] = 4;
+	mapheaderinfo[num]->cameraHeight = INT32_MIN;
 }
 
 /** Allocates a new map-header structure.
@@ -784,9 +786,13 @@ static int cmp_loopends(const void *a, const void *b)
 		*mt2 = *(const mapthing_t*const*)b;
 
 	// weighted sorting; tag takes precedence over type
-	return
-		intsign(mt1->tid - mt2->tid) * 2 +
+	const int maincomp = intsign(mt1->tid - mt2->tid) * 2 +
 		intsign(mt1->thing_args[0] - mt2->thing_args[0]);
+
+	// JugadorXEI (04/20/25): If a qsort comparison ends up with an equal result,
+	// it results in UNSPECIFIED BEHAVIOR, so assuming the previous two comparisons
+	// are equal, let's make it consistent with Linux behaviour (ascending order).
+	return maincomp != 0 ? maincomp : intsign((mt1 - mapthings) - (mt2 - mapthings));
 }
 
 static void P_SpawnMapThings(boolean spawnemblems)
@@ -1971,6 +1977,8 @@ static void ParseTextmapLinedefParameter(UINT32 i, const char *param, const char
 		lines[i].flags |= ML_NOTBOUNCY;
 	else if (fastcmp(param, "transfer") && fastcmp("true", val))
 		lines[i].flags |= ML_TFERLINE;
+	else if (fastcmp(param, "midtexinviswall") && fastcmp("true", val))
+		lines[i].flags |= ML_MIDTEXINVISWALL;
 	// Activation flags
 	else if (fastcmp(param, "repeatspecial") && fastcmp("true", val))
 		lines[i].activation |= SPAC_REPEATSPECIAL;
@@ -2781,6 +2789,8 @@ static void P_WriteTextmap(void)
 			fprintf(f, "notbouncy = true;\n");
 		if (wlines[i].flags & ML_TFERLINE)
 			fprintf(f, "transfer = true;\n");
+		if (wlines[i].flags & ML_MIDTEXINVISWALL)
+			fprintf(f, "midtexinviswall = true;\n");
 		if (wlines[i].activation & SPAC_REPEATSPECIAL)
 			fprintf(f, "repeatspecial = true;\n");
 		if (wlines[i].activation & SPAC_CROSS)
@@ -3365,6 +3375,23 @@ static boolean P_CheckLineSideTripWire(line_t *ld, int p)
 	terrain = K_GetTerrainForTextureNum(sda->midtexture);
 	tripwire = terrain && (terrain->flags & TRF_TRIPWIRE);
 
+	// If we are texture TRIPWIRE and have the ML_MIDTEXINVISWALL, the replace texture with TRIPWLOW
+	if (tripwire && (ld->flags & ML_MIDTEXINVISWALL)) // if we do backwards compat, update this to also swap for older custom maps without the flag
+	{
+		if (sda->midtexture == R_TextureNumForName("TRIPWIRE"))
+		{
+			sda->midtexture = R_TextureNumForName("TRIPWLOW");
+		}
+		else if (sda->midtexture == R_TextureNumForName("2RIPWIRE"))
+		{
+			sda->midtexture = R_TextureNumForName("2RIPWLOW");
+		}
+		else if (sda->midtexture == R_TextureNumForName("4RIPWIRE"))
+		{
+			sda->midtexture = R_TextureNumForName("4RIPWLOW");
+		}
+	}
+
 	if (tripwire)
 	{
 		// copy midtexture to other side
@@ -3682,9 +3709,7 @@ void P_UpdateSegLightOffset(seg_t *li)
 
 	// Between -2 and 2 for software, -16 and 16 for hardware
 	li->lightOffset = FixedFloor((extralight / 8) + (FRACUNIT / 2)) / FRACUNIT;
-#ifdef HWRENDER
 	li->hwLightOffset = FixedFloor(extralight + (FRACUNIT / 2)) / FRACUNIT;
-#endif
 }
 
 boolean P_SectorUsesDirectionalLighting(const sector_t *sector)
@@ -3789,9 +3814,7 @@ static void P_LoadSegs(UINT8 *data)
 		seg->linedef = &lines[SHORT(ms->linedef)];
 
 		seg->length = P_SegLength(seg);
-#ifdef HWRENDER
-		seg->flength = (rendermode == render_opengl) ? P_SegLengthFloat(seg) : 0;
-#endif
+		seg->flength = P_SegLengthFloat(seg);
 
 		seg->glseg = false;
 		P_InitializeSeg(seg);
@@ -3896,7 +3919,6 @@ static boolean P_LoadExtraVertices(UINT8 **data)
 	UINT32 xtrvrtx = READUINT32((*data));
 	line_t* ld = lines;
 	vertex_t *oldpos = vertexes;
-	ssize_t offset;
 	size_t i;
 
 	if (numvertexes != origvrtx) // If native vertex count doesn't match node original vertex count, bail out (broken data?).
@@ -3911,12 +3933,11 @@ static boolean P_LoadExtraVertices(UINT8 **data)
 	// If extra vertexes were generated, reallocate the vertex array and fix the pointers.
 	numvertexes += xtrvrtx;
 	vertexes = static_cast<vertex_t*>(Z_Realloc(vertexes, numvertexes*sizeof(*vertexes), PU_LEVEL, NULL));
-	offset = (size_t)(vertexes - oldpos);
 
 	for (i = 0, ld = lines; i < numlines; i++, ld++)
 	{
-		ld->v1 += offset;
-		ld->v2 += offset;
+		ld->v1 = &vertexes[ld->v1 - oldpos];
+		ld->v2 = &vertexes[ld->v2 - oldpos];
 	}
 
 	// Read extra vertex data.
@@ -4021,9 +4042,7 @@ static boolean P_LoadExtendedSubsectorsAndSegs(UINT8 **data, nodetype_t nodetype
 			segs[i].offset = FixedHypot(v1->x - v->x, v1->y - v->y);
 		}
 		seg->length = P_SegLength(seg);
-#ifdef HWRENDER
-		seg->flength = (rendermode == render_opengl) ? P_SegLengthFloat(seg) : 0;
-#endif
+		seg->flength = P_SegLengthFloat(seg);
 	}
 
 	return true;
@@ -5509,7 +5528,7 @@ static void P_ConvertBinaryLinedefTypes(void)
 				lines[i].args[0] = (lines[i].flags & ML_NOTBOUNCY) ? TMT_EACHTIMEENTERANDEXIT : TMT_EACHTIMEENTER;
 			else
 				lines[i].args[0] = TMT_CONTINUOUS;
-			lines[i].args[1] = (lines[i].special > 310) ? TMT_BLUE : TMT_RED;
+			lines[i].args[1] = (lines[i].special > 310) ? TMT_BLUE : TMT_ORANGE;
 			lines[i].special = 309;
 			break;
 		case 313: //No more enemies - once
@@ -7537,7 +7556,6 @@ static boolean P_LoadMapFromFile(void)
 	TracyCZone(__zone, true);
 
 	virtlump_t *textmap = vres_Find(curmapvirt, "TEXTMAP");
-	size_t i;
 
 	udmf = textmap != NULL;
 	udmf_version = 0;
@@ -7565,17 +7583,9 @@ static boolean P_LoadMapFromFile(void)
 		P_WriteTextmap();
 
 	// Copy relevant map data for NetArchive purposes.
-	spawnsectors = static_cast<sector_t*>(Z_Calloc(numsectors * sizeof(*sectors), PU_LEVEL, NULL));
-	spawnlines = static_cast<line_t*>(Z_Calloc(numlines * sizeof(*lines), PU_LEVEL, NULL));
-	spawnsides = static_cast<side_t*>(Z_Calloc(numsides * sizeof(*sides), PU_LEVEL, NULL));
-
-	memcpy(spawnsectors, sectors, numsectors * sizeof(*sectors));
-	memcpy(spawnlines, lines, numlines * sizeof(*lines));
-	memcpy(spawnsides, sides, numsides * sizeof(*sides));
-
-	for (i = 0; i < numsectors; i++)
-		if (sectors[i].tags.count)
-			spawnsectors[i].tags.tags = static_cast<mtag_t*>(memcpy(Z_Malloc(sectors[i].tags.count*sizeof(mtag_t), PU_LEVEL, NULL), sectors[i].tags.tags, sectors[i].tags.count*sizeof(mtag_t)));
+	P_DeepCopySectors(&spawnsectors, &sectors, numsectors);
+	P_DeepCopyLines(&spawnlines, &lines, numlines);
+	P_DeepCopySides(&spawnsides, &sides, numsides);
 
 	P_MakeMapMD5(curmapvirt, &mapmd5);
 
@@ -7617,6 +7627,8 @@ void P_SetupLevelSky(const char *skytexname, boolean global)
 static const char *maplumpname;
 lumpnum_t lastloadedmaplumpnum; // for comparative savegame
 
+extern "C" boolean blockreset;
+
 //
 // P_LevelInitStuff
 //
@@ -7629,6 +7641,7 @@ static void P_InitLevelSettings(void)
 
 	leveltime = 0;
 	modulothing = 0;
+	blockreset = 0;
 
 	P_SetFreezeLevel(false);
 	P_SetFreezeCheat(false);
@@ -7642,6 +7655,8 @@ static void P_InitLevelSettings(void)
 
 	nummapspraycans = 0;
 	numchallengedestructibles = 0;
+
+	Obj_AncientGearLevelInit();
 
 	// circuit, race and competition stuff
 	numcheatchecks = 0;
@@ -7685,6 +7700,8 @@ static void P_InitLevelSettings(void)
 	const boolean multi_speed = (gametypes[gametype]->speed == KARTSPEED_AUTO);
 	gamespeed = multi_speed ? KARTSPEED_EASY : gametypes[gametype]->speed;
 	franticitems = false;
+	g_teamplay = false;
+	g_duelpermitted = false;
 
 	if (K_PodiumSequence() == true)
 	{
@@ -7726,11 +7743,14 @@ static void P_InitLevelSettings(void)
 		if (multi_speed)
 		{
 			if (cv_kartspeed.value == KARTSPEED_AUTO)
-				gamespeed = ((speedscramble == -1) ? KARTSPEED_NORMAL : (UINT8)speedscramble);
+				gamespeed = ((speedscramble == -1) ? KARTSPEED_EASY : (UINT8)speedscramble);
 			else
 				gamespeed = (UINT8)cv_kartspeed.value;
 		}
 		franticitems = (boolean)cv_kartfrantic.value;
+		g_teamplay = (boolean)cv_teamplay.value; // we will overwrite this later if there is not enough players
+		g_duelpermitted = (boolean)cv_duel.value; // Ignored if too many players, see K_InRaceDuel
+
 	}
 
 	memset(&battleovertime, 0, sizeof(struct battleovertime));
@@ -7781,16 +7801,12 @@ void P_RespawnThings(void)
 
 static void P_ResetSpawnpoints(void)
 {
-	UINT8 i;
-
-	numdmstarts = numredctfstarts = numbluectfstarts = 0;
-	numfaultstarts = 0;
-	faultstart = NULL;
+	UINT8 i, j;
 
 	// reset the player starts
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
-		playerstarts[i] = bluectfstarts[i] = redctfstarts[i] = NULL;
+		playerstarts[i] = NULL;
 
 		if (playeringame[i])
 		{
@@ -7799,8 +7815,22 @@ static void P_ResetSpawnpoints(void)
 		}
 	}
 
+	numfaultstarts = 0;
+	faultstart = NULL;
+
+	numdmstarts = 0;
 	for (i = 0; i < MAX_DM_STARTS; i++)
 		deathmatchstarts[i] = NULL;
+
+	for (i = 0; i < TEAM__MAX; i++)
+	{
+		numteamstarts[i] = 0;
+
+		for (j = 0; j < MAXPLAYERS; j++)
+		{
+			teamstarts[i][j] = NULL;
+		}
+	}
 
 	for (i = 0; i < 16; i++)
 		skyboxviewpnts[i] = skyboxcenterpnts[i] = NULL;
@@ -7828,13 +7858,10 @@ static void P_LoadRecordGhosts(void)
 {
 	// see also /menus/play-local-race-time-attack.c's M_PrepareTimeAttack
 	char *gpath;
-	const char *modeprefix = "";
+	const char *modeprefix = M_GetRecordMode();
 	INT32 i;
 
 	gpath = Z_StrDup(va("%s" PATHSEP "media" PATHSEP "replay" PATHSEP "%s" PATHSEP "%s", srb2home, timeattackfolder, G_BuildMapName(gamemap)));
-
-	if (encoremode)
-		modeprefix = "spb-";
 
 	enum
 	{
@@ -7858,9 +7885,9 @@ static void P_LoadRecordGhosts(void)
 			map(cv_ghost_last, value, kLast);
 	};
 
-	auto add_ghosts = [gpath](const std::string& base, UINT8 bits)
+	auto add_ghosts = [gpath](const srb2::String& base, UINT8 bits)
 	{
-		auto load = [base](const char* suffix) { P_TryAddExternalGhost(fmt::format("{}-{}.lmp", base, suffix).c_str()); };
+		auto load = [base](const char* suffix) { P_TryAddExternalGhost(fmt::format("{}{}.lmp", base, suffix).c_str()); };
 
 		if (bits & kTime)
 			load("time-best");
@@ -7878,7 +7905,7 @@ static void P_LoadRecordGhosts(void)
 	if (allGhosts)
 	{
 		for (i = 0; i < numskins; ++i)
-			add_ghosts(fmt::format("{}-{}{}", gpath, skins[i].name, modeprefix), allGhosts);
+			add_ghosts(fmt::format("{}-{}-{}", gpath, skins[i]->name, modeprefix), allGhosts);
 	}
 
 	if (sameGhosts)
@@ -7886,7 +7913,7 @@ static void P_LoadRecordGhosts(void)
 		INT32 skin = R_SkinAvailableEx(cv_skin[0].string, false);
 		if (skin < 0 || !R_SkinUsable(-1, skin, false))
 			skin = 0; // use default skin
-		add_ghosts(fmt::format("{}-{}{}", gpath, skins[skin].name, modeprefix), sameGhosts);
+		add_ghosts(fmt::format("{}-{}-{}", gpath, skins[skin]->name, modeprefix), sameGhosts);
 	}
 
 	// Guest ghost
@@ -7972,12 +7999,84 @@ static void P_InitCamera(void)
 	}
 }
 
+static void P_ShuffleTeams(void)
+{
+	size_t i;
+
+	if (G_GametypeHasTeams() == false)
+	{
+		// Teams are not enabled, force to TEAM_UNASSIGNED
+
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			players[i].team = TEAM_UNASSIGNED;
+		}
+
+		return;
+	}
+
+	// The following will sort TEAM_UNASSIGNED players at random.
+	// In addition, you should know all players will have their team
+	// unset every round unless certain conditions are met.
+	// See Y_MidIntermission, G_InitNew (where resetplayer == true)
+
+	CONS_Debug(DBG_TEAMS, "Shuffling player teams...\n");
+
+	srb2::Vector<UINT8> player_shuffle;
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		if (playeringame[i] == false || players[i].spectator == true)
+		{
+			continue;
+		}
+		player_shuffle.push_back(i);
+	}
+
+	size_t n = player_shuffle.size();
+	if (inDuel == true || n <= 2) // cv_teamplay_min.value
+	{
+		CONS_Debug(DBG_TEAMS, "Not enough players to support teams; forcing teamplay preference off.\n");
+
+		// Not enough players for teams.
+		// Turn off the preference for this match.
+		g_teamplay = false;
+
+		// But we may still be in a forced
+		// teams gametype, so only return false
+		// if our preference means anything.
+		if (G_GametypeHasTeams() == false)
+		{
+			return;
+		}
+	}
+
+	if (n > 1)
+	{
+		for (i = n - 1; i > 0; i--)
+		{
+			size_t j = P_RandomKey(PR_TEAMS, i + 1);
+
+			size_t temp = player_shuffle[i];
+			player_shuffle[i] = player_shuffle[j];
+			player_shuffle[j] = temp;
+		}
+	}
+
+	for (i = 0; i < n; i++)
+	{
+		G_AutoAssignTeam(&players[ player_shuffle[i] ]);
+	}
+}
+
 static void P_InitPlayers(void)
 {
-	INT32 i, skin = -1, follower = -1;
+	INT32 i, skin = -1, follower = -1, col = SKINCOLOR_NONE;
 
 	// Make sure objectplace is OFF when you first start the level!
 	OP_ResetObjectplace();
+
+	// Update skins / colors between levels.
+	G_UpdateAllPlayerPreferences();
 
 	// Are we forcing a character?
 	if (gametype == GT_TUTORIAL)
@@ -7985,7 +8084,28 @@ static void P_InitPlayers(void)
 		// Get skin from name.
 		if (mapheaderinfo[gamemap-1] && mapheaderinfo[gamemap-1]->relevantskin[0])
 		{
-			skin = R_SkinAvailable(mapheaderinfo[gamemap-1]->relevantskin);
+			if (strcmp(mapheaderinfo[gamemap-1]->relevantskin, "_PROFILE") == 0)
+			{
+				profile_t *p = PR_GetProfile(cv_ttlprofilen.value);
+				if (p && !netgame)
+				{
+					skin = R_SkinAvailable(p->skinname);
+
+					if (!R_SkinUsable(g_localplayers[0], skin, false))
+					{
+						skin = GetSkinNumClosestToStats(skins[skin]->kartspeed, skins[skin]->kartweight, skins[skin]->flags, false);
+					}
+
+					if (K_ColorUsable(static_cast<skincolornum_t>(p->color), false, true) == true)
+					{
+						col = p->color;
+					}
+				}
+			}
+			else
+			{
+				skin = R_SkinAvailable(mapheaderinfo[gamemap-1]->relevantskin);
+			}
 		}
 		else
 		{
@@ -7998,7 +8118,7 @@ static void P_InitPlayers(void)
 			skin = 0;
 		}
 
-		if (netgame)
+		if (netgame || horngoner)
 			; // shouldn't happen but at least attempt to sync if it does
 		else for (i = 0; i < numfollowers; i++)
 		{
@@ -8022,7 +8142,7 @@ static void P_InitPlayers(void)
 		if (skin != -1)
 		{
 			SetPlayerSkinByNum(i, skin);
-			players[i].skincolor = skins[skin].prefcolor;
+			players[i].skincolor = (col != SKINCOLOR_NONE) ? col : skins[skin]->prefcolor;
 
 			players[i].followerskin = follower;
 			if (follower != -1)
@@ -8087,6 +8207,15 @@ static void P_InitGametype(void)
 #else
 		strcpy(ver, VERSIONSTRING);
 #endif
+		// Replace path separators with hyphens
+		{
+			char *p = ver;
+			while ((p = strpbrk(p, "/\\")))
+			{
+				*p = '-';
+				p++;
+			}
+		}
 		sprintf(buf, "%s" PATHSEP "media" PATHSEP "replay" PATHSEP "online" PATHSEP "%s" PATHSEP "%d-%s",
 				srb2home, ver, (int) (time(NULL)), G_BuildMapName(gamemap));
 
@@ -8316,6 +8445,57 @@ void P_LoadLevelMusic(void)
 	Music_ResetLevelVolume();
 }
 
+void P_FreeLevelState(void)
+{
+	if (numsectors)
+	{
+		F_EndTextPrompt(false, true);
+		K_UnsetDialogue();
+
+		ACS_InvalidateMapScope();
+		LUA_InvalidateLevel();
+
+		Obj_ClearCheckpoints();
+
+		sector_t *ss;
+		for (ss = sectors; sectors+numsectors != ss; ss++)
+		{
+			Z_Free(ss->attached);
+			Z_Free(ss->attachedsolid);
+		}
+
+		// This is the simplest guard against double frees.
+		// No valid map has zero sectors. Or, come to think
+		// of it, less than two in general! ~toast 310525
+		numsectors = 0;
+	}
+
+	// Clear pointers that would be left dangling by the purge
+	R_FlushTranslationColormapCache();
+
+#ifdef HWRENDER
+	// Free GPU textures before freeing patches.
+	if (rendermode == render_opengl && (vid.glstate == VID_GL_LIBRARY_LOADED))
+		HWR_ClearAllTextures();
+#endif
+
+	if (rendermode == render_soft)
+	{
+		// Queued draws might reference patches or colormaps about to be freed.
+		// Flush 2D to make sure no read-after-free occurs.
+		srb2::rhi::Rhi* rhi = srb2::sys::get_rhi(srb2::sys::g_current_rhi);
+		srb2::sys::main_hardware_state()->twodee_renderer->flush(*rhi, srb2::g_2d);
+	}
+
+	G_FreeGhosts(); // ghosts are allocated with PU_LEVEL
+	Patch_FreeTag(PU_PATCH_LOWPRIORITY);
+	Patch_FreeTag(PU_PATCH_ROTATED);
+	Z_FreeTags(PU_LEVEL, PU_PURGELEVEL - 1);
+
+	R_InitMobjInterpolators();
+	R_InitializeLevelInterpolators();
+}
+
 /** Loads a level from a lump or external wad.
   *
   * \param fromnetsave If true, skip some stuff because we're loading a netgame snapshot.
@@ -8328,9 +8508,10 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 	// use gamemap to get map number.
 	// 99% of the things already did, so.
 	// Map header should always be in place at this point
-	INT32 i, ranspecialwipe = 0;
-	sector_t *ss;
+	INT32 i;
 	virtlump_t *encoreLump = NULL;
+
+	boolean fade_shortcircuit = false;
 
 	levelloading = true;
 	g_reloadinggamestate = reloadinggamestate;
@@ -8392,7 +8573,7 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		lastwipetic = nowtime; \
 		if (moviemode && rendermode == render_opengl) \
 			M_LegacySaveFrame(); \
-		else if (moviemode && rendermode != render_none) \
+		else if (moviemode && rendermode == render_soft) \
 			I_CaptureVideoFrame(); \
 		NetKeepAlive(); \
 	} \
@@ -8402,7 +8583,7 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		wipegamestate = gamestate; // Don't fade if reloading the gamestate
 	// Encore mode fade to pink to white
 	// This is handled BEFORE sounds are stopped.
-	else if (encoremode && !prevencoremode && modeattacking == ATTACKING_NONE && !demo.rewinding)
+	else if (encoremode && !prevencoremode && !demo.simplerewind)
 	{
 		if (rendermode != render_none)
 		{
@@ -8455,12 +8636,10 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 	}
 #undef WAIT
 
-	// Special stage & record attack retry fade to white
-	// This is handled BEFORE sounds are stopped.
-	if (G_IsModeAttackRetrying() && !demo.playback && (gametyperules & GTR_BOSS) == 0)
+	if (demo.attract
+	|| (G_IsModeAttackRetrying() && !demo.playback && (gametyperules & GTR_BOSS) == 0))
 	{
-		ranspecialwipe = 2;
-		//wipestyleflags |= (WSF_FADEOUT|WSF_TOWHITE);
+		fade_shortcircuit = true;
 	}
 
 	// Make sure all sounds are stopped before Z_FreeTags.
@@ -8471,37 +8650,24 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 	if (rendermode != render_none)
 		V_ReloadPalette(); // Set the level palette
 
-	// Let's fade to white here
-	// But only if we didn't do the encore startup wipe
-	if (!demo.rewinding && !reloadinggamestate)
+	// Music set-up
+	if (demo.attract || demo.simplerewind)
 	{
-		int wipetype = wipe_level_toblack;
-
-		// TODO: What is this?? This does nothing because P_LoadLevelMusic is gonna halt music, anyway.
-#if 0
-		// Fade out music here. Deduct 2 tics so the fade volume actually reaches 0.
-		// But don't halt the music! S_Start will take care of that. This dodges a MIDI crash bug.
-		if (gamestate == GS_LEVEL)
-			S_FadeMusic(0, FixedMul(
-				FixedDiv((F_GetWipeLength(wipedefs[wipe_level_toblack])-2)*NEWTICRATERATIO, NEWTICRATE), MUSICRATE));
-#endif
-
-		if (demo.attract)
-		{
-			; // Leave the music alone! We're already playing what we want!
-
-			// Pull from RNG even though music will never change
-			// To silence playback has desynced warning
-			P_Random(PR_MUSICSELECT);
-		}
-		else if (K_PodiumSequence())
+		// Leave the music alone! We're already playing what we want!
+		// Pull from RNG even though music will never change
+		// To silence playback has desynced warning
+		P_Random(PR_MUSICSELECT);
+	}
+	else if (!reloadinggamestate)
+	{
+		if (K_PodiumSequence())
 		{
 			// mapmusrng is set by local player position in K_ResetCeremony
 			P_LoadLevelMusic();
 		}
 		else if (gamestate == GS_LEVEL)
 		{
-			if (ranspecialwipe == 2)
+			if (fade_shortcircuit)
 			{
 				pausedelay = -3; // preticker plus one
 			}
@@ -8515,6 +8681,14 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 				P_LoadLevelMusic();
 			}
 		}
+	}
+
+	// Let's fade to black or white here
+	// But only if we didn't do the encore startup wipe
+	if (!reloadinggamestate && !demo.simplerewind)
+	{
+		int wipetype = wipe_level_toblack;
+		sfxenum_t fadesound = sfx_None;
 
 		// Default
 		levelfadecol = 31;
@@ -8526,24 +8700,21 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		else if (K_PodiumHasEmerald())
 		{
 			// Special Stage out
-			if (ranspecialwipe != 2)
-				S_StartSound(NULL, sfx_s3k6a);
+			fadesound = sfx_s3k6a;
 			levelfadecol = 0;
 			wipetype = wipe_encore_towhite;
 		}
 		else if (gametyperules & GTR_SPECIALSTART)
 		{
 			// Special Stage in
-			if (ranspecialwipe != 2)
-				S_StartSound(NULL, sfx_s3kaf);
+			fadesound = sfx_s3kaf;
 			levelfadecol = 0;
 			wipetype = wipe_encore_towhite;
 		}
 		else if (skipstats == 1 && (gametyperules & GTR_BOSS) == 0)
 		{
 			// MapWarp
-			if (ranspecialwipe != 2)
-				S_StartSound(NULL, sfx_s3k73);
+			fadesound = sfx_s3k73;
 			levelfadecol = 0;
 			wipetype = wipe_encore_towhite;
 		}
@@ -8562,6 +8733,9 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		}
 		else
 		{
+			if (!fade_shortcircuit)
+				S_StartSound(NULL, fadesound);
+
 			if (rendermode != render_none)
 			{
 				F_WipeStartScreen();
@@ -8571,43 +8745,42 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 			}
 
 			F_RunWipe(wipetype, wipedefs[wipetype], false, ((levelfadecol == 0) ? "FADEMAP1" : "FADEMAP0"), false, false);
+
+			// Hold respawn to keep waiting until you're ready
+			if (G_IsModeAttackRetrying() && !demo.playback)
+			{
+				nowtime = lastwipetic;
+				while (G_PlayerInputDown(0, gc_bail, splitscreen + 1) == true)
+				{
+					while (!((nowtime = I_GetTime()) - lastwipetic))
+					{
+						I_Sleep(cv_sleep.value);
+						I_UpdateTime();
+					} \
+
+					I_OsPolling();
+					G_ResetAllDeviceResponding();
+
+					for (; eventtail != eventhead; eventtail = (eventtail+1) & (MAXEVENTS-1))
+					{
+						HandleGamepadDeviceEvents(&events[eventtail]);
+						G_MapEventsToControls(&events[eventtail]);
+					}
+
+					lastwipetic = nowtime;
+					if (moviemode && rendermode == render_opengl)
+						M_LegacySaveFrame();
+					else if (moviemode && rendermode == render_soft)
+						I_CaptureVideoFrame();
+					NetKeepAlive();
+				}
+
+				//wipestyleflags |= (WSF_FADEOUT|WSF_TOWHITE);
+			}
 		}
 	}
 
-	/*
-	if (!titlemapinaction)
-		wipegamestate = GS_LEVEL;
-	*/
-
-	// Close text prompt before freeing the old level
-	F_EndTextPrompt(false, true);
-
-	K_UnsetDialogue();
-
-	ACS_InvalidateMapScope();
-
-	LUA_InvalidateLevel();
-
-	for (ss = sectors; sectors+numsectors != ss; ss++)
-	{
-		Z_Free(ss->attached);
-		Z_Free(ss->attachedsolid);
-	}
-
-	// Clear pointers that would be left dangling by the purge
-	R_FlushTranslationColormapCache();
-
-#ifdef HWRENDER
-	// Free GPU textures before freeing patches.
-	if (rendermode == render_opengl && (vid.glstate == VID_GL_LIBRARY_LOADED))
-		HWR_ClearAllTextures();
-#endif
-
-	G_FreeGhosts(); // ghosts are allocated with PU_LEVEL
-	Patch_FreeTag(PU_PATCH_LOWPRIORITY);
-	Patch_FreeTag(PU_PATCH_ROTATED);
-	Z_FreeTags(PU_LEVEL, PU_PURGELEVEL - 1);
-	mobjcache = NULL;
+	P_FreeLevelState();
 
 	R_InitializeLevelInterpolators();
 
@@ -8796,6 +8969,15 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		I_Error("Playing binary maps is disabled; please convert to UDMF TEXTMAP and rebuild nodes.");
 	}
 
+	if (!(netgame || demo.playback))
+	{
+		// There is literally no reason to preserve ticcmds from a previous map
+		// offline, even and especially if mindelay is involved.
+		// Stop
+		D_ResetTiccmds();
+		memset(netcmds, 0, sizeof(netcmds)); // This is somehow actually necessary.
+	}
+
 	if (!fromnetsave)
 	{
 		INT32 buf = gametic % BACKUPTICS;
@@ -8833,7 +9015,7 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 		G_StartTitleCard();
 
 		// Can the title card actually run, though?
-		if (WipeStageTitle && ranspecialwipe != 2 && fromnetsave == false)
+		if (WipeStageTitle && !fade_shortcircuit && fromnetsave == false)
 		{
 			G_PreLevelTitleCard();
 		}
@@ -8849,6 +9031,7 @@ boolean P_LoadLevel(boolean fromnetsave, boolean reloadinggamestate)
 void P_PostLoadLevel(void)
 {
 	TracyCZone(__zone, true);
+	INT32 i;
 
 	P_MapStart();
 
@@ -8884,6 +9067,22 @@ void P_PostLoadLevel(void)
 		K_UpdateMatchRaceBots();
 	}
 
+	if (roundqueue.snapshotmaps == true)
+	{
+		// Force spectator for snapshotmaps command
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			if (!playeringame[i])
+			{
+				continue;
+			}
+
+			players[i].spectator = true;
+		}
+	}
+
+	P_ShuffleTeams();
+
 	K_TimerInit();
 
 	P_InitPlayers();
@@ -8904,10 +9103,11 @@ void P_PostLoadLevel(void)
 		marathonmode = static_cast<marathonmode_t>(marathonmode & ~MA_INIT);
 	}
 
+	Music_TuneReset(); // Placed before ACS scripts to allow remaps to occur on level start.
+
 	ACS_RunLevelStartScripts();
 	LUA_HookInt(gamemap, HOOK(MapLoad));
 
-	UINT8 i;
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		if (!playeringame[i])
@@ -9021,7 +9221,7 @@ static tic_t round_to_next_second(tic_t time)
 static void P_DeriveAutoMedalTimes(mapheader_t& map)
 {
 	// Gather staff ghost times
-	std::vector<tic_t> stafftimes;
+	srb2::Vector<tic_t> stafftimes;
 	for (int i = 0; i < map.ghostCount; i++)
 	{
 		tic_t time = map.ghostBrief[i]->time;
@@ -9211,7 +9411,7 @@ UINT8 P_InitMapData(void)
 				{
 					continue;
 				}
-				std::string ghostdirname = fmt::format("staffghosts/{}/", mapheaderinfo[i]->lumpname);
+				srb2::String ghostdirname = srb2::format("staffghosts/{}/", mapheaderinfo[i]->lumpname);
 
 				UINT16 lumpstart = W_CheckNumForFolderStartPK3(ghostdirname.c_str(), wadindex, 0);
 				if (lumpstart == INT16_MAX)
@@ -9272,6 +9472,177 @@ UINT8 P_InitMapData(void)
 	return ret;
 }
 
+void Command_dumprrautomedaltimes(void)
+{
+	FILE* out;
+	char outname[512];
+	memset(outname, 0, sizeof(outname));
+	sprintf(outname, "%s/rrautomedaltimes.csv", srb2home);
+	out = fopen(outname, "wb");
+	if (out == NULL)
+	{
+		CONS_Alert(CONS_ERROR, "Failed to dump rrautomedaltimes.csv\n");
+		return;
+	}
+	fprintf(out, "Name,Bronze,Silver,Gold,Platinum\n");
+	for (int i = 0; i < nummapheaders; ++i)
+	{
+		fprintf(out, "%s,", mapheaderinfo[i]->lvlttl);
+		fprintf(
+			out,
+			"%d'%d\"%02d,",
+			G_TicsToMinutes(mapheaderinfo[i]->automedaltime[3], true),
+			G_TicsToSeconds(mapheaderinfo[i]->automedaltime[3]),
+			G_TicsToCentiseconds(mapheaderinfo[i]->automedaltime[3])
+		);
+		fprintf(
+			out,
+			"%d'%d\"%02d,",
+			G_TicsToMinutes(mapheaderinfo[i]->automedaltime[2], true),
+			G_TicsToSeconds(mapheaderinfo[i]->automedaltime[2]),
+			G_TicsToCentiseconds(mapheaderinfo[i]->automedaltime[2])
+		);
+		fprintf(
+			out,
+			"%d'%d\"%02d,",
+			G_TicsToMinutes(mapheaderinfo[i]->automedaltime[1], true),
+			G_TicsToSeconds(mapheaderinfo[i]->automedaltime[1]),
+			G_TicsToCentiseconds(mapheaderinfo[i]->automedaltime[1])
+		);
+		fprintf(
+			out,
+			"%d'%d\"%02d\n",
+			G_TicsToMinutes(mapheaderinfo[i]->automedaltime[0], true),
+			G_TicsToSeconds(mapheaderinfo[i]->automedaltime[0]),
+			G_TicsToCentiseconds(mapheaderinfo[i]->automedaltime[0])
+		);
+	}
+	fclose(out);
+	CONS_Printf("Medal times written to %s\n", outname);
+}
+
+void Command_Platinums(void)
+{
+	srb2::Vector<std::string> platinums;
+
+	for (INT32 j = 0; j < nummapheaders; j++)
+	{
+		mapheader_t *map = mapheaderinfo[j];
+
+		if (map == NULL || map->ghostCount < 1)
+			continue;
+
+		srb2::Vector<std::pair<tic_t, std::string>> stafftimes;
+		for (int i = 0; i < map->ghostCount; i++)
+		{
+			tic_t time = map->ghostBrief[i]->time;
+			if (time <= 0)
+			{
+				continue;
+			}
+
+			stafftimes.push_back(std::make_pair(map->ghostBrief[i]->time, map->ghostBrief[i]->name));
+		}
+
+		if (stafftimes.empty())
+		{
+			continue;
+		}
+
+		std::sort(stafftimes.begin(), stafftimes.end(), [](auto &left, auto &right) {
+			return left.first < right.first;
+		});
+
+		CONS_Printf("%s: ", map->lumpname);
+
+		tic_t platinumtime = UINT32_MAX;
+
+		std::unordered_map<std::string, int> names;
+
+		for (auto &stafftime : stafftimes)
+		{
+			if (stafftime == stafftimes[0])
+			{
+				CONS_Printf("%s (%02d:%02d:%02d)", stafftime.second.c_str(),
+					G_TicsToMinutes(stafftime.first, true), G_TicsToSeconds(stafftime.first), G_TicsToCentiseconds(stafftime.first));
+				platinumtime = stafftime.first;
+			}
+			else
+			{
+				CONS_Printf(", %s (+%d:%02d:%02d)", stafftime.second.c_str(),
+					G_TicsToMinutes(stafftime.first - platinumtime, true),
+					G_TicsToSeconds(stafftime.first - platinumtime),
+					G_TicsToCentiseconds(stafftime.first - platinumtime));
+			}
+
+			names[stafftime.second]++;
+			if (names[stafftime.second] > 1)
+			{
+				CONS_Printf(" (DUPLICATE)");
+			}
+		}
+
+		CONS_Printf("\n");
+
+		platinums.push_back(stafftimes[0].second);
+	}
+
+	std::unordered_map<std::string, int> frequency;
+
+    for (const auto& platinum : platinums)
+	{
+        frequency[platinum]++;
+    }
+
+    for (const auto& pair : frequency)
+	{
+		CONS_Printf("%s: %d - ", pair.first.c_str(), pair.second);
+
+		for (INT32 j = 0; j < nummapheaders; j++)
+		{
+			mapheader_t *map = mapheaderinfo[j];
+
+			if (map == NULL || map->ghostCount < 1)
+				continue;
+
+			// Gather staff ghost times
+			srb2::Vector<tic_t> stafftimes;
+			for (int i = 0; i < map->ghostCount; i++)
+			{
+				tic_t time = map->ghostBrief[i]->time;
+				if (time <= 0)
+				{
+					continue;
+				}
+
+				stafftimes.push_back(map->ghostBrief[i]->time);
+			}
+
+			if (stafftimes.empty())
+			{
+				continue;
+			}
+
+			std::sort(stafftimes.begin(), stafftimes.end());
+
+			for (int i = 0; i < map->ghostCount; i++)
+			{
+				if (strcmp(pair.first.c_str(), map->ghostBrief[i]->name))
+					break;
+
+				tic_t time = map->ghostBrief[i]->time;
+				if (time == stafftimes.at(0))
+				{
+					CONS_Printf("%s, ", map->lumpname);
+					break;
+				}
+			}
+		}
+
+		CONS_Printf("\n");
+    }
+}
+
 //
 // Add a wadfile to the active wad files,
 // replace sounds, musics, patches, textures, sprites and maps
@@ -9314,7 +9685,7 @@ UINT16 P_PartialAddWadFile(const char *wadfilename)
 //	UINT16 mapPos, mapNum = 0;
 
 	// Init file.
-	if ((numlumps = W_InitFile(wadfilename, false, false)) == INT16_MAX)
+	if ((numlumps = W_InitFile(wadfilename, false, false, nullptr)) == INT16_MAX)
 	{
 		refreshdirmenu |= REFRESHDIR_NOTLOADED;
 		return false;
@@ -9543,3 +9914,26 @@ boolean P_MultiSetupWadFiles(boolean fullsetup)
 	partadd_stage++;
 	return false;
 }
+
+//
+// Let's see if this works
+//
+void P_ReduceVFXTextureReload(void)
+{
+	P_InitPicAnims();
+
+	if (!G_GamestateUsesLevel())
+		return;
+
+	P_SetupLevelFlatAnims();
+}
+
+// Let's see if *this* works
+extern "C" void ReduceVFX_OnChange(void);
+void ReduceVFX_OnChange(void)
+{
+	if (con_startup_loadprogress < LOADED_CONFIG)
+		return;
+	P_ReduceVFXTextureReload();
+}
+

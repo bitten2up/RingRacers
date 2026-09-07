@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -52,22 +52,20 @@ extern consvar_t cv_joyscale[MAXSPLITSCREENPLAYERS];
 
 extern consvar_t cv_pointlimit;
 extern consvar_t cv_timelimit;
+extern consvar_t cv_dueltimelimit, cv_duelscorelimit;
 extern consvar_t cv_numlaps;
 extern UINT32 timelimitintics, extratimeintics, secretextratime;
 extern UINT32 g_pointlimit;
 extern consvar_t cv_allowexitlevel;
 
-extern consvar_t cv_autobalance;
-extern consvar_t cv_teamscramble;
-extern consvar_t cv_scrambleonchange;
-
 extern consvar_t cv_netstat;
 
 extern consvar_t cv_countdowntime;
 extern consvar_t cv_mute;
+extern consvar_t cv_voice_allowservervoice;
 extern consvar_t cv_pause;
 
-extern consvar_t cv_restrictskinchange, cv_allowteamchange, cv_maxplayers;
+extern consvar_t cv_restrictskinchange, cv_allowteamchange, cv_maxplayers, cv_shuffleloser;
 extern consvar_t cv_spectatorreentry, cv_duelspectatorreentry, cv_antigrief;
 
 // SRB2kart items
@@ -83,6 +81,8 @@ extern consvar_t cv_karthorns;
 extern consvar_t cv_kartbot;
 extern consvar_t cv_karteliminatelast;
 extern consvar_t cv_thunderdome;
+extern consvar_t cv_teamplay;
+extern consvar_t cv_duel;
 extern consvar_t cv_kartusepwrlv;
 #ifdef DEVELOP
 	extern consvar_t cv_kartencoremap;
@@ -155,8 +155,8 @@ typedef enum
 	XD_ADDFILE,     // 8
 	XD_PAUSE,       // 9
 	XD_ADDPLAYER,   // 10
-	XD_TEAMCHANGE,  // 11
-	XD_CLEARSCORES, // 12
+	XD_SPECTATE,    // 11
+	XD_SETSCORE,    // 12
 	XD_VERIFIED,    // 13
 	XD_RANDOMSEED,  // 14
 	XD_RUNSOC,      // 15
@@ -183,73 +183,43 @@ typedef enum
 	XD_SCHEDULETASK, // 34
 	XD_SCHEDULECLEAR, // 35
 	XD_AUTOMATE,    // 36
-	XD_REQMAPQUEUE, // 37
-	XD_MAPQUEUE,	// 38
+	XD_MAPQUEUE = XD_AUTOMATE+2, // 38
 	XD_CALLZVOTE,   // 39
 	XD_SETZVOTE,    // 40
+	XD_TEAMCHANGE,  // 41
+	XD_SERVERMUTEPLAYER, // 42
+	XD_SERVERDEAFENPLAYER, // 43
+	XD_SERVERTEMPMUTEPLAYER, // 44
 
 	MAXNETXCMD
 } netxcmd_t;
 
 extern const char *netxcmdnames[MAXNETXCMD - 1];
 
-#if defined(_MSC_VER)
-#pragma pack(1)
-#endif
-
-#ifdef _MSC_VER
-#pragma warning(disable :  4214)
-#endif
-
-//Packet composition for Command_TeamChange_f() ServerTeamChange, etc.
-//bitwise structs make packing bits a little easier, but byte alignment harder?
-//todo: decide whether to make the other netcommands conform, or just get rid of this experiment.
-struct changeteam_packet_t {
-	UINT32 playernum    : 5;  // value 0 to 31
-	UINT32 newteam      : 5;  // value 0 to 31
-	UINT32 verification : 1;  // value 0 to 1
-	UINT32 autobalance  : 1;  // value 0 to 1
-	UINT32 scrambled    : 1;  // value 0 to 1
-} ATTRPACK;
-
-#ifdef _MSC_VER
-#pragma warning(default : 4214)
-#endif
-
-struct changeteam_value_t {
-	UINT16 l; // liitle endian
-	UINT16 b; // big enian
-} ATTRPACK;
-
-//Since we do not want other files/modules to know about this data buffer we union it here with a Short Int.
-//Other files/modules will hand the INT16 back to us and we will decode it here.
-//We don't have to use a union, but we would then send four bytes instead of two.
-typedef union {
-	changeteam_packet_t packet;
-	changeteam_value_t value;
-} ATTRPACK changeteam_union;
-
-#if defined(_MSC_VER)
-#pragma pack()
-#endif
-
 // add game commands, needs cleanup
 void D_RegisterServerCommands(void);
 void D_RegisterClientCommands(void);
 void CleanupPlayerName(INT32 playernum, const char *newname);
+boolean IsPlayerNameUnique(const char *name, INT32 playernum);
+boolean IsPlayerNameGood(char *name);
 boolean EnsurePlayerNameIsGood(char *name, INT32 playernum);
+void D_FillPlayerSkinAndColor(const UINT8 n, const player_t *player, player_config_t *config);
+void D_PlayerChangeSkinAndColor(player_t *player, UINT16 skin, UINT16 color, INT16 follower, UINT16 followercolor);
+void D_FillPlayerWeaponPref(const UINT8 n, player_config_t *config);
 void WeaponPref_Send(UINT8 ssplayer);
+void WeaponPref_Set(INT32 playernum, UINT8 prefs);
 void WeaponPref_Save(UINT8 **cp, INT32 playernum);
 size_t WeaponPref_Parse(const UINT8 *p, INT32 playernum);
 void D_SendPlayerConfig(UINT8 n);
 void Command_ExitGame_f(void);
 void Command_Retry_f(void);
+void Handle_MapQueueSend(UINT16 newmapnum, UINT16 newgametype, boolean newencoremode);
 boolean G_GamestateUsesExitLevel(void);
 void D_GameTypeChanged(INT32 lastgametype); // not a real _OnChange function anymore
 void D_MapChange(UINT16 pmapnum, INT32 pgametype, boolean pencoremode, boolean presetplayers, INT32 pdelay, boolean pskipprecutscene, boolean pforcespecialstage);
 void D_SetupVote(INT16 newgametype);
 void D_ModifyClientVote(UINT8 player, SINT8 voted);
-void D_PickVote(void);
+void D_PickVote(SINT8 angry_map);
 void ObjectPlace_OnChange(void);
 void P_SetPlayerSpectator(INT32 playernum);
 boolean IsPlayerAdmin(INT32 playernum);
@@ -291,6 +261,17 @@ void Automate_Clear(void);
 
 extern UINT32 livestudioaudience_timer;
 void LiveStudioAudience(void);
+
+typedef enum
+{
+	SYNC_NONE,
+	SYNC_RNG,
+	SYNC_HEALTH,
+	SYNC_POSITION,
+	SYNC_ITEM,
+	SYNC_CHARACTER,
+	SYNC__MAX
+} staffsync_reason_t;
 
 void D_Cheat(INT32 playernum, INT32 cheat, ...);
 

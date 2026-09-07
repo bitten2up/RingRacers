@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -12,6 +12,7 @@
 /// \file  p_tick.c
 /// \brief Archiving: SaveGame I/O, Thinker, Ticker
 
+#include "d_think.h"
 #include "doomstat.h"
 #include "d_main.h"
 #include "g_game.h"
@@ -51,12 +52,8 @@
 #include "m_easing.h"
 #include "k_hud.h" // messagetimer
 #include "k_endcam.h"
-
 #include "lua_profile.h"
-
-#ifdef PARANOIA
 #include "deh_tables.h" // MOBJTYPE_LIST
-#endif
 
 tic_t leveltime;
 boolean thinkersCompleted;
@@ -254,7 +251,13 @@ void Command_CountMobjs_f(void)
 					count++;
 			}
 
-			CONS_Printf(M_GetText("There are %d objects of type %d currently in the level.\n"), count, i);
+			const char *name;
+			if (i >= MT_FIRSTFREESLOT)
+				name = FREE_MOBJS[i-MT_FIRSTFREESLOT];
+			else
+				name = MOBJTYPE_LIST[i];
+
+			CONS_Printf(M_GetText("There are %d objects of type %d (%s) currently in the level.\n"), count, i, name);
 		}
 		return;
 	}
@@ -275,7 +278,14 @@ void Command_CountMobjs_f(void)
 		}
 
 		if (count > 0) // Don't bother displaying if there are none of this type!
-			CONS_Printf(" * %d: %d\n", i, count);
+		{
+			const char *name;
+			if (i >= MT_FIRSTFREESLOT)
+				name = FREE_MOBJS[i-MT_FIRSTFREESLOT];
+			else
+				name = MOBJTYPE_LIST[i];
+			CONS_Printf(" * %d (%s): %d\n", i, name, count);
+		}
 	}
 }
 
@@ -330,7 +340,6 @@ void P_AddThinker(const thinklistnum_t n, thinker_t *thinker)
 	thlist[n].prev = thinker;
 
 	thinker->references = 0;    // killough 11/98: init reference counter to 0
-	thinker->cachable = n == THINK_MOBJ;
 
 #ifdef PARANOIA
 	thinker->debug_mobjtype = MT_NULL;
@@ -448,11 +457,9 @@ void P_UnlinkThinker(thinker_t *thinker)
 	I_Assert(thinker->references == 0);
 
 	(next->prev = thinker->prev)->next = next;
-	if (thinker->cachable)
+	if (thinker->alloctype == TAT_LEVELPOOL)
 	{
-		// put cachable thinkers in the mobj cache, so we can avoid allocations
-		((mobj_t *)thinker)->hnext = mobjcache;
-		mobjcache = (mobj_t *)thinker;
+		Z_LevelPoolFree(thinker, thinker->size);
 	}
 	else
 	{
@@ -585,146 +592,6 @@ static void P_RunThinkers(void)
 	ps_acs_time = I_GetPreciseTime() - ps_acs_time;
 }
 
-//
-// P_DoAutobalanceTeams()
-//
-// Determine if the teams are unbalanced, and if so, move a player to the other team.
-//
-static void P_DoAutobalanceTeams(void)
-{
-	changeteam_union NetPacket;
-	UINT16 usvalue;
-	INT32 i=0;
-	INT32 red=0, blue=0;
-	INT32 redarray[MAXPLAYERS], bluearray[MAXPLAYERS];
-	//INT32 redflagcarrier = 0, blueflagcarrier = 0;
-	INT32 totalred = 0, totalblue = 0;
-
-	NetPacket.value.l = NetPacket.value.b = 0;
-	memset(redarray, 0, sizeof(redarray));
-	memset(bluearray, 0, sizeof(bluearray));
-
-	// Only do it if we have enough room in the net buffer to send it.
-	// Otherwise, come back next time and try again.
-	if (sizeof(usvalue) > GetFreeXCmdSize(0))
-		return;
-
-	//We have to store the players in an array with the rest of their team.
-	//We can then pick a random player to be forced to change teams.
-	for (i = 0; i < MAXPLAYERS; i++)
-	{
-		if (playeringame[i] && players[i].ctfteam)
-		{
-			if (players[i].ctfteam == 1)
-			{
-				//if (!players[i].gotflag)
-				{
-					redarray[red] = i; //store the player's node.
-					red++;
-				}
-				/*else
-					redflagcarrier++;*/
-			}
-			else
-			{
-				//if (!players[i].gotflag)
-				{
-					bluearray[blue] = i; //store the player's node.
-					blue++;
-				}
-				/*else
-					blueflagcarrier++;*/
-			}
-		}
-	}
-
-	totalred = red;// + redflagcarrier;
-	totalblue = blue;// + blueflagcarrier;
-
-	if ((abs(totalred - totalblue) > max(1, (totalred + totalblue) / 8)))
-	{
-		if (totalred > totalblue)
-		{
-			i = M_RandomKey(red);
-			NetPacket.packet.newteam = 2;
-			NetPacket.packet.playernum = redarray[i];
-			NetPacket.packet.verification = true;
-			NetPacket.packet.autobalance = true;
-
-			usvalue  = SHORT(NetPacket.value.l|NetPacket.value.b);
-			SendNetXCmd(XD_TEAMCHANGE, &usvalue, sizeof(usvalue));
-		}
-		else //if (totalblue > totalred)
-		{
-			i = M_RandomKey(blue);
-			NetPacket.packet.newteam = 1;
-			NetPacket.packet.playernum = bluearray[i];
-			NetPacket.packet.verification = true;
-			NetPacket.packet.autobalance = true;
-
-			usvalue  = SHORT(NetPacket.value.l|NetPacket.value.b);
-			SendNetXCmd(XD_TEAMCHANGE, &usvalue, sizeof(usvalue));
-		}
-	}
-}
-
-//
-// P_DoTeamscrambling()
-//
-// If a team scramble has been started, scramble one person from the
-// pre-made scramble array. Said array is created in TeamScramble_OnChange()
-//
-void P_DoTeamscrambling(void)
-{
-	changeteam_union NetPacket;
-	UINT16 usvalue;
-	NetPacket.value.l = NetPacket.value.b = 0;
-
-	// Only do it if we have enough room in the net buffer to send it.
-	// Otherwise, come back next time and try again.
-	if (sizeof(usvalue) > GetFreeXCmdSize(0))
-		return;
-
-	if (scramblecount < scrambletotal)
-	{
-		if (players[scrambleplayers[scramblecount]].ctfteam != scrambleteams[scramblecount])
-		{
-			NetPacket.packet.newteam = scrambleteams[scramblecount];
-			NetPacket.packet.playernum = scrambleplayers[scramblecount];
-			NetPacket.packet.verification = true;
-			NetPacket.packet.scrambled = true;
-
-			usvalue = SHORT(NetPacket.value.l|NetPacket.value.b);
-			SendNetXCmd(XD_TEAMCHANGE, &usvalue, sizeof(usvalue));
-		}
-
-		scramblecount++; //Increment, and get to the next player when we come back here next time.
-	}
-	else
-		CV_SetValue(&cv_teamscramble, 0);
-}
-
-static inline void P_DoTeamStuff(void)
-{
-	// Automatic team balance for CTF and team match
-	if (leveltime % (TICRATE * 5) == 0) //only check once per five seconds for the sake of CPU conservation.
-	{
-		// Do not attempt to autobalance and scramble teams at the same time.
-		// Only the server should execute this. No verified admins, please.
-		if ((cv_autobalance.value && !cv_teamscramble.value) && cv_allowteamchange.value && server)
-			P_DoAutobalanceTeams();
-	}
-
-	// Team scramble code for team match and CTF.
-	if ((leveltime % (TICRATE/7)) == 0)
-	{
-		// If we run out of time in the level, the beauty is that
-		// the Y_Ticker() team scramble code will pick it up.
-		if (cv_teamscramble.value && server)
-			P_DoTeamscrambling();
-	}
-}
-
 static inline void P_DeviceRumbleTick(void)
 {
 	UINT8 i;
@@ -741,9 +608,9 @@ static inline void P_DeviceRumbleTick(void)
 			{
 				low = high = 65536 / 2;
 			}
-			else if (player->sneakertimer > (sneakertime-(TICRATE/2)))
+			else if (player->sneakertimer > (sneakertime-(TICRATE/2)) || player->panelsneakertimer > (sneakertime-(TICRATE/2)) || player->weaksneakertimer > (sneakertime-(TICRATE/2)))
 			{
-				low = high = 65536 / (3+player->numsneakers);
+				low = high = 65536 / (3+player->numsneakers+player->numpanelsneakers+player->numweaksneakers);
 			}
 			else if (((player->boostpower < FRACUNIT) || (player->stairjank > 8))
 				&& P_IsObjectOnGround(player->mo) && player->speed != 0)
@@ -881,15 +748,7 @@ void P_Ticker(boolean run)
 	// Check for pause or menu up in single player
 	if (paused || P_AutoPause())
 	{
-		if (demo.rewinding && leveltime > 0)
-		{
-			leveltime = (leveltime-1) & ~3;
-			if (timeinmap > 0)
-				timeinmap = (timeinmap-1) & ~3;
-			G_PreviewRewind(leveltime);
-		}
-		else
-			P_RunChaseCameras();	// special case: allow freecam to MOVE during pause!
+		P_RunChaseCameras(); // special case: allow freecam to MOVE during pause!
 		return;
 	}
 
@@ -904,17 +763,23 @@ void P_Ticker(boolean run)
 
 		if (demo.recording)
 		{
-			G_WriteDemoExtraData();
-			for (i = 0; i < MAXPLAYERS; i++)
-				if (playeringame[i])
-					G_WriteDemoTiccmd(&players[i].cmd, i);
+			if (!G_ConsiderEndingDemoWrite())
+			{
+				G_WriteDemoExtraData();
+				for (i = 0; i < MAXPLAYERS; i++)
+					if (playeringame[i])
+						G_WriteDemoTiccmd(&players[i].cmd, i);
+			}
 		}
 		if (demo.playback && !demo.waitingfortally)
 		{
-			G_ReadDemoExtraData();
-			for (i = 0; i < MAXPLAYERS; i++)
-				if (playeringame[i])
-					G_ReadDemoTiccmd(&players[i].cmd, i);
+			if (!G_ConsiderEndingDemoRead())
+			{
+				G_ReadDemoExtraData();
+				for (i = 0; i < MAXPLAYERS; i++)
+					if (playeringame[i])
+						G_ReadDemoTiccmd(&players[i].cmd, i);
+			}
 		}
 
 		LUA_ResetTicTimers();
@@ -985,7 +850,7 @@ void P_Ticker(boolean run)
 					continue;
 				}
 
-				playerskin = &skins[players[i].skin];
+				playerskin = skins[players[i].skin];
 
 				playerskin->records.timeplayed++;
 			}
@@ -1045,7 +910,7 @@ void P_Ticker(boolean run)
 						continue;
 					}
 
-					playerskin = &skins[players[i].skin];
+					playerskin = skins[players[i].skin];
 					playerskin->records.modetimeplayed[mode]++;
 				}
 			}
@@ -1220,13 +1085,10 @@ void P_Ticker(boolean run)
 		}
 	}
 
-	if (g_fast_forward == 0)
+	if (g_fast_forward == 0 || demo.simplerewind)
 	{
 		timeinmap++;
 	}
-
-	if (G_GametypeHasTeams())
-		P_DoTeamStuff();
 
 	if (run)
 	{
@@ -1313,14 +1175,21 @@ void P_Ticker(boolean run)
 
 		if (demo.recording)
 		{
-			G_WriteAllGhostTics();
-
 			if (cv_recordmultiplayerdemos.value && demo.savebutton && demo.savebutton + 3*TICRATE < leveltime)
 				G_CheckDemoTitleEntry();
+
+			if (!G_ConsiderEndingDemoWrite())
+			{
+				G_WriteAllGhostTics();
+			}
 		}
-		else if (demo.playback && !demo.waitingfortally) // Use Ghost data for consistency checks.
+		else if (demo.playback && !demo.waitingfortally)
 		{
-			G_ConsAllGhostTics();
+			if (!G_ConsiderEndingDemoRead())
+			{
+				// Use Ghost data for consistency checks.
+				G_ConsAllGhostTics();
+			}
 		}
 
 		if (modeattacking)
@@ -1382,9 +1251,6 @@ void P_Ticker(boolean run)
 	}
 
 	P_MapEnd();
-
-	if (demo.playback)
-		G_StoreRewindInfo();
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{

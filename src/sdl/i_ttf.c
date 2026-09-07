@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2011 by Callum Dickinson.
 //
@@ -53,7 +53,7 @@ static char *searchFont(const char *fontsearchDir)
 	filestatus_t fstemp;
 
 	strcpy(tempsw, FONTFILE);
-	fstemp = filesearch(tempsw, fontsearchDir, NULL, true, 20);
+	fstemp = filesearch(tempsw, fontsearchDir, NULL, NULL, true, 20);
 	if (fstemp == FS_FOUND)
 	{
 		return tempsw;

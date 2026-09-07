@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -289,6 +289,7 @@ enum actionnum
 	A_MAKESSCANDLE,
 	A_HOLOGRAMRANDOMTRANSLUCENCY,
 	A_SSCHAINSHATTER,
+	A_GENERICBUMPER,
 	NUMACTIONS
 };
 
@@ -557,12 +558,13 @@ void A_BlendEyePuyoHack(mobj_t *actor);
 void A_MakeSSCandle(mobj_t *actor);
 void A_HologramRandomTranslucency(mobj_t *actor);
 void A_SSChainShatter(mobj_t *actor);
+void A_GenericBumper();
 
 extern boolean actionsoverridden[NUMACTIONS];
 
 // ratio of states to sprites to mobj types is roughly 6 : 1 : 1
 #define NUMMOBJFREESLOTS 1024
-#define NUMSPRITEFREESLOTS NUMMOBJFREESLOTS
+#define NUMSPRITEFREESLOTS (NUMMOBJFREESLOTS*2)
 #define NUMSTATEFREESLOTS (NUMMOBJFREESLOTS*8)
 
 // Hey, moron! If you change this table, don't forget about sprnames in info.c and the sprite lights in hw_light.c!
@@ -589,6 +591,7 @@ typedef enum sprite
 	SPR_BSPH, // Sphere
 	SPR_EMBM,
 	SPR_SPCN, // Spray Can
+	SPR_SBON, // Spray Can replacement bonus
 	SPR_MMSH, // Ancient Shrine
 	SPR_MORB, // One Morbillion
 	SPR_EMRC, // Chaos Emeralds
@@ -855,6 +858,10 @@ typedef enum sprite
 	SPR_MGBX, // Heavy Magician transform box
 	SPR_MGBT, // Heavy Magician transform box top
 	SPR_MGBB, // Heavy Magician transform box bottom
+	SPR_SSMA, // Mine radius
+	SPR_SSMB,
+	SPR_SSMC,
+	SPR_SSMD,
 	SPR_MSHD, // Item Monitor Big Shard
 	SPR_IMDB, // Item Monitor Small Shard (Debris)
 	SPR_MTWK, // Item Monitor Glass Twinkle
@@ -867,6 +874,11 @@ typedef enum sprite
 	SPR_WPRJ, // Instawhip Reject
 	SPR_GRNG, // Guard ring
 	SPR_GBDY, // Guard body
+
+	SPR_BAIL, // Bail charge
+	SPR_BAIB, // Bail after effect
+	SPR_BAIC, // Bail sparkle
+	SPR_TECH, // Bail tech charge
 
 	SPR_TRC1, // Charge aura
 	SPR_TRC2, // Charge fall
@@ -909,13 +921,31 @@ typedef enum sprite
 	SPR_DTRG, // Drop Target
 	SPR_BHOG, // Ballhog
 	SPR_BHBM, // Ballhog BOOM
+	SPR_BHGR, // Ballhog reticule
 	SPR_SPBM, // Self-Propelled Bomb
 	SPR_TRIS, // SPB Manta Ring start
 	SPR_TRNQ, // SPB Manta Ring loop
 	SPR_THNS, // Thunder Shield
+	SPR_THNC, // Lightning Shield Top Flash
+	SPR_THNA, // Lightning Shield Top Swoosh
+	SPR_THNB, // Lightning Shield Bottom Swoosh
+	SPR_THND, // Lightning Attack
+	SPR_THNE, // Lightning Attack
+	SPR_THNH, // Lightning Attack
+	SPR_THNF, // Lightning Attack
+	SPR_THNG, // Lightning Attack
 	SPR_BUBS, // Bubble Shield (not Bubs)
+	SPR_BUBT, // Bubble Shield trap
+	SPR_BUBA, // Bubble Shield Outline
+	SPR_BUBB, // Bubble Shield Top Wave
+	SPR_BUBC, // Bubble Shield Bottom Wave
+	SPR_BUBD, // Bubble Shield Reflection
+	SPR_BUBE, // Bubble Shield Underline
+	SPR_BUBG, // Bubble Shield drag
 	SPR_BWVE, // Bubble Shield waves
 	SPR_FLMS, // Flame Shield
+	SPR_FLMA, // Flame Shield Top Layer
+	SPR_FLMB, // Flame Shield Bottom Layer
 	SPR_FLMD, // Flame Shield dash
 	SPR_FLMP, // Flame Shield paper sprites
 	SPR_FLML, // Flame Shield speed lines
@@ -937,6 +967,7 @@ typedef enum sprite
 	SPR_BEXB, // Battle Bumper Explosion: Blast
 	SPR_TWBS, // Tripwire Boost
 	SPR_TWBT, // Tripwire BLASTER
+	SPR_TWBP, // Tripwire approach
 	SPR_SMLD, // Smooth landing
 
 	// Trick Effects
@@ -1016,6 +1047,7 @@ typedef enum sprite
 	SPR_ITEM,
 	SPR_ITMO,
 	SPR_ITMI,
+	SPR_IBON,
 	SPR_ITMN,
 	SPR_PWRB,
 	SPR_RBOW, // power-up aura
@@ -1115,6 +1147,19 @@ typedef enum sprite
 
 	SPR_WAYP,
 	SPR_EGOO,
+
+	SPR_AMPA,
+	SPR_AMPB,
+	SPR_AMPC,
+	SPR_AMPD,
+
+	SPR_EXPC,
+
+	SPR_TWBB, // Sonic Boom
+	SPR_TWOK, // Tripwire OK
+	SPR_TW_L, // Tripwire Lockout
+
+	SPR_SOR_,
 
 	SPR_WTRL, // Water Trail
 
@@ -1299,6 +1344,17 @@ typedef enum sprite
 	SPR_DIEM, // smoke
 	SPR_DIEN, // explosion
 
+	// Flybot767 (stun)
+	SPR_STUN,
+
+	SPR_STON,
+	SPR_TOXA,
+	SPR_TOXB,
+
+	SPR_GEAR,
+
+	SPR_MHPL,
+
 	// Pulley
 	SPR_HCCH,
 	SPR_HCHK,
@@ -1329,6 +1385,17 @@ typedef enum playersprite
 	SPR2_SIGN, SPR2_SIGL, SPR2_SSIG,
 	SPR2_XTRA,
 	SPR2_TALK,
+	SPR2_DKRA,
+	SPR2_DKRB,
+	SPR2_DKRC,
+	SPR2_DKRD,
+	SPR2_DKRE,
+	SPR2_DKRF,
+	SPR2_DKRG,
+	SPR2_DKRH,
+	SPR2_DKRI,
+	SPR2_DKRJ,
+	SPR2_DKRK,
 
 	SPR2_FIRSTFREESLOT,
 	SPR2_LASTFREESLOT = 0x7f,
@@ -1389,6 +1456,17 @@ typedef enum state
 
 	S_KART_LEFTOVER,
 	S_KART_LEFTOVER_NOTIRES,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_A,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_B,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_C,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_D,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_E,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_F,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_G,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_H,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_I,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_J,
+	S_KART_LEFTOVER_PARTICLE_CUSTOM_K,
 
 	S_KART_TIRE1,
 	S_KART_TIRE2,
@@ -2579,6 +2657,8 @@ typedef enum state
 	S_MAGICIANBOX_TOP,
 	S_MAGICIANBOX_BOTTOM,
 
+	S_MINERADIUS,
+
 	S_WAVEDASH,
 
 	S_INSTAWHIP,
@@ -2589,6 +2669,24 @@ typedef enum state
 	S_INSTAWHIP_REJECT,
 	S_BLOCKRING,
 	S_BLOCKBODY,
+
+	S_BAIL,
+	S_BAIB1,
+	S_BAIB2,
+	S_BAIB3,
+	S_BAIC,
+	S_BAILCHARGE,
+
+	S_AMPRING,
+	S_AMPBODY,
+	S_AMPAURA,
+	S_AMPBURST,
+
+	S_SONICBOOM,
+	S_TRIPWIREOK,
+	S_TRIPWIRELOCKOUT,
+
+	S_GOTIT,
 
 	S_CHARGEAURA,
 	S_CHARGEFALL,
@@ -2787,6 +2885,19 @@ typedef enum state
 	S_WIPEOUTTRAIL10,
 	S_WIPEOUTTRAIL11,
 
+	// "Firework"" dust trail
+	S_FIREWORKTRAIL1,
+	S_FIREWORKTRAIL2,
+	S_FIREWORKTRAIL3,
+	S_FIREWORKTRAIL4,
+	S_FIREWORKTRAIL5,
+	S_FIREWORKTRAIL6,
+	S_FIREWORKTRAIL7,
+	S_FIREWORKTRAIL8,
+	S_FIREWORKTRAIL9,
+	S_FIREWORKTRAIL10,
+	S_FIREWORKTRAIL11,
+
 	// Rocket sneaker
 	S_ROCKETSNEAKER_L,
 	S_ROCKETSNEAKER_R,
@@ -2923,22 +3034,8 @@ typedef enum state
 	S_BALLHOG7,
 	S_BALLHOG8,
 	S_BALLHOG_DEAD,
-	S_BALLHOGBOOM1,
-	S_BALLHOGBOOM2,
-	S_BALLHOGBOOM3,
-	S_BALLHOGBOOM4,
-	S_BALLHOGBOOM5,
-	S_BALLHOGBOOM6,
-	S_BALLHOGBOOM7,
-	S_BALLHOGBOOM8,
-	S_BALLHOGBOOM9,
-	S_BALLHOGBOOM10,
-	S_BALLHOGBOOM11,
-	S_BALLHOGBOOM12,
-	S_BALLHOGBOOM13,
-	S_BALLHOGBOOM14,
-	S_BALLHOGBOOM15,
-	S_BALLHOGBOOM16,
+	S_BALLHOGBOOM,
+	S_BALLHOG_RETICULE,
 
 	// Self-Propelled Bomb
 	S_SPB1,
@@ -2993,6 +3090,18 @@ typedef enum state
 	S_LIGHTNINGSHIELD23,
 	S_LIGHTNINGSHIELD24,
 
+	// Lightning Shield Visuals
+	S_THNC1,
+	S_THNA1,
+	S_THNC2,
+	S_THNB1,
+
+	S_THND,
+	S_THNE,
+	S_THNH,
+	S_THNF,
+	S_THNG,
+
 	// Bubble Shield
 	S_BUBBLESHIELD1,
 	S_BUBBLESHIELD2,
@@ -3028,6 +3137,16 @@ typedef enum state
 	S_BUBBLESHIELDWAVE5,
 	S_BUBBLESHIELDWAVE6,
 
+	// Bubble Shield Visuals
+	S_BUBA1,
+	S_BUBB1,
+	S_BUBB2,
+	S_BUBC1,
+	S_BUBC2,
+	S_BUBD1,
+	S_BUBE1,
+	S_BUBG1,
+
 	// Flame Shield
 	S_FLAMESHIELD1,
 	S_FLAMESHIELD2,
@@ -3047,6 +3166,11 @@ typedef enum state
 	S_FLAMESHIELD16,
 	S_FLAMESHIELD17,
 	S_FLAMESHIELD18,
+
+	// Flame Shield Visuals
+	S_FLMA1,
+	S_FLMA2,
+	S_FLMB1,
 
 	S_FLAMESHIELDDASH1,
 	S_FLAMESHIELDDASH2,
@@ -3161,6 +3285,8 @@ typedef enum state
 	S_TRIPWIREBOOST_BOTTOM,
 	S_TRIPWIREBOOST_BLAST_TOP,
 	S_TRIPWIREBOOST_BLAST_BOTTOM,
+
+	S_TRIPWIREAPPROACH,
 
 	S_SMOOTHLANDING,
 
@@ -3662,6 +3788,9 @@ typedef enum state
 	S_WAYPOINTSPLAT,
 	S_EGOORB,
 
+	S_AMPS,
+	S_EXP,
+
 	S_WATERTRAIL1,
 	S_WATERTRAIL2,
 	S_WATERTRAIL3,
@@ -4084,6 +4213,21 @@ typedef enum state
 	S_BADNIK_EXPLOSION_SHOCKWAVE2,
 	S_BADNIK_EXPLOSION1,
 	S_BADNIK_EXPLOSION2,
+
+	// Flybot767 (stun)
+	S_FLYBOT767,
+
+	S_STON,
+
+	S_TOXAA,
+	S_TOXAA_DEAD,
+	S_TOXAB,
+	S_TOXBA,
+
+	S_ANCIENTGEAR,
+	S_ANCIENTGEAR_PART,
+
+	S_MHPOLE,
 
 	S_FIRSTFREESLOT,
 	S_LASTFREESLOT = S_FIRSTFREESLOT + NUMSTATEFREESLOTS - 1,
@@ -4546,6 +4690,7 @@ typedef enum mobj_type
 	MT_MONITOR_PART,
 	MT_MONITOR_SHARD,
 	MT_MAGICIANBOX,
+	MT_MINERADIUS,
 	MT_WAVEDASH,
 
 	MT_INSTAWHIP,
@@ -4553,6 +4698,21 @@ typedef enum mobj_type
 	MT_INSTAWHIP_REJECT,
 	MT_BLOCKRING,
 	MT_BLOCKBODY,
+
+	MT_BAIL,
+	MT_BAILCHARGE,
+	MT_BAILSPARKLE,
+
+	MT_AMPRING,
+	MT_AMPBODY,
+	MT_AMPAURA,
+	MT_AMPBURST,
+
+	MT_SONICBOOM,
+	MT_TRIPWIREOK,
+	MT_TRIPWIRELOCKOUT,
+
+	MT_GOTIT,
 
 	MT_CHARGEAURA,
 	MT_CHARGEFALL,
@@ -4622,14 +4782,20 @@ typedef enum mobj_type
 
 	MT_BALLHOG, // Ballhog
 	MT_BALLHOGBOOM,
+	MT_BALLHOG_RETICULE,
+	MT_BALLHOG_RETICULE_TEST,
 
 	MT_SPB, // SPB stuff
 	MT_SPBEXPLOSION,
 	MT_MANTARING, // Juicebox for SPB
 
 	MT_LIGHTNINGSHIELD, // Shields
+	MT_LIGHTNINGSHIELD_VISUAL,
+	MT_LIGHTNINGATTACK_VISUAL,
 	MT_BUBBLESHIELD,
+	MT_BUBBLESHIELD_VISUAL,
 	MT_FLAMESHIELD,
+	MT_FLAMESHIELD_VISUAL,
 	MT_FLAMESHIELDUNDERLAY,
 	MT_FLAMESHIELDPAPER,
 	MT_BUBBLESHIELDTRAP,
@@ -4662,6 +4828,7 @@ typedef enum mobj_type
 	MT_BATTLEBUMPER_BLAST,
 
 	MT_TRIPWIREBOOST,
+	MT_TRIPWIREAPPROACH,
 
 	MT_SMOOTHLANDING,
 	MT_TRICKINDICATOR,
@@ -4989,6 +5156,23 @@ typedef enum mobj_type
 
 	MT_IPULLUP,
 	MT_PULLUPHOOK,
+
+	MT_AMPS,
+	MT_EXP,
+
+	MT_FLYBOT767,
+
+	MT_STONESHOE,
+	MT_STONESHOE_CHAIN,
+
+	MT_TOXOMISTER_POLE,
+	MT_TOXOMISTER_EYE,
+	MT_TOXOMISTER_CLOUD,
+
+	MT_ANCIENTGEAR,
+	MT_ANCIENTGEAR_PART,
+
+	MT_MHPOLE,
 
 	MT_FIRSTFREESLOT,
 	MT_LASTFREESLOT = MT_FIRSTFREESLOT + NUMMOBJFREESLOTS - 1,

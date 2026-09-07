@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 // Copyright (C) 2016 by James Haley, David Hill, et al. (Team Eternity)
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -1148,6 +1148,37 @@ bool CallFunc_SetLineTexture(ACSVM::Thread *thread, const ACSVM::Word *argV, ACS
 }
 
 /*--------------------------------------------------
+	bool CallFunc_SetLineBlocking(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
+
+		Changes a linedef's blocking flag.
+--------------------------------------------------*/
+bool CallFunc_SetLineBlocking(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
+{
+	mtag_t tag = 0;
+	UINT32 blocking = 0;
+	INT32 lineId = -1;
+
+	tag = argV[0];
+
+	if (argV[1] != 0)
+	{
+		blocking = ML_IMPASSABLE;
+	}
+
+	TAG_ITER_LINES(tag, lineId)
+	{
+		line_t *line = &lines[lineId];
+
+		if (line->flags & ML_TWOSIDED) // disallow changing this for 1-sided lines
+		{
+			line->flags = (line->flags & ~ML_IMPASSABLE) | blocking;
+		}
+	}
+
+	return false;
+}
+
+/*--------------------------------------------------
 	bool CallFunc_SetLineSpecial(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
 
 		Changes a linedef's special and arguments.
@@ -1271,7 +1302,7 @@ bool CallFunc_EndPrintBold(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM
 bool CallFunc_PlayerTeam(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
 {
 	auto info = &static_cast<Thread *>(thread)->info;
-	UINT8 teamID = 0;
+	UINT8 teamID = TEAM_UNASSIGNED;
 
 	(void)argV;
 	(void)argC;
@@ -1280,7 +1311,7 @@ bool CallFunc_PlayerTeam(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::
 		&& (info->mo != NULL && P_MobjWasRemoved(info->mo) == false)
 		&& (info->mo->player != NULL))
 	{
-		teamID = info->mo->player->ctfteam;
+		teamID = info->mo->player->team;
 	}
 
 	thread->dataStk.push(teamID);
@@ -1614,8 +1645,34 @@ bool CallFunc_PlayerSkin(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::
 		&& (info->mo != NULL && P_MobjWasRemoved(info->mo) == false)
 		&& (info->mo->player != NULL))
 	{
-		UINT8 skin = info->mo->player->skin;
-		thread->dataStk.push(~env->getString( skins[skin].name )->idx);
+		UINT16 skin = info->mo->player->skin;
+		thread->dataStk.push(~env->getString( skins[skin]->name )->idx);
+		return false;
+	}
+
+	thread->dataStk.push(0);
+	return false;
+}
+
+/*--------------------------------------------------
+	bool CallFunc_PlayerSkinRealName(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
+
+		Returns the activating player's skin real name.
+--------------------------------------------------*/
+bool CallFunc_PlayerSkinRealName(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
+{
+	Environment *env = &ACSEnv;
+	auto info = &static_cast<Thread *>(thread)->info;
+
+	(void)argV;
+	(void)argC;
+
+	if ((info != NULL)
+		&& (info->mo != NULL && P_MobjWasRemoved(info->mo) == false)
+		&& (info->mo->player != NULL))
+	{
+		UINT16 skin = info->mo->player->skin;
+		thread->dataStk.push(~env->getString( skins[skin]->realname )->idx);
 		return false;
 	}
 
@@ -1882,8 +1939,9 @@ bool CallFunc_GetGrabbedSprayCan(ACSVM::Thread *thread, const ACSVM::Word *argV,
 	&& gamemap-1 < basenummapheaders)
 	{
 		// See also P_SprayCanInit
-		UINT16 can_id = mapheaderinfo[gamemap-1]->cache_spraycan;
+		UINT16 can_id = mapheaderinfo[gamemap-1]->records.spraycan;
 
+		// Intentionally not affected by MCAN_BONUS
 		if (can_id < gamedata->numspraycans)
 		{
 			UINT16 col = gamedata->spraycans[can_id].col;
@@ -2377,12 +2435,24 @@ bool CallFunc_MusicStopAll(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM
 bool CallFunc_MusicRemap(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC)
 {
 	ACSVM::MapScope *map = thread->scopeMap;
+	ACSVM::String *tuneStr = nullptr;
+	const char *tune = nullptr;
 
 	// 0: str tune - id for the tune to play
 	// 1: str song - lump name for the song to map to
 	// 2: [bool foractivator] - only do this if the activator is a player and is being viewed
 
 	if (argC > 2 && argV[2] && !ACS_ActivatorIsLocal(thread))
+	{
+		return false;
+	}
+
+	tuneStr = map->getString(argV[0]);
+	tune = tuneStr->str;
+
+	// Do not allow ACS to remap Stereo Mode tunes.
+	if (strlen(tune) > 5
+	    && toupper(tune[0]) == 'S' && toupper(tune[1]) == 'T' && toupper(tune[2]) == 'E' && toupper(tune[3]) == 'R' && toupper(tune[4]) == 'E')
 	{
 		return false;
 	}
@@ -3336,6 +3406,12 @@ enum
 	THING_PROP_HNEXT,
 	THING_PROP_HPREV,
 	THING_PROP_ITNEXT,
+	THING_PROP_BAKEDXOFFSET,
+	THING_PROP_BAKEDYOFFSET,
+	THING_PROP_BAKEDZOFFSET,
+	THING_PROP_BAKEDXPIVOT,
+	THING_PROP_BAKEDYPIVOT,
+	THING_PROP_BAKEDZPIVOT,
 	THING_PROP__MAX
 };
 
@@ -3521,6 +3597,12 @@ bool CallFunc_GetThingProperty(ACSVM::Thread *thread, const ACSVM::Word *argV, A
 			PROP_MOBJ(THING_PROP_HNEXT, hnext)
 			PROP_MOBJ(THING_PROP_HPREV, hprev)
 			PROP_MOBJ(THING_PROP_ITNEXT, itnext)
+			PROP_INT(THING_PROP_BAKEDXOFFSET, bakexoff)
+			PROP_INT(THING_PROP_BAKEDYOFFSET, bakeyoff)
+			PROP_INT(THING_PROP_BAKEDZOFFSET, bakezoff)
+			PROP_INT(THING_PROP_BAKEDXPIVOT, bakexpiv)
+			PROP_INT(THING_PROP_BAKEDYPIVOT, bakeypiv)
+			PROP_INT(THING_PROP_BAKEDZPIVOT, bakezpiv)
 			default:
 			{
 				CONS_Alert(CONS_WARNING, "GetThingProperty type %d out of range (expected 0 - %d).\n", property, THING_PROP__MAX-1);
@@ -3557,13 +3639,15 @@ bool CallFunc_SetThingProperty(ACSVM::Thread *thread, const ACSVM::Word *argV, A
 	INT32 value = 0;
 
 	tag = argV[0];
-	mobj = P_FindMobjFromTID(tag, mobj, info->mo);
+	mobj_t *next = P_FindMobjFromTID(tag, mobj, info->mo);
 
 	property = argV[1];
 	value = argV[2];
 
-	while (mobj != NULL)
+	while ((mobj = next) != NULL)
 	{
+		// First in case of deletion. (Can't check for value == S_NULL because of A_ calls, etc)
+		next = P_FindMobjFromTID(tag, mobj, info->mo);
 
 #define PROP_READONLY(x, y) \
 	case x: \
@@ -3667,11 +3751,11 @@ bool CallFunc_SetThingProperty(ACSVM::Thread *thread, const ACSVM::Word *argV, A
 #define PROP_SKIN(x, y) \
 	case x: \
 	{ \
-		INT32 newSkin = (mobj->skin != NULL) ? (static_cast<skin_t *>(mobj->skin)) - skins : -1; \
+		INT32 newSkin = (mobj->skin != NULL) ? (static_cast<skin_t *>(mobj->skin)->skinnum) : -1; \
 		bool success = ACS_GetSkinFromString(thread->scopeMap->getString( value )->str, &newSkin); \
 		if (success == true) \
 		{ \
-			mobj->y = (newSkin >= 0 && newSkin < numskins) ? &skins[ newSkin ] : NULL; \
+			mobj->y = (newSkin >= 0 && newSkin < numskins) ? skins[ newSkin ] : NULL; \
 		} \
 		break; \
 	}
@@ -3797,8 +3881,6 @@ bool CallFunc_SetThingProperty(ACSVM::Thread *thread, const ACSVM::Word *argV, A
 				break;
 			}
 		}
-
-		mobj = P_FindMobjFromTID(tag, mobj, info->mo);
 
 #undef PROP_FLAGS
 #undef PROP_SCALE

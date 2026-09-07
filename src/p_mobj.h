@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -262,6 +262,8 @@ typedef enum
 	MFE_SLOPELAUNCHED     = 1<<14,
 	// Thinker is paused due to hitlag
 	MFE_PAUSED            = 1<<15,
+	// Don't launch off of slopes
+	MFE_DONTSLOPELAUNCH   = 1<<16,
 } mobjeflag_t;
 
 //
@@ -339,7 +341,7 @@ struct mobj_t
 	state_t *state;
 	UINT32 flags; // flags from mobjinfo tables
 	UINT32 flags2; // MF2_ flags
-	UINT16 eflags; // extra flags
+	UINT32 eflags; // extra flags
 
 	mtag_t tid;
 	mobj_t *tid_next;
@@ -420,6 +422,8 @@ struct mobj_t
 	UINT8 shadowcolor; // Palette index to use for rendering the shadow
 
 	fixed_t sprxoff, spryoff, sprzoff; // Sprite offsets in real space, does NOT affect position or collision
+	fixed_t bakexoff, bakeyoff, bakezoff; // BAKED sprite offsets. Simulates visuals in real space, and rotates along the object's sprite
+	fixed_t bakexpiv, bakeypiv, bakezpiv; // Pivot points for baked offsets. These are *not* rotated with a sprite
 
 	terrain_t *terrain; // Terrain definition of the floor this object last hit. NULL when in the air.
 	mobj_t *terrainOverlay; // Overlay sprite object for terrain
@@ -545,6 +549,7 @@ void P_AddCachedAction(mobj_t *mobj, INT32 statenum);
 
 boolean P_IsKartItem(INT32 type);
 boolean P_IsKartFieldItem(INT32 type);
+boolean P_IsRelinkItem(INT32 type);
 boolean K_IsMissileOrKartItem(mobj_t *mo);
 boolean P_CanDeleteKartItem(INT32 type);
 
@@ -561,6 +566,7 @@ fixed_t P_GetMobjSpawnHeight(const mobjtype_t mobjtype, const fixed_t x, const f
 fixed_t P_GetMapThingSpawnHeight(const mobjtype_t mobjtype, const mapthing_t* mthing, const fixed_t x, const fixed_t y);
 
 mobj_t *P_SpawnMapThing(mapthing_t *mthing);
+void P_CopyMapThingBehaviorFieldsToMobj(const mapthing_t *mthing, mobj_t *mobj);
 void P_CopyMapThingSpecialFieldsToMobj(const mapthing_t *mthing, mobj_t *mobj);
 void P_SpawnHoop(mapthing_t *mthing);
 void P_SpawnItemPattern(mapthing_t *mthing);
@@ -578,7 +584,7 @@ void P_NullPrecipThinker(precipmobj_t *mobj);
 void P_FreePrecipMobj(precipmobj_t *mobj);
 void P_SetScale(mobj_t *mobj, fixed_t newscale);
 void P_InstaScale(mobj_t *mobj, fixed_t newscale);
-void P_XYMovement(mobj_t *mo);
+boolean P_XYMovement(mobj_t *mo);
 void P_RingXYMovement(mobj_t *mo);
 void P_SceneryXYMovement(mobj_t *mo);
 boolean P_ZMovement(mobj_t *mo);
@@ -594,6 +600,8 @@ extern INT32 numhuntemeralds;
 extern INT32 numcheatchecks;
 extern UINT16 bossdisabled;
 extern boolean stoppedclock;
+
+#define EDITOR_CAM_DOOMEDNUM (3328)
 
 #ifdef __cplusplus
 } // extern "C"

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -43,9 +43,10 @@ mobj_t *P_FindNewPosition(UINT32 oldposition);
 struct savedata_bot_s
 {
 	boolean valid;
-	UINT8 skin;
+	UINT16 skin;
 	UINT8 difficulty;
 	boolean rival;
+	boolean foe;
 	UINT32 score;
 };
 
@@ -55,7 +56,7 @@ struct savedata_t
 	SINT8 lives;
 	UINT16 totalring;
 
-	UINT8 skin;
+	UINT16 skin;
 	UINT16 skincolor;
 	INT32 followerskin;
 	UINT16 followercolor;

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -96,7 +96,7 @@ private:
 	{
 		const player_t* p = toucher->player;
 
-		if (p->sneakertimer || p->invincibilitytimer || p->growshrinktimer > 0 || p->hyudorotimer)
+		if (p->sneakertimer || p->panelsneakertimer || p->weaksneakertimer || p->invincibilitytimer || p->growshrinktimer > 0 || p->hyudorotimer)
 		{
 			return;
 		}

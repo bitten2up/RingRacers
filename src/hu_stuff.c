@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -85,7 +85,9 @@ patch_t *frameslash;	// framerate stuff. Used in screen.c
 
 static player_t *plr;
 boolean hu_keystrokes; // :)
+boolean chat_keydown;
 boolean chat_on; // entering a chat message?
+boolean g_voicepushtotalk_on; // holding PTT?
 static char w_chat[HU_MAXMSGLEN + 1];
 static size_t c_input = 0; // let's try to make the chat input less shitty.
 static boolean headsupactive = false;
@@ -302,6 +304,10 @@ void HU_Init(void)
 		REG;
 
 		PR   ("4GTFN");
+		REG;
+
+		DIG  (2);
+		PR   ("GENEFN");
 		REG;
 
 		DIG  (1);
@@ -621,7 +627,7 @@ static void Command_Sayteam_f(void)
 		return;
 	}
 
-	if (G_GametypeHasTeams())	// revert to normal say if we don't have teams in this gametype.
+	if (G_GametypeHasTeams()) // revert to normal say if we don't have teams in this gametype.
 		DoSayPacketFromCommand(-1, 1, 0);
 	else
 		DoSayPacketFromCommand(0, 1, 0);
@@ -706,6 +712,9 @@ static void Got_Saycmd(const UINT8 **p, INT32 playernum)
 		}
 	}
 
+	if (LUA_HookPlayerMsg(playernum, target, flags, msg))
+		return;
+
 	// If it's a CSAY, just CECHO and be done with it.
 	if (flags & HU_CSAY)
 	{
@@ -779,16 +788,8 @@ static void Got_Saycmd(const UINT8 **p, INT32 playernum)
 		}
 		else if (target == -1) // say team
 		{
-			if (players[playernum].ctfteam == 1)
-			{
-				// red text
-				cstart = textcolor = "\x85";
-			}
-			else
-			{
-				// blue text
-				cstart = textcolor = "\x84";
-			}
+			sprintf(color_prefix, "%c", '\x80' + (g_teaminfo[ players[playernum].team ].chat_color >> V_CHARCOLORSHIFT));
+			cstart = textcolor = color_prefix;
 		}
 		else
 		{
@@ -897,6 +898,7 @@ void HU_TickSongCredits(void)
 		cursongcredit.x = cursongcredit.old_x = 0;
 		cursongcredit.anim = 0;
 		cursongcredit.trans = NUMTRANSMAPS;
+		cursongcredit.use_credits_offset = false;
 		return;
 	}
 
@@ -1110,6 +1112,22 @@ void HU_clearChatChars(void)
 //
 boolean HU_Responder(event_t *ev)
 {
+	// Handle Push-to-Talk
+	if (ev->data1 == gamecontrol[0][gc_voicepushtotalk][0]
+		|| ev->data1 == gamecontrol[0][gc_voicepushtotalk][1]
+		|| ev->data1 == gamecontrol[0][gc_voicepushtotalk][2]
+		|| ev->data1 == gamecontrol[0][gc_voicepushtotalk][3])
+	{
+		if (ev->type == ev_keydown && !chat_on)
+		{
+			g_voicepushtotalk_on = true;
+		}
+		else if (ev->type == ev_keyup)
+		{
+			g_voicepushtotalk_on = false;
+		}
+	}
+
 	if (ev->type != ev_keydown)
 		return false;
 
@@ -1593,12 +1611,7 @@ static void HU_DrawChat(void)
 	if (teamtalk)
 	{
 		talk = ttalk;
-#if 0
-		if (players[consoleplayer].ctfteam == 1)
-			t = '\0x85';  // Red
-		else if (players[consoleplayer].ctfteam == 2)
-			t = '\0x84'; // Blue
-#endif
+		//t = '\x80' + (g_teaminfo[ players[consoleplayer].team ].chat_color >> V_CHARCOLORSHIFT);
 	}
 
 	typelines = 1;
@@ -1925,25 +1938,25 @@ static void HU_DrawTitlecardCEcho(size_t num)
 		{
 			INT32 ofs;
 			INT32 timer = (INT32)(elapsed - timeroffset);
-			
+
 			if (timer <= 0)
 				return;	// we don't care.
-			
+
 			line = strchr(echoptr, '\\');
-			
+
 			if (line == NULL)
 				break;
 
 			*line = '\0';
-			
+
 			ofs = V_CenteredTitleCardStringOffset(echoptr, p4);
 			V_DrawTitleCardString(x - ofs, y, echoptr, 0, false, timer, fadeout, p4);
 
 			y += p4 ? 18 : 32;
-			
+
 			// offset the timer for the next line.
 			timeroffset += strlen(echoptr);
-			
+
 			// set the ptr to the \0 we made and advance it because we don't want an empty string.
 			echoptr = line;
 			echoptr++;
@@ -1972,6 +1985,10 @@ void HU_DrawSongCredits(void)
 	fixed_t y;
 
 	if (gamestate == GS_INTERMISSION)
+	{
+		y = (BASEVIDHEIGHT - 13) * FRACUNIT;
+	}
+	else if (cursongcredit.use_credits_offset)
 	{
 		y = (BASEVIDHEIGHT - 13) * FRACUNIT;
 	}
@@ -2138,7 +2155,7 @@ void HU_Erase(void)
 		con_hudupdate = false; // if it was set..
 	}
 #ifdef HWRENDER
-	else if (rendermode != render_none)
+	else if (rendermode == render_opengl)
 	{
 		// refresh just what is needed from the view borders
 		HWR_DrawViewBorder(secondframelines);
@@ -2569,8 +2586,6 @@ static void HU_DrawRankings(void)
 
 		completed[i] = true;
 
-		standings.character[standings.numplayers] = players[i].skin;
-		standings.color[standings.numplayers] = players[i].skincolor;
 		standings.pos[standings.numplayers] = players[i].position;
 
 #define strtime standings.strval[standings.numplayers]
@@ -2607,6 +2622,8 @@ static void HU_DrawRankings(void)
 
 		standings.numplayers++;
 	}
+
+	standings.halfway = (standings.numplayers-1)/2;
 
 	// Returns early if there's no players to draw
 	Y_PlayerStandingsDrawer(&standings, 0);

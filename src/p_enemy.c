@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -321,6 +321,7 @@ void A_BlendEyePuyoHack(mobj_t *actor);
 void A_MakeSSCandle(mobj_t *actor);
 void A_HologramRandomTranslucency(mobj_t *actor);
 void A_SSChainShatter(mobj_t *actor);
+void A_GenericBumper(mobj_t *actor);
 
 //for p_enemy.c
 
@@ -2147,6 +2148,9 @@ void A_VultureFly(mobj_t *actor)
 	fixed_t dx, dy, dz, dxy, dm;
 	mobj_t *dust;
 	fixed_t momm;
+	fixed_t rand_x;
+	fixed_t rand_y;
+	fixed_t rand_z;
 
 	if (LUA_CallAction(A_VULTUREFLY, actor))
 		return;
@@ -2190,7 +2194,11 @@ void A_VultureFly(mobj_t *actor)
 
 	P_VultureHoverParticle(actor);
 
-	dust = P_SpawnMobj(actor->x + P_RandomFixed(PR_UNDEFINED) - FRACUNIT/2, actor->y + P_RandomFixed(PR_UNDEFINED) - FRACUNIT/2, actor->z + actor->height/2 + P_RandomFixed(PR_UNDEFINED) - FRACUNIT/2, MT_PARTICLE);
+	// note: determinate random argument eval order
+	rand_z = P_RandomFixed(PR_UNDEFINED);
+	rand_y = P_RandomFixed(PR_UNDEFINED);
+	rand_x = P_RandomFixed(PR_UNDEFINED);
+	dust = P_SpawnMobj(actor->x + rand_x - FRACUNIT/2, actor->y + rand_y - FRACUNIT/2, actor->z + actor->height/2 + rand_z - FRACUNIT/2, MT_PARTICLE);
 	P_SetScale(dust, 2*FRACUNIT);
 	dust->destscale = FRACUNIT/3;
 	dust->scalespeed = FRACUNIT/40;
@@ -3502,11 +3510,32 @@ void A_AttractChase(mobj_t *actor)
 
 	if (actor->extravalue1 && actor->type != MT_EMERALD) // SRB2Kart
 	{
-		if (!actor->target || P_MobjWasRemoved(actor->target) || !actor->target->player)
+		// Screwed this up for staffghosts, so have a mess.
+		// 1. Insta-Whip's extended punish window used to delete flingrings off you while they were attracting
+		// 2. ALL conditions that deleted flingrings off you didn't decrement pickuprings, desyncing your ring count
+		boolean stale = (!actor->target || P_MobjWasRemoved(actor->target) || !actor->target->player);
+		boolean blocked = false;
+
+		if (!stale)
 		{
-			P_RemoveMobj(actor);
-			return;
+			blocked = actor->target->player->baildrop;
+			if (G_CompatLevel(0x0010))
+				blocked |= !!(actor->target->player->bailcharge || actor->target->player->defenseLockout > PUNISHWINDOW);
 		}
+
+		if (!G_CompatLevel(0x0010) || actor->extravalue2)
+		{
+			if (stale || blocked)
+			{
+				if (!G_CompatLevel(0x0010) && !stale)
+					if (actor->target->player->pickuprings)
+						actor->target->player->pickuprings--;
+
+				P_RemoveMobj(actor);
+				return;
+			}
+		}
+
 
 		if (actor->extravalue2) // Using for ring boost
 		{
@@ -3519,13 +3548,13 @@ void A_AttractChase(mobj_t *actor)
 				angle_t offset = FixedAngle(18<<FRACBITS);
 
 				// Base add is 3 tics for 9,9, adds 1 tic for each point closer to the 1,1 end
-				actor->target->player->ringboost += K_GetKartRingPower(actor->target->player, true) + 3;
+				actor->target->player->ringboost += K_GetFullKartRingPower(actor->target->player, true);
 
 				S_ReducedVFXSoundAtVolume(actor->target, sfx_s1b5, actor->target->player->ringvolume, NULL);
 
 				if (actor->target->player->rings <= 10 && P_IsDisplayPlayer(actor->target->player))
 				{
-					S_ReducedVFXSoundAtVolume(actor->target, sfx_gshab, 
+					S_ReducedVFXSoundAtVolume(actor->target, sfx_gshab,
 						210 - 10*actor->target->player->rings
 					, NULL);
 
@@ -3558,7 +3587,7 @@ void A_AttractChase(mobj_t *actor)
 				fixed_t offsZ = FixedMul(actor->movefactor, offsFrac);
 
 				//P_SetScale(actor, (actor->destscale = actor->target->scale));
-				K_MatchGenericExtraFlags(actor, actor->target);
+				K_MatchGenericExtraFlagsNoZAdjust(actor, actor->target);
 
 				P_MoveOrigin(
 					actor,
@@ -3575,7 +3604,7 @@ void A_AttractChase(mobj_t *actor)
 			if (actor->extravalue1 >= 16)
 			{
 				if (!P_GivePlayerRings(actor->target->player, 1)) // returns 0 if addition failed
-					actor->target->player->ringboost += K_GetKartRingPower(actor->target->player, true) + 3;
+					actor->target->player->ringboost += K_GetFullKartRingPower(actor->target->player, true);
 
 				if (actor->cvmem) // caching
 					S_StartSound(actor->target, sfx_s1c5);
@@ -3585,7 +3614,9 @@ void A_AttractChase(mobj_t *actor)
 				actor->target->player->ringvolume -= RINGVOLUMECOLLECTPENALTY;
 				actor->target->player->ringtransparency -= RINGTRANSPARENCYCOLLECTPENALTY;
 
-				actor->target->player->pickuprings--;
+				if (actor->target->player->pickuprings || !G_CompatLevel(0x0011))
+					actor->target->player->pickuprings--;
+
 				P_RemoveMobj(actor);
 				return;
 			}
@@ -3595,7 +3626,7 @@ void A_AttractChase(mobj_t *actor)
 
 				P_SetScale(actor, (actor->destscale = mapobjectscale - ((mapobjectscale/14) * actor->extravalue1)));
 				actor->z = actor->target->z;
-				K_MatchGenericExtraFlags(actor, actor->target);
+				K_MatchGenericExtraFlagsNoZAdjust(actor, actor->target);
 				P_MoveOrigin(actor,
 					actor->target->x + FixedMul(dist, FINECOSINE(actor->angle >> ANGLETOFINESHIFT)),
 					actor->target->y + FixedMul(dist, FINESINE(actor->angle >> ANGLETOFINESHIFT)),
@@ -3640,7 +3671,7 @@ void A_AttractChase(mobj_t *actor)
 			if (
 				actor->tracer->player && actor->tracer->health
 				&& ((gametyperules & GTR_SPHERES)
-					|| (actor->tracer->player->itemtype == KITEM_LIGHTNINGSHIELD
+					|| (actor->tracer->player->curshield == KSHIELD_LIGHTNING
 					&& RINGTOTAL(actor->tracer->player) < 20
 					&& !(actor->tracer->player->pflags & PF_RINGLOCK)))
 				//&& P_CheckSight(actor, actor->tracer)
@@ -3791,7 +3822,13 @@ void A_FishJump(mobj_t *actor)
 		if (i < MAXPLAYERS)
 		{
 			fixed_t rad = actor->radius>>FRACBITS;
-			P_SpawnMobjFromMobj(actor, P_RandomRange(PR_UNDEFINED, rad, -rad)<<FRACBITS, P_RandomRange(PR_UNDEFINED, rad, -rad)<<FRACBITS, 0, (mobjtype_t)locvar2);
+			fixed_t rand_x;
+			fixed_t rand_y;
+
+			// note: determinate random argument eval order
+			rand_y = P_RandomRange(PR_UNDEFINED, rad, -rad);
+			rand_x = P_RandomRange(PR_UNDEFINED, rad, -rad);
+			P_SpawnMobjFromMobj(actor, rand_x<<FRACBITS, rand_y<<FRACBITS, 0, (mobjtype_t)locvar2);
 		}
 	}
 
@@ -3883,7 +3920,7 @@ void A_OverlayThink(mobj_t *actor)
 	if (!actor->target)
 		return;
 
-	if (!r_splitscreen && rendermode != render_soft)
+	if (!r_splitscreen && rendermode == render_opengl)
 	{
 		angle_t viewingangle;
 
@@ -5128,10 +5165,7 @@ void A_OldRingExplode(mobj_t *actor) {
 
 		if (changecolor)
 		{
-			if (!(gametyperules & GTR_TEAMS))
-				mo->color = actor->target->color; //copy color
-			else if (actor->target->player->ctfteam == 2)
-				mo->color = skincolor_bluering;
+			P_ColorTeamMissile(mo, actor->target->player);
 		}
 	}
 
@@ -5144,10 +5178,7 @@ void A_OldRingExplode(mobj_t *actor) {
 
 	if (changecolor)
 	{
-		if (!(gametyperules & GTR_TEAMS))
-			mo->color = actor->target->color; //copy color
-		else if (actor->target->player->ctfteam == 2)
-			mo->color = skincolor_bluering;
+		P_ColorTeamMissile(mo, actor->target->player);
 	}
 
 	mo = P_SpawnMobj(actor->x, actor->y, actor->z, locvar1);
@@ -5159,10 +5190,7 @@ void A_OldRingExplode(mobj_t *actor) {
 
 	if (changecolor)
 	{
-		if (!(gametyperules & GTR_TEAMS))
-			mo->color = actor->target->color; //copy color
-		else if (actor->target->player->ctfteam == 2)
-			mo->color = skincolor_bluering;
+		P_ColorTeamMissile(mo, actor->target->player);
 	}
 }
 
@@ -10346,6 +10374,9 @@ void A_FlameParticle(mobj_t *actor)
 	mobjtype_t type = (mobjtype_t)(mobjinfo[actor->type].painchance);
 	fixed_t rad, hei;
 	mobj_t *particle;
+	fixed_t rand_x;
+	fixed_t rand_y;
+	fixed_t rand_z;
 
 	if (LUA_CallAction(A_FLAMEPARTICLE, actor))
 		return;
@@ -10355,10 +10386,14 @@ void A_FlameParticle(mobj_t *actor)
 
 	rad = actor->radius>>FRACBITS;
 	hei = actor->height>>FRACBITS;
+	// note: determinate random argument eval order
+	rand_z = P_RandomRange(PR_DECORATION, hei/2, hei);
+	rand_y = P_RandomRange(PR_DECORATION, rad, -rad);
+	rand_x = P_RandomRange(PR_DECORATION, rad, -rad);
 	particle = P_SpawnMobjFromMobj(actor,
-		P_RandomRange(PR_DECORATION, rad, -rad)<<FRACBITS,
-		P_RandomRange(PR_DECORATION, rad, -rad)<<FRACBITS,
-		P_RandomRange(PR_DECORATION, hei/2, hei)<<FRACBITS,
+		rand_x<<FRACBITS,
+		rand_y<<FRACBITS,
+		rand_z<<FRACBITS,
 		type);
 	P_SetObjectMomZ(particle, 2<<FRACBITS, false);
 }
@@ -10542,9 +10577,17 @@ void A_MineExplode(mobj_t *actor)
 		P_SpawnMobj(actor->x, actor->y, actor->z, type);
 		for (i = 0; i < 16; i++)
 		{
-			mobj_t *b = P_SpawnMobj(actor->x+P_RandomRange(PR_EXPLOSION, -dist, dist)*FRACUNIT,
-				actor->y+P_RandomRange(PR_EXPLOSION, -dist, dist)*FRACUNIT,
-				actor->z+P_RandomRange(PR_EXPLOSION, ((actor->eflags & MFE_UNDERWATER) ? -dist : 0), dist)*FRACUNIT,
+			fixed_t rand_x;
+			fixed_t rand_y;
+			fixed_t rand_z;
+
+			// note: determinate random argument eval order
+			rand_z = P_RandomRange(PR_EXPLOSION, ((actor->eflags & MFE_UNDERWATER) ? -dist : 0), dist);
+			rand_y = P_RandomRange(PR_EXPLOSION, -dist, dist);
+			rand_x = P_RandomRange(PR_EXPLOSION, -dist, dist);
+			mobj_t *b = P_SpawnMobj(actor->x+rand_x*FRACUNIT,
+				actor->y+rand_y*FRACUNIT,
+				actor->z+rand_z*FRACUNIT,
 				type);
 			fixed_t dx = b->x - actor->x, dy = b->y - actor->y, dz = b->z - actor->z;
 			fixed_t dm = P_AproxDistance(dz, P_AproxDistance(dy, dx));
@@ -12109,9 +12152,16 @@ void A_JawzExplode(mobj_t *actor)
 	while (shrapnel)
 	{
 		INT32 speed, speed2;
+		fixed_t rand_x;
+		fixed_t rand_y;
+		fixed_t rand_z;
 
-		truc = P_SpawnMobj(actor->x + P_RandomRange(PR_EXPLOSION, -8, 8)*FRACUNIT, actor->y + P_RandomRange(PR_EXPLOSION, -8, 8)*FRACUNIT,
-			actor->z + P_RandomRange(PR_EXPLOSION, 0, 8)*FRACUNIT, MT_BOOMPARTICLE);
+		// note: determinate random argument eval order
+		rand_z = P_RandomRange(PR_EXPLOSION, 0, 8);
+		rand_y = P_RandomRange(PR_EXPLOSION, -8, 8);
+		rand_x = P_RandomRange(PR_EXPLOSION, -8, 8);
+		truc = P_SpawnMobj(actor->x + rand_x*FRACUNIT, actor->y + rand_y*FRACUNIT,
+			actor->z + rand_z*FRACUNIT, MT_BOOMPARTICLE);
 		truc->scale = actor->scale*2;
 
 		speed = FixedMul(7*FRACUNIT, actor->scale)>>FRACBITS;
@@ -12212,7 +12262,18 @@ void A_BallhogExplode(mobj_t *actor)
 	mo2 = P_SpawnMobj(actor->x, actor->y, actor->z, MT_BALLHOGBOOM);
 	P_SetScale(mo2, actor->scale*2);
 	mo2->destscale = mo2->scale;
+	P_SetTarget(&mo2->target, actor->target);
 	S_StartSound(mo2, actor->info->deathsound);
+
+	if (actor->target && !P_MobjWasRemoved(actor->target) && actor->target->player)
+	{
+		mo2->color = actor->target->color;
+		mo2->colorized = true;
+	}
+
+	P_StartQuakeFromMobj(7, 50 * actor->scale, 1024 * actor->scale, actor);
+
+	actor->fuse = 1;
 	return;
 }
 
@@ -12222,7 +12283,7 @@ void A_SpecialStageBombExplode(mobj_t *actor)
 		return;
 
 	K_SpawnLandMineExplosion(actor, SKINCOLOR_KETCHUP, actor->hitlag);
-	P_StartQuakeFromMobj(TICRATE/6, 24 * actor->scale, 512 * mapobjectscale, actor);
+	//P_StartQuakeFromMobj(7, 80 * actor->scale, 4096 * mapobjectscale, actor);
 }
 
 // A_LightningFollowPlayer:
@@ -12288,8 +12349,16 @@ void A_FZBoomSmoke(mobj_t *actor)
 
 	for (i = 0; i < 8+(4*var1); i++)
 	{
-		mobj_t *smoke = P_SpawnMobj(actor->x + (P_RandomRange(PR_SMOLDERING, -rad, rad)*actor->scale), actor->y + (P_RandomRange(PR_SMOLDERING, -rad, rad)*actor->scale),
-			actor->z + (P_RandomRange(PR_SMOLDERING, 0, 72)*actor->scale), MT_THOK);
+		fixed_t rand_x;
+		fixed_t rand_y;
+		fixed_t rand_z;
+
+		// note: determinate random argument eval order
+		rand_z = P_RandomRange(PR_SMOLDERING, 0, 72);
+		rand_y = P_RandomRange(PR_SMOLDERING, -rad, rad);
+		rand_x = P_RandomRange(PR_SMOLDERING, -rad, rad);
+		mobj_t *smoke = P_SpawnMobj(actor->x + (rand_x*actor->scale), actor->y + (rand_y*actor->scale),
+			actor->z + (rand_z*actor->scale), MT_THOK);
 
 		P_SetMobjState(smoke, S_FZEROSMOKE1);
 		smoke->tics += P_RandomRange(PR_SMOLDERING, -3, 4);
@@ -12512,12 +12581,19 @@ A_SpawnItemDebrisCloud (mobj_t *actor)
 	{
 		const INT16 spacing =
 			(target->radius / 2) / target->scale;
+		fixed_t rand_x;
+		fixed_t rand_y;
+		fixed_t rand_z;
 
+		// note: determinate random argument evaluation order
+		rand_z = P_RandomRange(PR_ITEM_DEBRIS, 0, 4 * spacing);
+		rand_y = P_RandomRange(PR_ITEM_DEBRIS, -spacing, spacing);
+		rand_x = P_RandomRange(PR_ITEM_DEBRIS, -spacing, spacing);
 		mobj_t *puff = P_SpawnMobjFromMobj(
 				target,
-				P_RandomRange(PR_ITEM_DEBRIS, -spacing, spacing) * FRACUNIT,
-				P_RandomRange(PR_ITEM_DEBRIS, -spacing, spacing) * FRACUNIT,
-				P_RandomRange(PR_ITEM_DEBRIS, 0, 4 * spacing) * FRACUNIT,
+				rand_x * FRACUNIT,
+				rand_y * FRACUNIT,
+				rand_z * FRACUNIT,
 				MT_SPINDASHDUST
 		);
 
@@ -12675,4 +12751,55 @@ void A_SSChainShatter(mobj_t* actor)
 	S_StartSound(NULL, sfx_chcrun);
 
 	actor->fuse = 1;
+}
+
+// var1 = If -1, triggered by collision event
+// var2 = Strength value
+//
+// mobjinfo dependencies:
+// - deathsound - bumper noise
+// - seestate - bumper flashing state
+//
+void A_GenericBumper(mobj_t* actor)
+{
+	if (var1 != -1)
+		return;
+
+	mobj_t *other = actor->target;
+
+	if (!other)
+		return;
+
+	// This code was ported from Lua
+	// Original was Balloon Park's bumpers?
+	INT32 hang = R_PointToAngle2(
+		actor->x, actor->y,
+		other->x, other->y
+	);
+
+	INT32 vang = 0;
+
+	if (!P_IsObjectOnGround(other))
+	{
+		vang = R_PointToAngle2(
+			FixedHypot(actor->x, actor->y), actor->z + (actor->height / 2),
+			FixedHypot(other->x, other->y), other->z + (other->height / 2)
+		);
+	}
+
+	INT32 baseStrength = abs(astate->var2);
+	fixed_t strength = (baseStrength * actor->scale) / 2;
+
+	other->momx = FixedMul(FixedMul(strength, FCOS(hang)), abs(FCOS(vang)));
+	other->momy = FixedMul(FixedMul(strength, FSIN(hang)), abs(FCOS(vang)));
+	other->momz = FixedMul(strength, FSIN(vang));
+
+	if (other->player)
+		K_SetTireGrease(other->player, max(other->player->tiregrease, 2*TICRATE));
+
+	if (actor->state != &states[actor->info->seestate])
+	{
+		S_StartSound(actor, actor->info->deathsound);
+		P_SetMobjState(actor, actor->info->seestate);
+	}
 }

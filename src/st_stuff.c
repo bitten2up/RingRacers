@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -34,7 +34,7 @@
 #include "p_setup.h" // NiGHTS grading
 #include "r_fps.h"
 #include "m_random.h" // random index
-#include "m_cond.h" // item finder
+#include "k_director.h" // K_DirectorIsEnabled
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -96,13 +96,11 @@ boolean ST_SameTeam(player_t *a, player_t *b)
 	if (G_GametypeHasTeams() == true)
 	{
 		// You get team messages if you're on the same team.
-		return (a->ctfteam == b->ctfteam);
+		return (a->team == b->team);
 	}
-	else
-	{
-		// Not that everyone's not on the same team, but team messages go to normal chat if everyone's not in the same team.
-		return true;
-	}
+
+	// Not that everyone's not on the same team, but team messages go to normal chat if everyone's not in the same team.
+	return true;
 }
 
 static boolean st_stopped = true;
@@ -125,7 +123,7 @@ void ST_doPaletteStuff(void)
 {
 	INT32 palette;
 
-	if (stplyr && stplyr->flashcount)
+	if (stplyr && stplyr->flashcount && cv_reducevfx.value == 0)
 		palette = stplyr->flashpal;
 	else
 		palette = 0;
@@ -181,7 +179,7 @@ void ST_LoadGraphics(void)
 void ST_LoadFaceGraphics(INT32 skinnum)
 {
 #define FACE_MAX (FACE_MINIMAP+1)
-	spritedef_t *sprdef = &skins[skinnum].sprites[SPR2_XTRA];
+	spritedef_t *sprdef = &skins[skinnum]->sprites[SPR2_XTRA];
 	spriteframe_t *sprframe;
 	UINT8 i = 0, maxer = min(sprdef->numframes, FACE_MAX);
 	while (i < maxer)
@@ -500,22 +498,33 @@ void ST_drawDebugInfo(void)
 		camera_t *cam = &camera[screen];
 		if (stplyr->spectator || cam->freecam)
 		{
-			const fixed_t d = AngleFixed(cam->angle);
-			V_DrawRightAlignedString(320, height - 24, V_MONOSPACE, va("X: %6d", cam->x>>FRACBITS));
-			V_DrawRightAlignedString(320, height - 16, V_MONOSPACE, va("Y: %6d", cam->y>>FRACBITS));
-			V_DrawRightAlignedString(320, height - 8, V_MONOSPACE, va("Z: %6d", cam->z>>FRACBITS));
-			V_DrawRightAlignedString(320, height, V_MONOSPACE, va("A: %6d", FixedInt(d)));
+			const fixed_t a = AngleFixed(cam->angle);
+			fixed_t p = AngleFixed(cam->aiming);
+
+			if (p > (180 * FRACUNIT))
+			{
+				p = -((360 * FRACUNIT) - p);
+			}
+
+			V_DrawRightAlignedString(320, height - 32, V_MONOSPACE, va("X: %6d", cam->x>>FRACBITS));
+			V_DrawRightAlignedString(320, height - 24, V_MONOSPACE, va("Y: %6d", cam->y>>FRACBITS));
+			V_DrawRightAlignedString(320, height - 16, V_MONOSPACE, va("Z: %6d", cam->z>>FRACBITS));
+			V_DrawRightAlignedString(320, height - 8, V_MONOSPACE, va("A: %6d", FixedInt(a)));
+			V_DrawRightAlignedString(320, height, V_MONOSPACE, va("P: %6d", FixedInt(p)));
+
+			height -= 48;
 		}
 		else
 		{
 			const fixed_t d = AngleFixed(stplyr->mo->angle);
+
 			V_DrawRightAlignedString(320, height - 24, V_MONOSPACE, va("X: %6d", stplyr->mo->x>>FRACBITS));
 			V_DrawRightAlignedString(320, height - 16, V_MONOSPACE, va("Y: %6d", stplyr->mo->y>>FRACBITS));
 			V_DrawRightAlignedString(320, height - 8, V_MONOSPACE, va("Z: %6d", stplyr->mo->z>>FRACBITS));
 			V_DrawRightAlignedString(320, height, V_MONOSPACE, va("A: %6d", FixedInt(d)));
-		}
 
-		height -= 40;
+			height -= 40;
+		}
 	}
 
 	if (cht_debug & DBG_DETAILED)
@@ -728,6 +737,8 @@ void ST_startTitleCard(void)
 	lt_ticker = lt_exitticker = lt_lasttic = 0;
 	lt_endtime = 4*TICRATE;	// + (10*NEWTICRATERATIO);
 	lt_fade = 0;
+
+	WipeStageTitle = false;
 }
 
 //
@@ -779,7 +790,7 @@ patch_t *ST_getRoundPicture(boolean small)
 //
 void ST_runTitleCard(void)
 {
-	boolean run = !(paused || P_AutoPause() || g_fast_forward > 0);
+	boolean run = !(paused || P_AutoPause() || (g_fast_forward > 0 && demo.simplerewind == DEMO_REWIND_OFF));
 	INT32 auxticker;
 	boolean doroundicon = (ST_getRoundPicture(false) != NULL);
 
@@ -1369,11 +1380,11 @@ static INT32 ST_ServerSplash_OpacityFlag(INT32 opacity)
 	return (NUMTRANSMAPS - opacity) << V_ALPHASHIFT;
 }
 
+#define SPLASH_LEN ((FRACUNIT * TICRATE) * 3)
+#define SPLASH_WAIT ((FRACUNIT * TICRATE) / 2)
+
 void ST_DrawServerSplash(boolean timelimited)
 {
-	static const fixed_t SPLASH_LEN = (FRACUNIT * TICRATE) * 3;
-	static const fixed_t SPLASH_WAIT = (FRACUNIT * TICRATE) / 2;
-
 	static fixed_t splashTime = -SPLASH_WAIT;
 	static char prevContext[8] = {0};
 
@@ -1487,11 +1498,22 @@ void ST_DrawServerSplash(boolean timelimited)
 
 void ST_DrawSaveReplayHint(INT32 flags)
 {
-	V_DrawRightAlignedThinString(
-		BASEVIDWIDTH - 2, 2,
-		flags|V_YELLOWMAP,
-		(demo.willsave && demo.titlename[0]) ? "Replay will be saved.  \xAB Change title" : "\xAB or \xAD Save replay"
-	);
+	const char *text;
+	if (gamestate == GS_LEVEL && camera[0].freecam)
+	{
+		text = va(
+			"<c> Disable Freecam to <b_pressed> %s replay",
+			(demo.willsave && demo.titlename[0])
+				? "rename"
+				: "save"
+		);
+	}
+	else if (demo.willsave && demo.titlename[0])
+		text = "Replay will be saved.  <b> Change title";
+	else
+		text = "<b> Save replay";
+
+	K_DrawGameControl(BASEVIDWIDTH - 2, 2, 0, text, 2, TINY_FONT, flags|V_YELLOWMAP);
 }
 
 static fixed_t ST_CalculateFadeIn(player_t *player)
@@ -1559,6 +1581,20 @@ void ST_Drawer(void)
 	if (rendermode == render_soft)
 #endif
 		if (rendermode != render_none) ST_doPaletteStuff();
+
+#ifdef BETAVERSION
+
+	if (g_takemapthumbnail == TMT_NO)
+	{
+		char nag[256];
+		snprintf(nag, sizeof(nag), "KartKrew.org - %s %s - Pre-release testing version", SRB2VERSION, BETAVERSION);
+
+		V_DrawCenteredMenuString(BASEVIDWIDTH/2, 2, V_60TRANS|V_SNAPTOTOP, nag);
+
+		V_DrawCenteredMenuString(BASEVIDWIDTH/2, BASEVIDHEIGHT - 10, V_60TRANS|V_SNAPTOBOTTOM, nag);
+	}
+
+#endif
 
 	fixed_t localfadein[MAXSPLITSCREENPLAYERS];
 

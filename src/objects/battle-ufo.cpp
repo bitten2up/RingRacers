@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by SteelT.
-// Copyright (C) 2024 by James Robert Roman.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by SteelT.
+// Copyright (C) 2025 by James Robert Roman.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -31,7 +31,7 @@ using srb2::math::Fixed;
 using srb2::Mobj;
 using srb2::MobjList;
 
-extern consvar_t cv_battleufotest;
+extern "C" consvar_t cv_battleufotest;
 
 extern mobj_t* svg_battleUfoSpawners;
 
@@ -132,7 +132,7 @@ public:
 
 		Spawner* spawner = next(g_battleufo.previousId);
 		UFO* ufo = static_cast<UFO*>(P_SpawnMobjFromMobj(spawner, 0, 0, 250*FRACUNIT - ofs, MT_BATTLEUFO));
-		
+
 		K_AddMessage("Crack the Combat UFO!", true, false);
 		S_StartSound(NULL, sfx_mbs54);
 
@@ -286,4 +286,9 @@ void Obj_BattleUFOBeamThink(mobj_t *beam)
 INT32 Obj_BattleUFOSpawnerID(const mobj_t *spawner)
 {
 	return static_cast<const Spawner*>(spawner)->id();
+}
+
+mobj_t *Obj_GetNextUFOSpawner(void)
+{
+	return g_spawners.next(g_battleufo.previousId);
 }

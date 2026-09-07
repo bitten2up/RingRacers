@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 // Copyright (C) 2000 by DooM Legacy Team.
@@ -21,7 +21,42 @@
 #include "m_random.h"
 #include "m_fixed.h"
 
-
+char rng_class_names[34][30] = {
+	"UNDEFINED",
+	"EXECUTOR",
+	"ACS",
+	"DECORATION",
+	"TERRAIN",
+	"BUBBLE",
+	"RANDOMANIM",
+	"PLAYERSTARTS",
+	"VOICES",
+	"RANDOMSKIN",
+	"RANDOMAUDIENCE",
+	"RULESCRAMBLE",
+	"MUSICSELECT",
+	"ITEM_ROULETTE",
+	"ITEM_RINGS",
+	"ITEM_SHRINK",
+	"ITEM_BUBBLE",
+	"ITEM_DEBRIS",
+	"ITEM_BOOST",
+	"EXPLOSION",
+	"SMOLDERING",
+	"SPARKLE",
+	"MOVINGTARGET",
+	"TRACKHAZARDD",
+	"BATTLEUFO",
+	"BOTS",
+	"AUTOROULETTE",
+	"FUZZ",
+	"FROSTTHROWERS",
+	"ITEM_SPAWNER",
+	"TEAMS",
+	"DUMMY",
+	"INTERPHUDRANDOM",
+	"NUISANCE"
+};
 
 // ---------------------------
 // RNG functions (not synched)
@@ -145,7 +180,7 @@ ATTRINLINE static UINT32 FUNCINLINE __internal_prng__(pr_class_t pr_class)
 
 /** Provides a random number within a specified range.
   *
-  * \return A random, uniformly distributed number from [0,bound].
+  * \return A random, uniformly distributed integer from [0,bound).
   */
 ATTRINLINE static UINT32 FUNCINLINE __internal_prng_bound__(pr_class_t pr_class, UINT32 bound)
 {

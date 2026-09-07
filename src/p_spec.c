@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -16,6 +16,7 @@
 ///        utility functions, etc.
 ///        Line Tag handling. Line and Sector triggers.
 
+#include "d_think.h"
 #include "dehacked.h"
 #include "doomdef.h"
 #include "g_game.h"
@@ -52,6 +53,9 @@
 #include "m_easing.h"
 #include "music.h"
 #include "k_battle.h" // battleprisons
+#include "k_endcam.h" // K_EndCameraIsFreezing()
+#include "k_race.h" // K_SpawnFinishEXP
+#include "k_grandprix.h" // grandprixinfo
 
 // Not sure if this is necessary, but it was in w_wad.c, so I'm putting it here too -Shadow Hog
 #include <errno.h>
@@ -149,8 +153,8 @@ static void GrowAnimDefs(void)
 }
 
 // A prototype; here instead of p_spec.h, so they're "private"
-void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum);
-void P_ParseAnimationDefintion(void);
+void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum, boolean photosens);
+void P_ParseAnimationDefintion(boolean photosens);
 
 /** Sets up texture and flat animations.
   *
@@ -177,12 +181,24 @@ void P_InitPicAnims(void)
 	{
 		UINT16 animdefsLumpNum;
 
+		if (cv_reducevfx.value)
+		{
+			// Find RVFXANIM lump in the WAD *first*
+			animdefsLumpNum = W_CheckNumForNamePwad("RVFXANIM", w, 0);
+
+			while (animdefsLumpNum != INT16_MAX)
+			{
+				P_ParseANIMDEFSLump(w, animdefsLumpNum, true);
+				animdefsLumpNum = W_CheckNumForNamePwad("RVFXANIM", (UINT16)w, animdefsLumpNum + 1);
+			}
+		}
+
 		// Find ANIMDEFS lump in the WAD
 		animdefsLumpNum = W_CheckNumForNamePwad("ANIMDEFS", w, 0);
 
 		while (animdefsLumpNum != INT16_MAX)
 		{
-			P_ParseANIMDEFSLump(w, animdefsLumpNum);
+			P_ParseANIMDEFSLump(w, animdefsLumpNum, false);
 			animdefsLumpNum = W_CheckNumForNamePwad("ANIMDEFS", (UINT16)w, animdefsLumpNum + 1);
 		}
 	}
@@ -234,7 +250,7 @@ void P_InitPicAnims(void)
 	animdefs = NULL;
 }
 
-void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum)
+void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum, boolean photosens)
 {
 	char *animdefsLump;
 	size_t animdefsLumpLength;
@@ -267,7 +283,7 @@ void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum)
 		if (stricmp(animdefsToken, "TEXTURE") == 0)
 		{
 			Z_Free(animdefsToken);
-			P_ParseAnimationDefintion();
+			P_ParseAnimationDefintion(photosens);
 		}
 		else if (stricmp(animdefsToken, "FLAT") == 0)
 		{
@@ -282,16 +298,20 @@ void P_ParseANIMDEFSLump(INT32 wadNum, UINT16 lumpnum)
 		{
 			I_Error("Error parsing ANIMDEFS lump: Expected \"TEXTURE\", got \"%s\"",animdefsToken);
 		}
-		// parse next line
-		while (*p != '\0' && *p != '\n') ++p;
-		if (*p == '\n') ++p;
+
+		do // get next content line to parse
+		{
+			while (*p != '\0' && *p != '\n') ++p; // skips content of evaluated line
+			while (*p == '\n') ++p; // skips extra blank lines
+		} while (*p == '/' && *(p+1) == '/'); // skips comments
+
 		animdefsToken = M_GetToken(p);
 	}
 	Z_Free(animdefsToken);
 	Z_Free((void *)animdefsText);
 }
 
-void P_ParseAnimationDefintion(void)
+void P_ParseAnimationDefintion(boolean photosens)
 {
 	char *animdefsToken;
 	size_t animdefsTokenLength;
@@ -431,6 +451,12 @@ void P_ParseAnimationDefintion(void)
 		|| animSpeed < 0) // Number is not positive
 	{
 		I_Error("Error parsing ANIMDEFS lump: Expected a positive integer for \"%s\"'s animation speed, got \"%s\"", animdefs[i].startname, animdefsToken);
+	}
+	// Not letting anyone mess up a photosensitivity feature like this.
+	if ((photosens) && animSpeed < 8)
+	{
+		CONS_Alert(CONS_WARNING, M_GetText("RVFXANIM: Animation speed of \"%s\" is less than 8 - automatically set to 8\n"), animdefs[i].startname);
+		animSpeed = 8;
 	}
 	animdefs[i].speed = animSpeed;
 	Z_Free(animdefsToken);
@@ -1297,7 +1323,9 @@ static void P_AddExecutorDelay(line_t *line, mobj_t *mobj, sector_t *sector)
 		delay = (line->backsector->ceilingheight >> FRACBITS) + (line->backsector->floorheight >> FRACBITS);
 	}
 
-	e = Z_Calloc(sizeof (*e), PU_LEVSPEC, NULL);
+	e = Z_LevelPoolCalloc(sizeof (*e));
+	e->thinker.alloctype = TAT_LEVELPOOL;
+	e->thinker.size = sizeof (*e);
 
 	e->thinker.function.acp1 = (actionf_p1)T_ExecutorDelay;
 	e->line = line;
@@ -1535,7 +1563,7 @@ boolean P_RunTriggerLinedef(line_t *triggerline, mobj_t *actor, sector_t *caller
 			// Only red/blue team members can activate this.
 			if (!(actor && actor->player))
 				return false;
-			if (actor->player->ctfteam != ((triggerline->args[1] == TMT_RED) ? 1 : 2))
+			if (actor->player->team != ((triggerline->args[1] == TMT_ORANGE) ? TEAM_ORANGE : TEAM_BLUE))
 				return false;
 			break;
 		case 314:
@@ -1586,7 +1614,7 @@ boolean P_RunTriggerLinedef(line_t *triggerline, mobj_t *actor, sector_t *caller
 				return false;
 			if (!triggerline->stringargs[0])
 				return false;
-			if (!(stricmp(triggerline->stringargs[0], skins[actor->player->skin].name) == 0) ^ !!(triggerline->args[1]))
+			if (!(stricmp(triggerline->stringargs[0], skins[actor->player->skin]->name) == 0) ^ !!(triggerline->args[1]))
 				return false;
 			break;
 		case 334: // object dye
@@ -1936,7 +1964,7 @@ static void K_HandleLapIncrement(player_t *player)
 		if (!G_TimeAttackStart() && leveltime < starttime && !(gametyperules & GTR_ROLLINGSTART))
 		{
 			// freeze 'em until fault penalty is over
-			player->mo->hitlag = starttime - leveltime + TICRATE*3;
+			player->mo->hitlag = starttime - leveltime + 2*TICRATE;
 			P_ResetPlayer(player);
 			player->pflags |= PF_VOID;
 			player->mo->renderflags |= RF_DONTDRAW;
@@ -1962,6 +1990,13 @@ static void K_HandleLapIncrement(player_t *player)
 			{
 				S_StartSound(player->mo, sfx_s3kb2);
 			}
+
+			player->karthud[khud_splitcolor] = 0;
+			player->karthud[khud_splitposition] = 1;
+			player->karthud[khud_splitskin] = -1;
+			player->karthud[khud_splittime] = (INT32)(starttime - leveltime);
+			player->karthud[khud_splittimer] = 3*TICRATE;
+			player->karthud[khud_splitwin] = -2;
 
 			return;
 		}
@@ -2015,10 +2050,11 @@ static void K_HandleLapIncrement(player_t *player)
 			{
 				UINT32 skinflags = (demo.playback)
 					? demo.skinlist[demo.currentskinid[(player-players)]].flags
-					: skins[player->skin].flags;
+					: skins[player->skin]->flags;
 				if (skinflags & SF_IRONMAN)
 				{
-					SetRandomFakePlayerSkin(player, true, false);
+					if ((player->laps == 1 && lapisfresh) || !K_InRaceDuel()) // We'll do this in K_CheckpointCrossAward if necessary.
+						SetRandomFakePlayerSkin(player, true, false);
 				}
 
 				// Always trust waypoints entering the first lap.
@@ -2031,17 +2067,35 @@ static void K_HandleLapIncrement(player_t *player)
 				K_UpdateAllPlayerPositions(); // P_DoPlayerExit calls this
 			}
 
-			if (G_TimeAttackStart() && !linecrossed)
+			if (!G_TimeAttackStart() && !(gametyperules & GTR_ROLLINGSTART) && player->laps == 1 && lapisfresh)
 			{
-				linecrossed = leveltime;
-				if (starttime > leveltime) // Overlong starts shouldn't reset time on cross
-					starttime = leveltime;
-				if (demo.recording)
-					demo_extradata[player-players] |= DXD_START;
-				Music_Stop("position");
+				boolean setupsplits = false;
+
+				if (rainbowstartavailable)
+				{
+					// CONS_Printf("%d: %s gimme first blood\n", leveltime, player_names[player - players]);
+					player->pflags2 |= PF2_GIMMEFIRSTBLOOD;
+					setupsplits = true;
+				}
+				else if (!K_InRaceDuel() && M_NotFreePlay())
+				{
+					// CONS_Printf("%d: %s gimme start award\n", leveltime, player_names[player - players]);
+					player->pflags2 |= PF2_GIMMESTARTAWARDS;
+					setupsplits = true;
+				}
+
+				if (setupsplits)
+				{
+					player->karthud[khud_splitcolor] = 0;
+					player->karthud[khud_splitposition] = 1;
+					player->karthud[khud_splitskin] = -1;
+					player->karthud[khud_splittime] = (INT32)(starttime - leveltime);
+					player->karthud[khud_splittimer] = 2*TICRATE;
+					player->karthud[khud_splitwin] = (rainbowstartavailable) ? 2 : 0;
+				}
 			}
 
-			if (rainbowstartavailable == true && player->mo->hitlag == 0)
+			if (rainbowstartavailable == true && player->mo->hitlag == 0 && G_TimeAttackStart())
 			{
 				S_StartSound(player->mo, sfx_s23c);
 				player->startboost = 125;
@@ -2069,7 +2123,9 @@ static void K_HandleLapIncrement(player_t *player)
 			}
 			else if (P_IsDisplayPlayer(player))
 			{
-				if (numlaps > 1 && player->laps == numlaps) // final lap
+				if (K_InRaceDuel())
+					S_StartSound(NULL, sfx_s221);
+				else if (numlaps > 1 && player->laps == numlaps) // final lap
 					S_StartSound(NULL, sfx_s3k68);
 				else if ((player->laps > 1) && (player->laps < numlaps)) // non-final lap
 					S_StartSound(NULL, sfx_s221);
@@ -2082,7 +2138,7 @@ static void K_HandleLapIncrement(player_t *player)
 			}
 			else
 			{
-				if ((player->laps > numlaps) && (player->position == 1))
+				if ((player->laps > numlaps) && (player->position == 1) && (!K_InRaceDuel()))
 				{
 					// opponent finished
 					S_StartSound(NULL, sfx_s253);
@@ -2102,20 +2158,20 @@ static void K_HandleLapIncrement(player_t *player)
 					player->laptime[LAP_LAST] = player->laptime[LAP_CUR];
 					player->laptime[LAP_CUR] = 0;
 
-					// Update power levels for this lap.
-					K_UpdatePowerLevels(player, player->laps, false);
+					UINT16 oldexp = player->exp;
+					K_CheckpointCrossAward(player);
+					K_UpdatePowerLevels(player, player->gradingpointnum, false);
 
-					if (nump > 1 && K_IsPlayerLosing(player) == false)
+					if (player->exp > oldexp)
 					{
-						if (inDuel == false && player->position == 1) // 1st place in 1v1 uses thumbs up
-						{
-							player->lapPoints += 2;
-						}
-						else
-						{
-							player->lapPoints++;
-						}
+						K_SpawnFinishEXP(player, player->exp - oldexp);
 					}
+
+					if (player->position == 1 && !(gametyperules & GTR_CHECKPOINTS))
+					{
+						Obj_DeactivateCheckpoints();
+					}
+					player->checkpointId = 0;
 				}
 
 				// Set up lap animation vars
@@ -3195,14 +3251,31 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 			break;
 
 		case 424: // Change Weather
+		{
+			preciptype_t new_precip = PRECIP_NONE;
+			if (udmf_version < 2)
+			{
+				new_precip = args[0];
+			}
+			else
+			{
+				new_precip = stringargs[0] ? get_number(stringargs[0]) : PRECIP_NONE;
+			}
+
 			if (args[1])
 			{
-				globalweather = (UINT8)(args[0]);
+				globalweather = new_precip;
 				P_SwitchWeather(globalweather);
 			}
-			else if (mo && mo->player && P_IsPartyPlayer(mo->player))
-				P_SwitchWeather(args[0]);
+			else
+			{
+				if (mo && mo->player && P_IsPartyPlayer(mo->player))
+				{
+					P_SwitchWeather(new_precip);
+				}
+			}
 			break;
+		}
 
 		case 425: // Calls P_SetMobjState on calling mobj
 			{
@@ -3214,8 +3287,13 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 					return false;
 				}
 
-				while ((targetThing = P_FindMobjFromTID(args[1], targetThing, mo)) != NULL)
+				mobj_t *next = P_FindMobjFromTID(args[1], targetThing, mo);
+
+				while ((targetThing = next) != NULL)
 				{
+					// First in case of deletion. (Can't check for state == S_NULL because of A_ calls, etc)
+					next = P_FindMobjFromTID(args[1], targetThing, mo);
+
 					if (targetThing->player != NULL)
 					{
 						continue;
@@ -3853,19 +3931,18 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 						foundrover = true;
 
 						// If fading an invisible FOF whose render flags we did not yet set,
-						// initialize its alpha to 1
-						// for relative alpha calc
+						// initialize its alpha to 0 for relative alpha calculation
 						if (!(args[3] & TMST_DONTDOTRANSLUCENT) &&      // do translucent
 							(rover->spawnflags & FOF_NOSHADE) && // do not include light blocks, which don't set FOF_NOSHADE
 							!(rover->spawnflags & FOF_RENDERSIDES) &&
 							!(rover->spawnflags & FOF_RENDERPLANES) &&
 							!(rover->fofflags & FOF_RENDERALL))
-							rover->alpha = 1;
+							rover->alpha = 0;
 
 						P_RemoveFakeFloorFader(rover);
 						P_FadeFakeFloor(rover,
 							rover->alpha,
-							max(1, min(256, (args[3] & TMST_RELATIVE) ? rover->alpha + destvalue : destvalue)),
+							max(0, min(255, (args[3] & TMST_RELATIVE) ? rover->alpha + destvalue : destvalue)),
 							0,                                         // set alpha immediately
 							false, NULL,                               // tic-based logic
 							false,                                     // do not handle FOF_EXISTS
@@ -3939,19 +4016,18 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 						else
 						{
 							// If fading an invisible FOF whose render flags we did not yet set,
-							// initialize its alpha to 1
-							// for relative alpha calc
+							// initialize its alpha to 0 for relative alpha calculation
 							if (!(args[4] & TMFT_DONTDOTRANSLUCENT) &&      // do translucent
 								(rover->spawnflags & FOF_NOSHADE) && // do not include light blocks, which don't set FOF_NOSHADE
 								!(rover->spawnflags & FOF_RENDERSIDES) &&
 								!(rover->spawnflags & FOF_RENDERPLANES) &&
 								!(rover->fofflags & FOF_RENDERALL))
-								rover->alpha = 1;
+								rover->alpha = 0;
 
 							P_RemoveFakeFloorFader(rover);
 							P_FadeFakeFloor(rover,
 								rover->alpha,
-								max(1, min(256, (args[4] & TMFT_RELATIVE) ? rover->alpha + destvalue : destvalue)),
+								max(0, min(255, (args[4] & TMFT_RELATIVE) ? rover->alpha + destvalue : destvalue)),
 								0,                                         // set alpha immediately
 								false, NULL,                               // tic-based logic
 								!(args[4] & TMFT_DONTDOEXISTS),      // do not handle FOF_EXISTS
@@ -4139,8 +4215,7 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 			{
 				INT32 failureangle = FixedAngle((min(max(abs(args[1]), 0), 360))*FRACUNIT);
 				INT32 failuredelay = abs(args[2]);
-				INT32 failureexectag = args[3];
-				boolean persist = !!(args[4]);
+				boolean persist = !!(args[3]);
 				mobj_t *anchormo;
 
 				anchormo = P_FindObjectTypeFromTag(MT_ANGLEMAN, args[0]);
@@ -4151,7 +4226,6 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 				P_SetTarget(&mo->tracer, anchormo);
 				mo->lastlook = persist; // don't disable behavior after first failure
 				mo->extravalue1 = failureangle; // angle to exceed for failure state
-				mo->extravalue2 = failureexectag; // exec tag for failure state (angle is not within range)
 				mo->cusval = mo->cvmem = failuredelay; // cusval = tics to allow failure before line trigger; cvmem = decrement timer
 			}
 			break;
@@ -4161,7 +4235,7 @@ boolean P_ProcessSpecial(activator_t *activator, INT16 special, INT32 *args, cha
 			{
 				mo->eflags &= ~MFE_TRACERANGLE;
 				P_SetTarget(&mo->tracer, NULL);
-				mo->lastlook = mo->cvmem = mo->cusval = mo->extravalue1 = mo->extravalue2 = 0;
+				mo->lastlook = mo->cvmem = mo->cusval = mo->extravalue1 = 0;
 			}
 			break;
 
@@ -4707,7 +4781,7 @@ void P_SetupSignExit(player_t *player, boolean tie)
 		return;
 
 	// SRB2Kart: FINALLY, add in an alternative if no place is found
-	if (player->mo && !P_MobjWasRemoved(player->mo))
+	if (player->mo && !P_MobjWasRemoved(player->mo) && !K_EndCameraIsFreezing())
 	{
 		thing = P_SpawnMobj(player->mo->x, player->mo->y, player->mo->floorz, MT_SIGN);
 		thing->angle = bestAngle;
@@ -5358,8 +5432,24 @@ static void P_EvaluateDamageType(player_t *player, sector_t *sector, boolean isT
 			P_DamageMobj(player->mo, NULL, NULL, 1, DMG_INSTAKILL);
 			break;
 		case SD_STUMBLE:
-			if (isTouching)
+ 			if (isTouching && G_CompatLevel(0x0010))
+			{
+				player->pflags2 |= PF2_ALWAYSDAMAGED;
 				P_DamageMobj(player->mo, NULL, NULL, 1, DMG_STUMBLE);
+				player->pflags2 &= ~PF2_ALWAYSDAMAGED;
+
+			}
+			else
+			{
+				if (isTouching && player->mo->hitlag == 0 &&
+					(player->mo->momz == 0 || (player->mo->momz > 0) != (P_MobjFlip(player->mo) > 0)))
+				{
+					player->pflags2 |= PF2_ALWAYSDAMAGED;
+					P_DamageMobj(player->mo, NULL, NULL, 1, DMG_STUMBLE);
+					player->pflags2 &= ~PF2_ALWAYSDAMAGED;
+				}
+			}
+
 			break;
 		default:
 			break;
@@ -6383,7 +6473,9 @@ static void P_AddFloatThinker(sector_t *sec, UINT16 tag, line_t *sourceline)
 	floatthink_t *floater;
 
 	// create and initialize new thinker
-	floater = Z_Calloc(sizeof (*floater), PU_LEVSPEC, NULL);
+	floater = Z_LevelPoolCalloc(sizeof (*floater));
+	floater->thinker.alloctype = TAT_LEVELPOOL;
+	floater->thinker.size = sizeof (*floater);
 	P_AddThinker(THINK_MAIN, &floater->thinker);
 
 	floater->thinker.function.acp1 = (actionf_p1)T_FloatSector;
@@ -6414,7 +6506,9 @@ static void P_AddPlaneDisplaceThinker(INT32 type, fixed_t speed, INT32 control, 
 	planedisplace_t *displace;
 
 	// create and initialize new displacement thinker
-	displace = Z_Calloc(sizeof (*displace), PU_LEVSPEC, NULL);
+	displace = Z_LevelPoolCalloc(sizeof (*displace));
+	displace->thinker.alloctype = TAT_LEVELPOOL;
+	displace->thinker.size = sizeof (*displace);
 	P_AddThinker(THINK_MAIN, &displace->thinker);
 
 	displace->thinker.function.acp1 = (actionf_p1)T_PlaneDisplace;
@@ -6444,7 +6538,9 @@ static void P_AddBlockThinker(sector_t *sec, line_t *sourceline)
 	mariocheck_t *block;
 
 	// create and initialize new elevator thinker
-	block = Z_Calloc(sizeof (*block), PU_LEVSPEC, NULL);
+	block = Z_LevelPoolCalloc(sizeof (*block));
+	block->thinker.alloctype = TAT_LEVELPOOL;
+	block->thinker.size = sizeof (*block);
 	P_AddThinker(THINK_MAIN, &block->thinker);
 
 	block->thinker.function.acp1 = (actionf_p1)T_MarioBlockChecker;
@@ -6469,7 +6565,9 @@ static void P_AddRaiseThinker(sector_t *sec, INT16 tag, fixed_t speed, fixed_t c
 {
 	raise_t *raise;
 
-	raise = Z_Calloc(sizeof (*raise), PU_LEVSPEC, NULL);
+	raise = Z_LevelPoolCalloc(sizeof (*raise));
+	raise->thinker.alloctype = TAT_LEVELPOOL;
+	raise->thinker.size = sizeof (*raise);
 	P_AddThinker(THINK_MAIN, &raise->thinker);
 
 	raise->thinker.function.acp1 = (actionf_p1)T_RaiseSector;
@@ -6496,7 +6594,9 @@ static void P_AddAirbob(sector_t *sec, INT16 tag, fixed_t dist, boolean raise, b
 {
 	raise_t *airbob;
 
-	airbob = Z_Calloc(sizeof (*airbob), PU_LEVSPEC, NULL);
+	airbob = Z_LevelPoolCalloc(sizeof (*airbob));
+	airbob->thinker.alloctype = TAT_LEVELPOOL;
+	airbob->thinker.size = sizeof (*airbob);
 	P_AddThinker(THINK_MAIN, &airbob->thinker);
 
 	airbob->thinker.function.acp1 = (actionf_p1)T_RaiseSector;
@@ -6538,7 +6638,9 @@ static inline void P_AddThwompThinker(sector_t *sec, line_t *sourceline, fixed_t
 		return;
 
 	// create and initialize new elevator thinker
-	thwomp = Z_Calloc(sizeof (*thwomp), PU_LEVSPEC, NULL);
+	thwomp = Z_LevelPoolCalloc(sizeof (*thwomp));
+	thwomp->thinker.alloctype = TAT_LEVELPOOL;
+	thwomp->thinker.size = sizeof (*thwomp);
 	P_AddThinker(THINK_MAIN, &thwomp->thinker);
 
 	thwomp->thinker.function.acp1 = (actionf_p1)T_ThwompSector;
@@ -6578,7 +6680,9 @@ static inline void P_AddNoEnemiesThinker(line_t *sourceline)
 	noenemies_t *nobaddies;
 
 	// create and initialize new thinker
-	nobaddies = Z_Calloc(sizeof (*nobaddies), PU_LEVSPEC, NULL);
+	nobaddies = Z_LevelPoolCalloc(sizeof (*nobaddies));
+	nobaddies->thinker.alloctype = TAT_LEVELPOOL;
+	nobaddies->thinker.size = sizeof (*nobaddies);
 	P_AddThinker(THINK_MAIN, &nobaddies->thinker);
 
 	nobaddies->thinker.function.acp1 = (actionf_p1)T_NoEnemiesSector;
@@ -6598,7 +6702,9 @@ static void P_AddEachTimeThinker(line_t *sourceline, boolean triggerOnExit)
 	eachtime_t *eachtime;
 
 	// create and initialize new thinker
-	eachtime = Z_Calloc(sizeof (*eachtime), PU_LEVSPEC, NULL);
+	eachtime = Z_LevelPoolCalloc(sizeof (*eachtime));
+	eachtime->thinker.alloctype = TAT_LEVELPOOL;
+	eachtime->thinker.size = sizeof (*eachtime);
 	P_AddThinker(THINK_MAIN, &eachtime->thinker);
 
 	eachtime->thinker.function.acp1 = (actionf_p1)T_EachTimeThinker;
@@ -6622,7 +6728,9 @@ static inline void P_AddCameraScanner(sector_t *sourcesec, sector_t *actionsecto
 	CONS_Alert(CONS_WARNING, M_GetText("Detected a camera scanner effect (linedef type 5). This effect is deprecated and will be removed in the future!\n"));
 
 	// create and initialize new elevator thinker
-	elevator = Z_Calloc(sizeof (*elevator), PU_LEVSPEC, NULL);
+	elevator = Z_LevelPoolCalloc(sizeof (*elevator));
+	elevator->thinker.alloctype = TAT_LEVELPOOL;
+	elevator->thinker.size = sizeof (*elevator);
 	P_AddThinker(THINK_MAIN, &elevator->thinker);
 
 	elevator->thinker.function.acp1 = (actionf_p1)T_CameraScanner;
@@ -6703,7 +6811,9 @@ void T_LaserFlash(laserthink_t *flash)
 
 static inline void P_AddLaserThinker(INT16 tag, line_t *line, boolean nobosses)
 {
-	laserthink_t *flash = Z_Calloc(sizeof (*flash), PU_LEVSPEC, NULL);
+	laserthink_t *flash = Z_LevelPoolCalloc(sizeof (*flash));
+	flash->thinker.alloctype = TAT_LEVELPOOL;
+	flash->thinker.size = sizeof (*flash);
 
 	P_AddThinker(THINK_MAIN, &flash->thinker);
 
@@ -8234,7 +8344,9 @@ void T_Scroll(scroll_t *s)
   */
 static void Add_Scroller(INT32 type, fixed_t dx, fixed_t dy, INT32 control, INT32 affectee, INT32 accel, INT32 exclusive)
 {
-	scroll_t *s = Z_Calloc(sizeof *s, PU_LEVSPEC, NULL);
+	scroll_t *s = Z_LevelPoolCalloc(sizeof (*s));
+	s->thinker.alloctype = TAT_LEVELPOOL;
+	s->thinker.size = sizeof (*s);
 	s->thinker.function.acp1 = (actionf_p1)T_Scroll;
 	s->type = type;
 	s->dx = dx;
@@ -8379,7 +8491,9 @@ static void P_SpawnScrollers(void)
   */
 static void Add_MasterDisappearer(tic_t appeartime, tic_t disappeartime, tic_t offset, INT32 line, INT32 sourceline)
 {
-	disappear_t *d = Z_Malloc(sizeof *d, PU_LEVSPEC, NULL);
+	disappear_t *d = Z_LevelPoolCalloc(sizeof (*d));
+	d->thinker.alloctype = TAT_LEVELPOOL;
+	d->thinker.size = sizeof (*d);
 
 	d->thinker.function.acp1 = (actionf_p1)T_Disappear;
 	d->appeartime = appeartime;
@@ -8505,15 +8619,14 @@ static boolean P_FadeFakeFloor(ffloor_t *rover, INT16 sourcevalue, INT16 destval
 	if (rover->master->special == 258) // Laser block
 		return false;
 
-	// If fading an invisible FOF whose render flags we did not yet set,
-	// initialize its alpha to 1
+	// If fading an invisible FOF whose render flags we did not yet set, initialize its alpha to 0
 	if (dotranslucent &&
 		(rover->spawnflags & FOF_NOSHADE) && // do not include light blocks, which don't set FOF_NOSHADE
 		!(rover->fofflags & FOF_FOG) && // do not include fog
 		!(rover->spawnflags & FOF_RENDERSIDES) &&
 		!(rover->spawnflags & FOF_RENDERPLANES) &&
 		!(rover->fofflags & FOF_RENDERALL))
-		rover->alpha = 1;
+		rover->alpha = 0;
 
 	if (fadingdata)
 		alpha = fadingdata->alpha;
@@ -8599,7 +8712,7 @@ static boolean P_FadeFakeFloor(ffloor_t *rover, INT16 sourcevalue, INT16 destval
 	{
 		if (doexists && !(rover->spawnflags & FOF_BUSTUP))
 		{
-			if (alpha <= 1)
+			if (alpha <= 0)
 				rover->fofflags &= ~FOF_EXISTS;
 			else
 				rover->fofflags |= FOF_EXISTS;
@@ -8611,7 +8724,7 @@ static boolean P_FadeFakeFloor(ffloor_t *rover, INT16 sourcevalue, INT16 destval
 
 		if (dotranslucent && !(rover->fofflags & FOF_FOG))
 		{
-			if (alpha >= 256)
+			if (alpha >= 255)
 			{
 				if (!(rover->fofflags & FOF_CUTSOLIDS) &&
 					(rover->spawnflags & FOF_CUTSOLIDS))
@@ -8711,11 +8824,11 @@ static boolean P_FadeFakeFloor(ffloor_t *rover, INT16 sourcevalue, INT16 destval
 		else // clamp fadingdata->alpha to software's alpha levels
 		{
 			if (alpha < 12)
-				rover->alpha = destvalue < 12 ? destvalue : 1; // Don't even draw it
+				rover->alpha = destvalue < 12 ? destvalue : 0; // Don't even draw it
 			else if (alpha < 38)
 				rover->alpha = destvalue >= 12 && destvalue < 38 ? destvalue : 25;
 			else if (alpha < 64)
-				rover->alpha = destvalue >=38 && destvalue < 64 ? destvalue : 51;
+				rover->alpha = destvalue >= 38 && destvalue < 64 ? destvalue : 51;
 			else if (alpha < 89)
 				rover->alpha = destvalue >= 64 && destvalue < 89 ? destvalue : 76;
 			else if (alpha < 115)
@@ -8731,7 +8844,7 @@ static boolean P_FadeFakeFloor(ffloor_t *rover, INT16 sourcevalue, INT16 destval
 			else if (alpha < 243)
 				rover->alpha = destvalue >= 217 && destvalue < 243 ? destvalue : 230;
 			else // Opaque
-				rover->alpha = destvalue >= 243 ? destvalue : 256;
+				rover->alpha = destvalue >= 243 ? destvalue : 255;
 		}
 	}
 
@@ -8761,20 +8874,21 @@ static void P_AddFakeFloorFader(ffloor_t *rover, size_t sectornum, size_t ffloor
 {
 	fade_t *d;
 
-	// If fading an invisible FOF whose render flags we did not yet set,
-	// initialize its alpha to 1
+	// If fading an invisible FOF whose render flags we did not yet set, initialize its alpha to 0
 	if (dotranslucent &&
 		(rover->spawnflags & FOF_NOSHADE) && // do not include light blocks, which don't set FOF_NOSHADE
 		!(rover->spawnflags & FOF_RENDERSIDES) &&
 		!(rover->spawnflags & FOF_RENDERPLANES) &&
 		!(rover->fofflags & FOF_RENDERALL))
-		rover->alpha = 1;
+		rover->alpha = 0;
 
 	// already equal, nothing to do
-	if (rover->alpha == max(1, min(256, relative ? rover->alpha + destvalue : destvalue)))
+	if (rover->alpha == max(0, min(255, relative ? rover->alpha + destvalue : destvalue)))
 		return;
 
-	d = Z_Malloc(sizeof *d, PU_LEVSPEC, NULL);
+	d = Z_LevelPoolCalloc(sizeof (*d));
+	d->thinker.alloctype = TAT_LEVELPOOL;
+	d->thinker.size = sizeof (*d);
 
 	d->thinker.function.acp1 = (actionf_p1)T_Fade;
 	d->rover = rover;
@@ -8782,7 +8896,7 @@ static void P_AddFakeFloorFader(ffloor_t *rover, size_t sectornum, size_t ffloor
 	d->ffloornum = (UINT32)ffloornum;
 
 	d->alpha = d->sourcevalue = rover->alpha;
-	d->destvalue = max(1, min(256, relative ? rover->alpha + destvalue : destvalue)); // rover->alpha is 1-256
+	d->destvalue = max(0, min(255, relative ? rover->alpha + destvalue : destvalue)); // rover->alpha is 0-255
 
 	if (ticbased)
 	{
@@ -8927,7 +9041,9 @@ static void Add_ColormapFader(sector_t *sector, extracolormap_t *source_exc, ext
 		return;
 	}
 
-	d = Z_Malloc(sizeof *d, PU_LEVSPEC, NULL);
+	d = Z_LevelPoolCalloc(sizeof (*d));
+	d->thinker.alloctype = TAT_LEVELPOOL;
+	d->thinker.size = sizeof (*d);
 	d->thinker.function.acp1 = (actionf_p1)T_FadeColormap;
 	d->sector = sector;
 	d->source_exc = source_exc;
@@ -9050,7 +9166,9 @@ void T_FadeColormap(fadecolormap_t *d)
   */
 static void Add_Friction(INT32 friction, INT32 movefactor, INT32 affectee, INT32 referrer)
 {
-	friction_t *f = Z_Calloc(sizeof *f, PU_LEVSPEC, NULL);
+	friction_t *f = Z_LevelPoolCalloc(sizeof (*f));
+	f->thinker.alloctype = TAT_LEVELPOOL;
+	f->thinker.size = sizeof (*f);
 
 	f->thinker.function.acp1 = (actionf_p1)T_Friction;
 	f->friction = friction;
@@ -9154,11 +9272,7 @@ static void P_SpawnFriction(void)
 		if (friction < 0)
 			friction = 0;
 
-		movefactor = FixedDiv(ORIG_FRICTION, friction);
-		if (movefactor < FRACUNIT)
-			movefactor = 8*movefactor - 7*FRACUNIT;
-		else
-			movefactor = FRACUNIT;
+		movefactor = P_MoveFactorFromFriction(friction);
 
 		Add_Friction(friction, movefactor, (INT32)(s-sectors), -1);
 
@@ -9188,7 +9302,9 @@ static void P_SpawnFriction(void)
   */
 static void Add_Pusher(pushertype_e type, fixed_t x_mag, fixed_t y_mag, fixed_t z_mag, INT32 affectee, INT32 referrer, INT32 exclusive, INT32 slider)
 {
-	pusher_t *p = Z_Calloc(sizeof *p, PU_LEVSPEC, NULL);
+	pusher_t *p = Z_LevelPoolCalloc(sizeof (*p));
+	p->thinker.alloctype = TAT_LEVELPOOL;
+	p->thinker.size = sizeof (*p);
 
 	p->thinker.function.acp1 = (actionf_p1)T_Pusher;
 	p->type = type;
@@ -9540,7 +9656,7 @@ void P_DoQuakeOffset(UINT8 view, mappoint_t *viewPos, mappoint_t *offset)
 		quake = quake->next;
 	}
 
-	// Add level-based effects.
+	// Add level-based effects
 	if (P_MobjWasRemoved(viewer->mo) == false
 		&& viewer->speed > viewer->mo->scale
 		&& P_IsObjectOnGround(viewer->mo) == true)
@@ -9561,6 +9677,18 @@ void P_DoQuakeOffset(UINT8 view, mappoint_t *viewPos, mappoint_t *offset)
 	}
 
 	fixed_t maxShake = FixedMul(cv_cam_height[view].value, mapobjectscale) * 3 / 4;
+
+	// Map-specific camera height
+	if (mapheaderinfo[gamemap-1]->cameraHeight >= 0)
+	{
+		if (r_splitscreen != 1)
+			maxShake = FixedMul(mapheaderinfo[gamemap-1]->cameraHeight, mapobjectscale) * 3 / 4;
+
+		// For 2p SPLITSCREEN SPECIFICALLY:
+		// The view is pretty narrow, so move it back 3/20 of the way towards default camera height.
+		else
+			maxShake = FixedMul((mapheaderinfo[gamemap-1]->cameraHeight*17 + cv_cam_height[view].value*3)/20, mapobjectscale) * 3 / 4;
+	}
 
 	if (battle)
 	{

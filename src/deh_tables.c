@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -24,6 +24,10 @@
 #include "g_state.h" // gamestate_t (for lua)
 #include "r_data.h" // patchalphastyle_t
 #include "k_boss.h" // spottype_t (for lua)
+#include "k_follower.h" // followermode_t (for lua)
+#include "music.h" // tune flags (for lua)
+#include "k_respawn.h" // respawn values (for lua)
+#include "k_waypoint.h" // waypoint values (for lua)
 
 #include "deh_tables.h"
 
@@ -295,6 +299,7 @@ actionpointer_t actionpointers[] =
 	{{A_MakeSSCandle},           "A_MAKESSCANDLE"},
 	{{A_HologramRandomTranslucency}, "A_HOLOGRAMRANDOMTRANSLUCENCY"},
 	{{A_SSChainShatter}, "A_SSCHAINSHATTER"},
+	{{A_GenericBumper}, "A_GENERICBUMPER"},
 
 	{{NULL},                     "NONE"},
 
@@ -367,6 +372,17 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 
 	"S_KART_LEFTOVER",
 	"S_KART_LEFTOVER_NOTIRES",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_A",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_B",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_C",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_D",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_E",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_F",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_G",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_H",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_I",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_J",
+	"S_KART_LEFTOVER_PARTICLE_CUSTOM_K",
 
 	"S_KART_TIRE1",
 	"S_KART_TIRE2",
@@ -1557,6 +1573,8 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_MAGICIANBOXTOP",
 	"S_MAGICIANBOXBOTTOM",
 
+	"S_MINERADIUS",
+
 	"S_WAVEDASH",
 
 	"S_INSTAWHIP",
@@ -1567,6 +1585,26 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_INSTAWHIP_REJECT",
 	"S_BLOCKRING",
 	"S_BLOCKBODY",
+
+	"S_BAIL",
+	"S_BAIB1",
+	"S_BAIB2",
+	"S_BAIB3",
+	"S_BAIC",
+	"S_BAILCHARGE",
+
+	"S_AMPRING",
+	"S_AMPBODY",
+	"S_AMPAURA",
+	"S_AMPBURST",
+
+	// Tripwire VFX on player for bumping it or passing it
+	
+	"S_SONICBOOM",
+	"S_TRIPWIREOK",
+	"S_TRIPWIRELOCKOUT",
+
+	"S_GOTIT",
 
 	"S_CHARGEAURA",
 	"S_CHARGEFALL",
@@ -1765,6 +1803,19 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_WIPEOUTTRAIL10",
 	"S_WIPEOUTTRAIL11",
 
+	// "Firework" dust trail
+	"S_FIREWORKTRAIL",
+	"S_FIREWORKTRAIL2",
+	"S_FIREWORKTRAIL3",
+	"S_FIREWORKTRAIL4",
+	"S_FIREWORKTRAIL5",
+	"S_FIREWORKTRAIL6",
+	"S_FIREWORKTRAIL7",
+	"S_FIREWORKTRAIL8",
+	"S_FIREWORKTRAIL9",
+	"S_FIREWORKTRAIL10",
+	"S_FIREWORKTRAIL11",
+
 	// Rocket sneaker
 	"S_ROCKETSNEAKER_L",
 	"S_ROCKETSNEAKER_R",
@@ -1901,22 +1952,8 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_BALLHOG7",
 	"S_BALLHOG8",
 	"S_BALLHOG_DEAD",
-	"S_BALLHOGBOOM1",
-	"S_BALLHOGBOOM2",
-	"S_BALLHOGBOOM3",
-	"S_BALLHOGBOOM4",
-	"S_BALLHOGBOOM5",
-	"S_BALLHOGBOOM6",
-	"S_BALLHOGBOOM7",
-	"S_BALLHOGBOOM8",
-	"S_BALLHOGBOOM9",
-	"S_BALLHOGBOOM10",
-	"S_BALLHOGBOOM11",
-	"S_BALLHOGBOOM12",
-	"S_BALLHOGBOOM13",
-	"S_BALLHOGBOOM14",
-	"S_BALLHOGBOOM15",
-	"S_BALLHOGBOOM16",
+	"S_BALLHOGBOOM",
+	"S_BALLHOG_RETICULE",
 
 	// Self-Propelled Bomb - just an explosion for now...
 	"S_SPB1",
@@ -1971,6 +2008,18 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_LIGHTNINGSHIELD23",
 	"S_LIGHTNINGSHIELD24",
 
+	// Lightning Shield Visuals
+	"S_THNC1",
+	"S_THNA1",
+	"S_THNC2",
+	"S_THNB1",
+
+	"S_THND",
+	"S_THNE",
+	"S_THNH",
+	"S_THNF",
+	"S_THNG",
+
 	// Bubble Shield
 	"S_BUBBLESHIELD1",
 	"S_BUBBLESHIELD2",
@@ -2006,6 +2055,16 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_BUBBLESHIELDWAVE5",
 	"S_BUBBLESHIELDWAVE6",
 
+	// Bubble Shield Visuals
+	"S_BUBA1",
+	"S_BUBB1",
+	"S_BUBB2",
+	"S_BUBC1",
+	"S_BUBC2",
+	"S_BUBD1",
+	"S_BUBE1",
+	"S_BUBG1", // F used by Nova Shore
+
 	// Flame Shield
 	"S_FLAMESHIELD1",
 	"S_FLAMESHIELD2",
@@ -2025,6 +2084,11 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_FLAMESHIELD16",
 	"S_FLAMESHIELD17",
 	"S_FLAMESHIELD18",
+
+	// Flame Shield Visuals
+	"S_FLMA1",
+	"S_FLMA2",
+	"S_FLMB1",
 
 	"S_FLAMESHIELDDASH1",
 	"S_FLAMESHIELDDASH2",
@@ -2139,6 +2203,8 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_TRIPWIREBOOST_BOTTOM",
 	"S_TRIPWIREBOOST_BLAST_TOP",
 	"S_TRIPWIREBOOST_BLAST_BOTTOM",
+
+	"S_TRIPWIREAPPROACH",
 
 	"S_SMOOTHLANDING",
 
@@ -2636,6 +2702,9 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_WAYPOINTSPLAT",
 	"S_EGOORB",
 
+	"S_AMPS",
+	"S_EXP",
+
 	"S_WATERTRAIL1",
 	"S_WATERTRAIL2",
 	"S_WATERTRAIL3",
@@ -3055,6 +3124,21 @@ const char *const STATE_LIST[] = { // array length left dynamic for sanity testi
 	"S_BADNIK_EXPLOSION_SHOCKWAVE2",
 	"S_BADNIK_EXPLOSION1",
 	"S_BADNIK_EXPLOSION2",
+
+	// Flybot767 (stun)
+	"S_FLYBOT767",
+
+	"S_STON",
+
+	"S_TOXAA",
+	"S_TOXAA_DEAD",
+	"S_TOXAB",
+	"S_TOXBA",
+
+	"S_ANCIENTGEAR",
+	"S_ANCIENTGEAR_PART",
+
+	"S_MHPOLE",
 };
 
 // RegEx to generate this from info.h: ^\tMT_([^,]+), --> \t"MT_\1",
@@ -3497,6 +3581,7 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 	"MT_MONITOR_PART",
 	"MT_MONITOR_SHARD",
 	"MT_MAGICIANBOX",
+	"MT_MINERADIUS",
 	"MT_WAVEDASH",
 
 	"MT_INSTAWHIP",
@@ -3504,6 +3589,21 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 	"MT_INSTAWHIP_REJECT",
 	"MT_BLOCKRING",
 	"MT_BLOCKBODY",
+
+	"MT_BAIL",
+	"MT_BAILCHARGE",
+	"MT_BAILSPARKLE",
+
+	"MT_AMPRING",
+	"MT_AMPBODY",
+	"MT_AMPAURA",
+	"MT_AMPBURST",
+
+	"MT_SONICBOOM",
+	"MT_TRIPWIREOK",
+	"MT_TRIPWIRELOCKOUT",
+
+	"MT_GOTIT",
 
 	"MT_CHARGEAURA",
 	"MT_CHARGEFALL",
@@ -3573,14 +3673,20 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 
 	"MT_BALLHOG", // Ballhog
 	"MT_BALLHOGBOOM",
+	"MT_BALLHOG_RETICULE",
+	"MT_BALLHOG_RETICULE_TEST",
 
 	"MT_SPB", // Self-Propelled Bomb
 	"MT_SPBEXPLOSION",
 	"MT_MANTARING", // Juicebox for SPB
 
 	"MT_LIGHTNINGSHIELD", // Shields
+	"MT_LIGHTNINGSHIELD_VISUAL",
+	"MT_LIGHTNINGATTACK_VISUAL",
 	"MT_BUBBLESHIELD",
+	"MT_BUBBLESHIELD_VISUAL",
 	"MT_FLAMESHIELD",
+	"MT_FLAMESHIELD_VISUAL",
 	"MT_FLAMESHIELDUNDERLAY",
 	"MT_FLAMESHIELDPAPER",
 	"MT_BUBBLESHIELDTRAP",
@@ -3613,6 +3719,7 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 	"MT_BATTLEBUMPER_BLAST",
 
 	"MT_TRIPWIREBOOST",
+	"MT_TRIPWIREAPPROACH",
 
 	"MT_SMOOTHLANDING",
 	"MT_TRICKINDICATOR",
@@ -3842,7 +3949,7 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 	"MT_AGZ_AGFF",
 	"MT_AGZ_CLOUD",
 	"MT_AGZ_CLOUDCLUSTER",
-	
+
 	"MT_SSZ_CLOUD",
 	"MT_SSZ_CLOUDCLUSTER",
 
@@ -3937,6 +4044,23 @@ const char *const MOBJTYPE_LIST[] = {  // array length left dynamic for sanity t
 
 	"MT_IPULLUP",
 	"MT_PULLUPHOOK",
+
+	"MT_AMPS",
+	"MT_EXP",
+
+	"MT_FLYBOT767",
+
+	"MT_STONESHOE",
+	"MT_STONESHOE_CHAIN",
+
+	"MT_TOXOMISTER_POLE",
+	"MT_TOXOMISTER_EYE",
+	"MT_TOXOMISTER_CLOUD",
+
+	"MT_ANCIENTGEAR",
+	"MT_ANCIENTGEAR_PART",
+
+	"MT_MHPOLE",
 };
 
 const char *const MOBJFLAG_LIST[] = {
@@ -4089,6 +4213,25 @@ const char *const PLAYERFLAG_LIST[] = {
 	"NOFASTFALL", // Has already done ebrake/fastfall behavior for this input. Fastfalling needs a new input to prevent unwanted bounces on unexpected airtime.
 
 	NULL // stop loop here.
+};
+
+const char *const PLAYERFLAG2_LIST[] = {
+	"SELFMUTE",
+	"SELFDEAFEN",
+	"SERVERMUTE",
+	"SERVERDEAFEN",
+	
+	"STRICTFASTFALL", // Fastfall only with C, never with A+X. Profile preference.
+	
+	"ALWAYSDAMAGED", // Ignore invulnerability or clash conditions when evaulating damage (P_DamageMobj). Unset after use!
+	"BUBBLECONTACT", // ACHTUNG VERY BAD HACK - Don't allow Bubble Shield to contact certain objects unless this is a fresh blowup.
+	"SUPERTRANSFERVFX", // Don't respawn the "super transfer available" VFX.
+	"FASTTUMBLEBOUNCE", // Don't lose speed when tumblebouncing.
+	
+	"SERVERTEMPMUTE", // Haven't met gamestochat requirement
+	"SAMEFRAMESTUNG", // Goofy bullshit for tracking mutual ring sting
+	"UNSTINGABLE", // Was bumped out of spindash
+	NULL
 };
 
 const char *const GAMETYPERULE_LIST[] = {
@@ -4626,6 +4769,7 @@ struct int_const_s const INT_CONST[] = {
 	{"LF_NOZONE",LF_NOZONE},
 	{"LF_SECTIONRACE",LF_SECTIONRACE},
 	{"LF_SUBTRACTNUM",LF_SUBTRACTNUM},
+	{"LF_NOCOMMS",LF_NOCOMMS},
 	// And map flags
 	{"LF2_HIDEINMENU",LF2_HIDEINMENU},
 	{"LF2_NOTIMEATTACK",LF2_NOTIMEATTACK},
@@ -4667,12 +4811,17 @@ struct int_const_s const INT_CONST[] = {
 
 	// Carrying
 	{"CR_NONE",CR_NONE},
+	{"CR_SLIDING",CR_SLIDING},
 	{"CR_ZOOMTUBE",CR_ZOOMTUBE},
+	{"CR_DASHRING",CR_DASHRING},
+	{"CR_TRAPBUBBLE",CR_TRAPBUBBLE},
+	{"CR_MUSHROOMHILLPOLE", CR_MUSHROOMHILLPOLE},
 
 	// Character flags (skinflags_t)
 	{"SF_MACHINE",SF_MACHINE},
 	{"SF_IRONMAN",SF_IRONMAN},
 	{"SF_BADNIK",SF_BADNIK},
+	{"SF_HIVOLT",SF_HIVOLT},
 
 	// Sound flags
 	{"SF_TOTALLYSINGLE",SF_TOTALLYSINGLE},
@@ -4748,6 +4897,7 @@ struct int_const_s const INT_CONST[] = {
 	{"OV_DONT3DOFFSET", OV_DONT3DOFFSET},
 	{"OV_DONTXYSCALE", OV_DONTXYSCALE},
 	{"OV_DONTROLL", OV_DONTROLL},
+	{"OV_DONTBAKEOFFSET", OV_DONTBAKEOFFSET},
 
 	// Player state (playerstate_t)
 	{"PST_LIVE",PST_LIVE}, // Playing or camping.
@@ -4963,9 +5113,19 @@ struct int_const_s const INT_CONST[] = {
 	{"BT_DRIFT",BT_DRIFT},
 	{"BT_BRAKE",BT_BRAKE},
 	{"BT_ATTACK",BT_ATTACK},
+	{"BT_LOOKBACK",BT_LOOKBACK},
+	{"BT_BAIL",BT_BAIL},
+	{"BT_VOTE",BT_VOTE},
+	{"BT_SPINDASH",BT_SPINDASH}, // Real button now, but triggers the macro same as always.
+	{"BT_EBRAKEMASK",BT_EBRAKEMASK}, // Macro button
+	{"BT_SPINDASHMASK",BT_SPINDASHMASK}, // Macro button
+	{"BT_RESPAWNMASK",BT_RESPAWNMASK}, // Macro button
 	{"BT_LUAA",BT_LUAA}, // Lua customizable
 	{"BT_LUAB",BT_LUAB}, // Lua customizable
 	{"BT_LUAC",BT_LUAC}, // Lua customizable
+	{"BT_LUA1",BT_LUA1}, // Lua customizable
+	{"BT_LUA2",BT_LUA2}, // Lua customizable
+	{"BT_LUA3",BT_LUA3}, // Lua customizable
 
 	// Lua command registration flags
 	{"COM_ADMIN",COM_ADMIN},
@@ -5109,6 +5269,8 @@ struct int_const_s const INT_CONST[] = {
 	{"KRITEM_DUALJAWZ",KRITEM_DUALJAWZ},
 	{"KRITEM_TRIPLEGACHABOM",KRITEM_TRIPLEGACHABOM},
 	{"NUMKARTRESULTS",NUMKARTRESULTS},
+	{"KDROP_STONESHOETRAP",KDROP_STONESHOETRAP},
+	{"KCAPSULE_RING", KCAPSULE_RING},
 	{"FIRSTPOWERUP",FIRSTPOWERUP},
 	{"POWERUP_SMONITOR",POWERUP_SMONITOR},
 	{"POWERUP_BARRIER",POWERUP_BARRIER},
@@ -5119,6 +5281,21 @@ struct int_const_s const INT_CONST[] = {
 	{"ENDOFPOWERUPS",ENDOFPOWERUPS},
 	{"LASTPOWERUP",LASTPOWERUP},
 	{"NUMPOWERUPS",NUMPOWERUPS},
+
+	// kartslotmachine_t
+	{"KSM_BAR", KSM_BAR},
+	{"KSM_DOUBLEBAR", KSM_DOUBLEBAR},
+	{"KSM_TRIPLEBAR", KSM_TRIPLEBAR},
+	{"KSM_RING", KSM_RING},
+	{"KSM_SEVEN", KSM_SEVEN},
+	{"KSM_JACKPOT", KSM_JACKPOT},
+	{"KSM__MAX", KSM__MAX},
+
+	// itemflags_t
+	{"IF_USERINGS", IF_USERINGS},
+	{"IF_ITEMOUT", IF_ITEMOUT},
+	{"IF_EGGMANOUT", IF_EGGMANOUT},
+	{"IF_HOLDREADY", IF_HOLDREADY},
 
 	// kartshields_t
 	{"KSHIELD_NONE",KSHIELD_NONE},
@@ -5150,6 +5327,124 @@ struct int_const_s const INT_CONST[] = {
 	{"PRECIPFX_THUNDER",PRECIPFX_THUNDER},
 	{"PRECIPFX_LIGHTNING",PRECIPFX_LIGHTNING},
 	{"PRECIPFX_WATERPARTICLES",PRECIPFX_WATERPARTICLES},
+
+	// followermode_t
+	{"FOLLOWERMODE_FLOAT",FOLLOWERMODE_FLOAT},
+	{"FOLLOWERMODE_GROUND",FOLLOWERMODE_GROUND},
+
+	// tripwirestate_t
+	{"TRIPSTATE_NONE",TRIPSTATE_NONE},
+	{"TRIPSTATE_PASSED",TRIPSTATE_PASSED},
+	{"TRIPSTATE_BLOCKED",TRIPSTATE_BLOCKED},
+
+	// tripwirepass_t
+	{"TRIPWIRE_NONE",TRIPWIRE_NONE},
+	{"TRIPWIRE_IGNORE",TRIPWIRE_IGNORE},
+	{"TRIPWIRE_BOOST",TRIPWIRE_BOOST},
+	{"TRIPWIRE_BLASTER",TRIPWIRE_BLASTER},
+	{"TRIPWIRE_CONSUME",TRIPWIRE_CONSUME},
+
+	// trickstate_t
+	{"TRICKSTATE_NONE",TRICKSTATE_NONE},
+	{"TRICKSTATE_READY",TRICKSTATE_READY},
+	{"TRICKSTATE_FORWARD",TRICKSTATE_FORWARD},
+	{"TRICKSTATE_RIGHT",TRICKSTATE_RIGHT},
+	{"TRICKSTATE_LEFT",TRICKSTATE_LEFT},
+	{"TRICKSTATE_BACK",TRICKSTATE_BACK},
+
+	// items
+	{"GARDENTOP_MAXGRINDTIME",GARDENTOP_MAXGRINDTIME},
+	{"BALLHOGINCREMENT",BALLHOGINCREMENT},
+
+	// kickstart
+	{"ACCEL_KICKSTART",ACCEL_KICKSTART},
+
+	// tripwires
+	{"TRIPWIRETIME",TRIPWIRETIME},
+
+	// tricks
+	{"TRICKMOMZRAMP",TRICKMOMZRAMP},
+	{"TRICKLAG",TRICKLAG},
+	{"TRICKDELAY",TRICKDELAY},
+
+	// tumble
+	{"TUMBLEBOUNCES",TUMBLEBOUNCES},
+	{"TUMBLEGRAVITY",TUMBLEGRAVITY},
+
+	// tune flags
+	{"TN_INCLUSIVEFADE",TN_INCLUSIVEFADE},
+	{"TN_USEMAPVOLUME",TN_USEMAPVOLUME},
+	{"TN_SYNCMUSIC",TN_SYNCMUSIC},
+	{"TN_MUSICCRED",TN_MUSICCRED},
+	{"TN_VAPES",TN_VAPES},
+	{"TN_NIGHTCOREABLE",TN_NIGHTCOREABLE},
+	{"TN_CHANGEPITCH",TN_CHANGEPITCH},
+	{"TN_LOOPING",TN_LOOPING},
+	
+	// k_respawn.h values
+	{"RESPAWN_DIST",RESPAWN_DIST},
+	{"RESPAWN_TIME",RESPAWN_TIME},
+	{"RESPAWNST_NONE",RESPAWNST_NONE},
+	{"RESPAWNST_MOVE",RESPAWNST_MOVE},
+	{"RESPAWNST_DROP",RESPAWNST_DROP},
+	
+	// k_waypoint.h values
+	{"DEFAULT_WAYPOINT_RADIUS",DEFAULT_WAYPOINT_RADIUS},
+
+	{"PICKUP_RINGORSPHERE", PICKUP_RINGORSPHERE},
+	{"PICKUP_ITEMBOX", PICKUP_ITEMBOX},
+	{"PICKUP_EGGBOX", PICKUP_EGGBOX},
+	{"PICKUP_PAPERITEM", PICKUP_PAPERITEM},
+
+	// k_bot.h constants
+	{"MAXBOTDIFFICULTY",MAXBOTDIFFICULTY},
+	{"DIFFICULTBOT",DIFFICULTBOT},
+	{"BOTTURNCONFIRM",BOTTURNCONFIRM},
+	{"BOTSPINDASHCONFIRM",BOTSPINDASHCONFIRM},
+	{"BOTRESPAWNCONFIRM",BOTRESPAWNCONFIRM},
+	{"BOT_ITEM_DECISION_TIME",BOT_ITEM_DECISION_TIME},
+
+	// botStyle_e
+	{"BOT_STYLE_NORMAL",BOT_STYLE_NORMAL},
+	{"BOT_STYLE_STAY",BOT_STYLE_STAY},
+	{"BOT_STYLE__MAX",BOT_STYLE__MAX},
+
+	// botItemPriority_e
+	{"BOT_ITEM_PR__FALLBACK",BOT_ITEM_PR__FALLBACK},
+	{"BOT_ITEM_PR_NEUTRAL",BOT_ITEM_PR_NEUTRAL},
+	{"BOT_ITEM_PR_FRONTRUNNER",BOT_ITEM_PR_FRONTRUNNER},
+	{"BOT_ITEM_PR_SPEED",BOT_ITEM_PR_SPEED},
+	{"BOT_ITEM_PR__OVERRIDES",BOT_ITEM_PR__OVERRIDES},
+	{"BOT_ITEM_PR_RINGDEBT",BOT_ITEM_PR_RINGDEBT},
+	{"BOT_ITEM_PR_POWER",BOT_ITEM_PR_POWER},
+	{"BOT_ITEM_PR_SPB",BOT_ITEM_PR_SPB},
+	{"BOT_ITEM_PR__MAX",BOT_ITEM_PR__MAX},
+
+	// textmapbotcontroller_t
+	{"TMBOT_NORUBBERBAND",TMBOT_NORUBBERBAND},
+	{"TMBOT_NOCONTROL",TMBOT_NOCONTROL},
+	{"TMBOT_FORCEDIR",TMBOT_FORCEDIR},
+	{"TMBOT_FASTFALL",TMBOT_FASTFALL},
+
+	// textmapbottrick_t
+	{"TMBOTTR_NONE",TMBOTTR_NONE},
+	{"TMBOTTR_LEFT",TMBOTTR_LEFT},
+	{"TMBOTTR_RIGHT",TMBOTTR_RIGHT},
+	{"TMBOTTR_UP",TMBOTTR_UP},
+	{"TMBOTTR_DOWN",TMBOTTR_DOWN},
+
+	// t_overlay_action_t
+	{"TOV_UNDEFINED",TOV_UNDEFINED},
+	{"TOV_STILL",TOV_STILL},
+	{"TOV_MOVING",TOV_MOVING},
+	{"TOV__MAX",TOV__MAX},
+
+	// terrain_flags_t
+	{"TRF_LIQUID",TRF_LIQUID},
+	{"TRF_SNEAKERPANEL",TRF_SNEAKERPANEL},
+	{"TRF_STAIRJANK",TRF_STAIRJANK},
+	{"TRF_TRIPWIRE",TRF_TRIPWIRE},
+	{"TRF_REMAP",TRF_REMAP},
 
 	{NULL,0}
 };

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2022 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -39,6 +39,7 @@ enum hud {
 	hud_speedometer,
 	hud_freeplay,
 	hud_rankings,		// Tab rankings
+	hud_rings,			// Rings and Spheres HUD element
 
 	// Intermission
 	hud_intermissiontally,

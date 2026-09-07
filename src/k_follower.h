@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -114,6 +114,8 @@ struct followercategory_t
 
 extern INT32 numfollowercategories;
 extern followercategory_t followercategories[MAXFOLLOWERCATEGORIES];
+
+extern boolean horngoner;
 
 /*--------------------------------------------------
 	INT32 K_FollowerAvailable(const char *name)

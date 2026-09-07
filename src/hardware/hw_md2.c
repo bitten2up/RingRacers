@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -495,7 +495,10 @@ void HWR_InitModels(void)
 	size_t i;
 	INT32 s;
 	FILE *f;
-	char name[24], filename[32];
+	char name[26], filename[32];
+	// name[24] is used to check for names in the models.dat file that match with sprites or player skins
+	// sprite names are always 4 characters long, and names is for player skins can be up to 19 characters long
+	// PLAYERMODELPREFIX is 6 characters long
 	float scale, offset;
 	size_t prefixlen;
 
@@ -632,7 +635,7 @@ void HWR_AddPlayerModel(INT32 skin) // For skins that were added after startup
 		if (!strnicmp(name, PLAYERMODELPREFIX, prefixlen) && (len > prefixlen))
 			skinname += prefixlen;
 
-		if (stricmp(skinname, skins[skin].name) == 0)
+		if (stricmp(skinname, skins[skin]->name) == 0)
 		{
 			md2_playermodels[skin].skin = skin;
 			md2_playermodels[skin].scale = scale;
@@ -826,10 +829,9 @@ static void HWR_CreateBlendedTexture(patch_t *gpatch, patch_t *blendgpatch, GLMi
 				}
 			}
 		}
-	}
 
-	if (translen > 0)
 		colorbrightnesses[translen] = colorbrightnesses[translen-1];
+	}
 
 	if (skinnum == TC_BLINK)
 		blendcolor = V_GetColor(skincolors[color].ramp[3]);
@@ -1402,7 +1404,10 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 		// hitlag vibrating
 		if (spr->mobj->hitlag > 0 && (spr->mobj->eflags & MFE_DAMAGEHITLAG))
 		{
-			fixed_t mul = spr->mobj->hitlag * HITLAGJITTERS;
+			fixed_t jitters = HITLAGJITTERS;
+			if (R_UsingFrameInterpolation() && !paused)
+				jitters += (rendertimefrac / HITLAGDIV);
+			fixed_t mul = spr->mobj->hitlag * jitters;
 
 			if (leveltime & 1)
 			{
@@ -1448,10 +1453,10 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 
 		// 1. load model+texture if not already loaded
 		// 2. draw model with correct position, rotation,...
-		if (spr->mobj->skin && spr->mobj->sprite == SPR_PLAY && !md2_playermodels[(skin_t*)spr->mobj->skin-skins].notfound) // Use the player MD2 list if the mobj has a skin and is using the player sprites
+		if (spr->mobj->skin && spr->mobj->sprite == SPR_PLAY && !md2_playermodels[((skin_t*)spr->mobj->skin)->skinnum].notfound) // Use the player MD2 list if the mobj has a skin and is using the player sprites
 		{
-			md2 = &md2_playermodels[(skin_t*)spr->mobj->skin-skins];
-			md2->skin = (skin_t*)spr->mobj->skin-skins;
+			md2 = &md2_playermodels[((skin_t*)spr->mobj->skin)->skinnum];
+			md2->skin = ((skin_t*)spr->mobj->skin)->skinnum;
 		}
 		else
 		{
@@ -1525,7 +1530,7 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 
 			if (spr->mobj->skin && spr->mobj->sprite == SPR_PLAY) // This thing is a player!
 			{
-				skinnum = (skin_t*)spr->mobj->skin-skins;
+				skinnum = ((skin_t*)spr->mobj->skin)->skinnum;
 			}
 
 			// Hide not-yet-unlocked characters in replays from other people
@@ -1668,14 +1673,23 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 			p.angley = FIXED_TO_FLOAT(anglef);
 		}
 
+		angle_t pitchR, rollR, fixedAngY;
+
+		pitchR = 0;
+		rollR = 0;
+		fixedAngY = 0;
+
 		{
 			fixed_t anglef = AngleFixed(R_ModelRotationAngle(spr->mobj, NULL));
 
 			p.rollangle = 0.0f;
 
+			// make fixedAngY a disguised fixed_t first
+			fixedAngY = FLOAT_TO_FIXED(p.angley);
+
 			if (anglef)
 			{
-				fixed_t camAngleDiff = AngleFixed(viewangle) - FLOAT_TO_FIXED(p.angley); // dumb reconversion back, I know
+				fixed_t camAngleDiff = AngleFixed(viewangle) - (fixed_t)(fixedAngY); // dumb reconversion back, I know
 
 				p.rollangle = FIXED_TO_FLOAT(anglef);
 				p.roll = true;
@@ -1685,9 +1699,19 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 				p.centery = FIXED_TO_FLOAT(spr->mobj->height / 2);
 
 				// rotation axes relative to camera
-				p.rollx = FIXED_TO_FLOAT(FINECOSINE(FixedAngle(camAngleDiff) >> ANGLETOFINESHIFT));
-				p.rollz = FIXED_TO_FLOAT(FINESINE(FixedAngle(camAngleDiff) >> ANGLETOFINESHIFT));
+				pitchR = FINESINE(FixedAngle(camAngleDiff) >> ANGLETOFINESHIFT);
+				rollR = FINECOSINE(FixedAngle(camAngleDiff) >> ANGLETOFINESHIFT);
+
+				p.rollx = FIXED_TO_FLOAT((fixed_t)rollR);
+				p.rollz = FIXED_TO_FLOAT((fixed_t)pitchR);
+
+				// convert to angles
+				pitchR = FixedAngle((fixed_t)pitchR);
+				rollR = FixedAngle((fixed_t)rollR);
 			}
+
+			// make this a proper angle now
+			fixedAngY = FixedAngle(fixedAngY);
 		}
 
 		p.anglez = FIXED_TO_FLOAT(AngleFixed(R_InterpolateAngle(spr->mobj->old_pitch, spr->mobj->pitch)));
@@ -1699,6 +1723,8 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 		HWD.pfnSetShader(SHADER_MODEL);	// model shader
 		{
 			float this_scale = FIXED_TO_FLOAT(spr->mobj->scale);
+			fixed_t floorClip = spr->mobj->terrain ? spr->mobj->terrain->floorClip : 0;
+			float finalfloorClip = FIXED_TO_FLOAT(FixedMul(floorClip, mapobjectscale)*P_MobjFlip(spr->mobj));
 
 			float xs = this_scale * FIXED_TO_FLOAT(spr->mobj->spritexscale);
 			float ys = this_scale * FIXED_TO_FLOAT(spr->mobj->spriteyscale);
@@ -1709,7 +1735,89 @@ boolean HWR_DrawModel(gl_vissprite_t *spr)
 			// offset perpendicular to the camera angle
 			p.x -= ox * gl_viewsin;
 			p.y += ox * gl_viewcos;
-			p.z += oy;
+			p.z += oy - finalfloorClip;
+
+			if (R_ThingIsUsingBakedOffsets(spr->mobj))
+			{
+				// visoffset stuff
+				float xx, xy, yx, yy;
+				float zx, zy, zz;
+				float xpiv, ypiv, zpiv;
+				fixed_t zh;
+				fixed_t xoffs, yoffs;
+
+				// xoffs = (cos(xoff) + sin(yoff))
+				xoffs =
+					FixedMul(spr->mobj->bakeyoff, -FINECOSINE(fixedAngY >> ANGLETOFINESHIFT)) +
+					FixedMul(spr->mobj->bakexoff, FINESINE(fixedAngY >> ANGLETOFINESHIFT));
+
+				// yoffs = (-sin(xoff) + cos(yoff))
+				yoffs =
+					FixedMul(spr->mobj->bakeyoff, -FINESINE(fixedAngY >> ANGLETOFINESHIFT)) +
+					FixedMul(spr->mobj->bakexoff, FINECOSINE(fixedAngY >> ANGLETOFINESHIFT));
+
+				const fixed_t hflipmul = hflip ? -FRACUNIT : FRACUNIT;
+
+				xpiv = FIXED_TO_FLOAT(
+					FixedMul(
+						FixedMul(spr->mobj->bakeypiv,
+								 -FINECOSINE(fixedAngY >> ANGLETOFINESHIFT)) +
+						FixedMul(spr->mobj->bakexpiv,
+								 FINESINE(fixedAngY >> ANGLETOFINESHIFT)),
+					hflipmul));
+				ypiv = FIXED_TO_FLOAT(
+					FixedMul(
+						FixedMul(spr->mobj->bakeypiv,
+								 -FINESINE(fixedAngY >> ANGLETOFINESHIFT)) +
+						FixedMul(spr->mobj->bakexpiv,
+								 FINECOSINE(fixedAngY >> ANGLETOFINESHIFT)),
+					hflipmul));
+				zpiv = FIXED_TO_FLOAT(spr->mobj->bakezpiv * ((flip) ? -1 : 1));
+
+				pitchR = ((pitchR + spr->mobj->pitch) * ((flip) ? -1 : 1));
+				rollR = ((rollR + spr->mobj->roll) * ((flip) ? -1 : 1));
+
+				// x offset
+				xx = FIXED_TO_FLOAT(FixedMul(FixedMul(
+											FixedMul(xoffs,spr->mobj->spritexscale),
+											hflipmul), 
+											FINECOSINE(pitchR >> ANGLETOFINESHIFT)
+											));
+				xy = FIXED_TO_FLOAT(FixedMul(FixedMul(
+									FixedMul(xoffs,spr->mobj->spritexscale),
+									hflipmul),
+									-FINESINE(pitchR >> ANGLETOFINESHIFT)
+									));
+
+				// y offset
+				yx = FIXED_TO_FLOAT(FixedMul(FixedMul(
+											FixedMul(yoffs,spr->mobj->spritexscale),
+											hflipmul), 
+											FINECOSINE(rollR >> ANGLETOFINESHIFT)
+											));
+
+				yy = FIXED_TO_FLOAT(FixedMul(FixedMul(
+									FixedMul(yoffs,spr->mobj->spritexscale),
+									hflipmul),
+									-FINESINE(rollR >> ANGLETOFINESHIFT)
+									));
+
+				// z offset
+				zh = FixedMul(FixedMul(spr->mobj->bakezoff,spr->mobj->spriteyscale),
+								FINECOSINE(rollR >> ANGLETOFINESHIFT));
+
+				zz = FIXED_TO_FLOAT(FixedMul(zh,
+									FINECOSINE(pitchR >> ANGLETOFINESHIFT)));
+				zx = FIXED_TO_FLOAT(FixedMul(zh,
+									FINESINE(pitchR >> ANGLETOFINESHIFT)));
+				zy = FIXED_TO_FLOAT(FixedMul(zh,
+									FINESINE(rollR >> ANGLETOFINESHIFT)));
+
+				// do these namings even make sense at this point?
+				p.x += xx + zx + xpiv;
+				p.z += (xy + yy + zz * (flip ? -1 : 1)) + zpiv;
+				p.y += yx + zy + ypiv;
+			}
 
 			HWD.pfnDrawModel(md2->model, frame, durs, tics, nextFrame, &p, md2->scale * xs, md2->scale * ys, flip, hflip, &Surf);
 		}

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -13,13 +13,12 @@
 
 #ifdef __cplusplus
 
-#include <array>
 #include <cstdint>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
-#include <nlohmann/json.hpp>
+#include "core/json.hpp"
+#include "core/hash_map.hpp"
+#include "core/string.h"
+#include "core/vector.hpp"
 
 namespace srb2
 {
@@ -39,7 +38,7 @@ struct GamedataPlaytimeJson final
 	uint32_t statistics;
 	uint32_t tumble;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataPlaytimeJson,
 		total,
 		netgame,
@@ -60,7 +59,7 @@ struct GamedataRingsJson final
 {
 	uint32_t total;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataRingsJson, total)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataRingsJson, total)
 };
 
 struct GamedataRoundsJson final
@@ -71,7 +70,7 @@ struct GamedataRoundsJson final
 	uint32_t special;
 	uint32_t custom;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataRoundsJson, race, battle, prisons, special, custom)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataRoundsJson, race, battle, prisons, special, custom)
 };
 
 struct GamedataChallengeKeysJson final
@@ -81,7 +80,7 @@ struct GamedataChallengeKeysJson final
 	uint16_t keyspending;
 	uint16_t chaokeys;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataChallengeKeysJson, pendingkeyrounds, pendingkeyroundoffset, keyspending, chaokeys)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataChallengeKeysJson, pendingkeyrounds, pendingkeyroundoffset, keyspending, chaokeys)
 };
 
 struct GamedataMilestonesJson final
@@ -97,8 +96,9 @@ struct GamedataMilestonesJson final
 	bool enteredtutorialchallenge;
 	bool sealedswapalerted;
 	bool tutorialdone;
+	bool playgroundroute;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataMilestonesJson,
 		gonerlevel,
 		everloadedaddon,
@@ -110,7 +110,8 @@ struct GamedataMilestonesJson final
 		finishedtutorialchallenge,
 		enteredtutorialchallenge,
 		sealedswapalerted,
-		tutorialdone
+		tutorialdone,
+		playgroundroute
 	)
 };
 
@@ -119,15 +120,15 @@ struct GamedataPrisonEggPickupsJson final
 	uint16_t thisprisoneggpickup;
 	uint16_t prisoneggstothispickup;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataPrisonEggPickupsJson, thisprisoneggpickup, prisoneggstothispickup)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataPrisonEggPickupsJson, thisprisoneggpickup, prisoneggstothispickup)
 };
 
 struct GamedataChallengeGridJson final
 {
 	uint32_t width;
-	std::vector<uint16_t> grid;
+	Vector<uint16_t> grid;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataChallengeGridJson, width, grid)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataChallengeGridJson, width, grid)
 };
 
 struct GamedataSkinRecordsPlaytimeJson final
@@ -140,7 +141,7 @@ struct GamedataSkinRecordsPlaytimeJson final
 	uint32_t custom;
 	uint32_t tumble;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataSkinRecordsPlaytimeJson,
 		total,
 		race,
@@ -158,7 +159,7 @@ struct GamedataSkinRecordsJson final
 	uint32_t rounds;
 	GamedataSkinRecordsPlaytimeJson time;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataSkinRecordsJson,
 		wins,
 		rounds,
@@ -170,7 +171,7 @@ struct GamedataSkinJson final
 {
 	GamedataSkinRecordsJson records;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSkinJson, records)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSkinJson, records)
 };
 
 struct GamedataMapVisitedJson final
@@ -181,7 +182,7 @@ struct GamedataMapVisitedJson final
 	bool spbattack;
 	bool mysticmelody;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapVisitedJson, visited, beaten, encore, spbattack, mysticmelody)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapVisitedJson, visited, beaten, encore, spbattack, mysticmelody)
 };
 
 struct GamedataMapStatsTimeAttackJson final
@@ -189,7 +190,7 @@ struct GamedataMapStatsTimeAttackJson final
 	uint32_t besttime;
 	uint32_t bestlap;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapStatsTimeAttackJson, besttime, bestlap)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapStatsTimeAttackJson, besttime, bestlap)
 };
 
 struct GamedataMapStatsSpbAttackJson final
@@ -197,7 +198,7 @@ struct GamedataMapStatsSpbAttackJson final
 	uint32_t besttime;
 	uint32_t bestlap;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapStatsSpbAttackJson, besttime, bestlap)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapStatsSpbAttackJson, besttime, bestlap)
 };
 
 struct GamedataMapStatsPlaytimeJson final
@@ -212,7 +213,7 @@ struct GamedataMapStatsPlaytimeJson final
 	uint32_t timeattack;
 	uint32_t spbattack;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataMapStatsPlaytimeJson,
 		total,
 		netgame,
@@ -232,7 +233,7 @@ struct GamedataMapStatsJson final
 	GamedataMapStatsSpbAttackJson spbattack;
 	GamedataMapStatsPlaytimeJson time;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataMapStatsJson,
 		timeattack,
 		spbattack,
@@ -244,16 +245,18 @@ struct GamedataMapJson final
 {
 	GamedataMapVisitedJson visited;
 	GamedataMapStatsJson stats;
+	uint16_t spraycan;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapJson, visited, stats)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataMapJson, visited, stats, spraycan)
 };
 
+// Deprecated
 struct GamedataSprayCanJson final
 {
-	std::string map;
-	std::string color;
+	String map;
+	String color;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSprayCanJson, map, color)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSprayCanJson, map, color)
 };
 
 struct GamedataCupRecordsJson final
@@ -261,24 +264,24 @@ struct GamedataCupRecordsJson final
 	uint8_t bestplacement;
 	uint8_t bestgrade;
 	bool gotemerald;
-	std::string bestskin;
+	String bestskin;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataCupRecordsJson, bestplacement, bestgrade, gotemerald, bestskin)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataCupRecordsJson, bestplacement, bestgrade, gotemerald, bestskin)
 };
 
 struct GamedataCupJson final
 {
-	std::string name;
-	std::vector<GamedataCupRecordsJson> records;
+	String name;
+	Vector<GamedataCupRecordsJson> records;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataCupJson, name, records)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataCupJson, name, records)
 };
 
 struct GamedataSealedSwapJson final
 {
-	std::string name;
+	String name;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSealedSwapJson, name)
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GamedataSealedSwapJson, name)
 };
 
 struct GamedataJson final
@@ -290,19 +293,20 @@ struct GamedataJson final
 	GamedataMilestonesJson milestones;
 	GamedataPrisonEggPickupsJson prisons;
 	uint32_t tafolderhash;
-	std::vector<bool> emblems;
-	std::vector<bool> unlockables;
-	std::vector<bool> unlockpending;
-	std::vector<bool> conditionsets;
+	Vector<bool> emblems;
+	Vector<bool> unlockables;
+	Vector<bool> unlockpending;
+	Vector<bool> conditionsets;
 	GamedataChallengeGridJson challengegrid;
 	uint32_t timesBeaten;
-	std::unordered_map<std::string, GamedataSkinJson> skins;
-	std::unordered_map<std::string, GamedataMapJson> maps;
-	std::vector<GamedataSprayCanJson> spraycans;
-	std::unordered_map<std::string, GamedataCupJson> cups;
-	std::vector<GamedataSealedSwapJson> sealedswaps;
+	HashMap<String, GamedataSkinJson> skins;
+	Vector<String> spraycans_v2;
+	HashMap<String, GamedataMapJson> maps;
+	Vector<GamedataSprayCanJson> spraycans; // Deprecated
+	HashMap<String, GamedataCupJson> cups;
+	Vector<GamedataSealedSwapJson> sealedswaps;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+	SRB2_JSON_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 		GamedataJson,
 		playtime,
 		rings,
@@ -318,6 +322,7 @@ struct GamedataJson final
 		challengegrid,
 		timesBeaten,
 		skins,
+		spraycans_v2,
 		maps,
 		spraycans,
 		cups,

@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'"
-// Copyright (C) 2024 by Lachlan "Lach" Wright
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by "Lat'"
+// Copyright (C) 2025 by Lachlan "Lach" Wright
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -179,11 +179,19 @@ void Obj_AdventureAirBoosterHitboxTouch(mobj_t *hitbox, player_t *player)
 	// before we change the colour, spawn a buncha sparkles
 	for (i = 0; i < 12; i++)
 	{
+		fixed_t rand_x;
+		fixed_t rand_y;
+		fixed_t rand_z;
+
+		// note: determinate random argument eval order
+		rand_z = P_RandomFixed(PR_DECORATION);
+		rand_y = P_RandomFixed(PR_DECORATION);
+		rand_x = P_RandomFixed(PR_DECORATION);
 		part = P_SpawnMobjFromMobj(
 			hitbox,
-			FixedMul(AAB_RADIUS << 1, P_RandomFixed(PR_DECORATION)) - AAB_RADIUS,
-			FixedMul(AAB_RADIUS << 1, P_RandomFixed(PR_DECORATION)) - AAB_RADIUS,
-			FixedMul(AAB_RADIUS << 1, P_RandomFixed(PR_DECORATION)) - AAB_RADIUS,
+			FixedMul(AAB_RADIUS << 1, rand_x) - AAB_RADIUS,
+			FixedMul(AAB_RADIUS << 1, rand_y) - AAB_RADIUS,
+			FixedMul(AAB_RADIUS << 1, rand_z) - AAB_RADIUS,
 			MT_DVDPARTICLE
 		);
 		part->color = booster->color;

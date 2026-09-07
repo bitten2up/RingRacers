@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -26,6 +26,7 @@
 #include "w_wad.h"
 #include "z_zone.h"
 #include "hu_stuff.h"
+#include "k_hud.h"
 
 #include "lua_script.h"
 #include "lua_libs.h"
@@ -50,6 +51,7 @@ static const char *const hud_disable_options[] = {
 	"minimap",
 	"item",
 	"position",
+	"names",
 	"check",		// "CHECK" f-zero indicator
 	"minirankings",	// Gametype rankings to the left
 	"battlerankingsbumpers",	// bumper drawer for battle. Useful if you want to make a custom battle gamemode without bumpers being involved.
@@ -57,6 +59,7 @@ static const char *const hud_disable_options[] = {
 	"speedometer",
 	"freeplay",
 	"rankings",
+	"rings",
 
 	"intermissiontally",
 	"intermissionmessages",
@@ -429,9 +432,9 @@ static int libd_getSprite2Patch(lua_State *L)
 	if (super)
 		j |= FF_SPR2SUPER;
 
-	j = P_GetSkinSprite2(&skins[i], j, NULL); // feed skin and current sprite2 through to change sprite2 used if necessary
+	j = P_GetSkinSprite2(skins[i], j, NULL); // feed skin and current sprite2 through to change sprite2 used if necessary
 
-	sprdef = &skins[i].sprites[j];
+	sprdef = &skins[i]->sprites[j];
 
 	// set frame number
 	frame = luaL_optinteger(L, 2, 0);
@@ -459,7 +462,7 @@ static int libd_getSprite2Patch(lua_State *L)
 		INT32 rot = R_GetRollAngle(rollangle);
 
 		if (rot) {
-			patch_t *rotsprite = Patch_GetRotatedSprite(sprframe, frame, angle, sprframe->flip & (1<<angle), true, &skins[i].sprinfo[j], rot);
+			patch_t *rotsprite = Patch_GetRotatedSprite(sprframe, frame, angle, sprframe->flip & (1<<angle), true, &skins[i]->sprinfo[j], rot);
 			LUA_PushUserdata(L, rotsprite, META_PATCH);
 			lua_pushboolean(L, false);
 			lua_pushboolean(L, true);
@@ -575,6 +578,7 @@ static int libd_drawStretched(lua_State *L)
 
 // KART: draw patch on minimap from x, y coordinates on the map
 // Sal: Let's please just merge the relevant info into the actual function, and have Lua call that...
+// JugadorXEI: hey, sure.
 static int libd_drawOnMinimap(lua_State *L)
 {
 	fixed_t x, y, scale;	// coordinates of the object
@@ -585,22 +589,12 @@ static int libd_drawOnMinimap(lua_State *L)
 
 	// variables used to replicate k_kart's mmap drawer:
 	patch_t *AutomapPic;
-	INT32 mx, my;
-	INT32 splitflags, minimaptrans;
-
-	// base position of the minimap which also takes splits into account:
-	INT32 MM_X, MM_Y;
 
 	// variables used for actually drawing the icon:
-	fixed_t amnumxpos, amnumypos;
-	INT32 amxpos, amypos;
-
-	node_t *bsp = &nodes[numnodes-1];
-	fixed_t maxx, minx, maxy, miny;
-
-	fixed_t mapwidth, mapheight;
-	fixed_t xoffset, yoffset;
-	fixed_t xscale, yscale, zoom;
+	position_t amnumpos;
+	INT32 minimapflags;
+	fixed_t amxpos, amypos;
+	INT32 mm_x, mm_y;
 	fixed_t patchw, patchh;
 
 	HUDONLY	// only run this function in hud hooks
@@ -612,55 +606,6 @@ static int libd_drawOnMinimap(lua_State *L)
 		colormap = *((UINT8 **)luaL_checkudata(L, 5, META_COLORMAP));
 	centered = lua_optboolean(L, 6);
 
-	// replicate exactly what source does for its minimap drawer; AKA hardcoded garbo.
-
-	// first, check what position the mmap is supposed to be in (pasted from k_kart.c):
-	MM_X = BASEVIDWIDTH - 50;		// 270
-	MM_Y = (BASEVIDHEIGHT/2)-16; //  84
-	if (r_splitscreen)
-	{
-		MM_Y = (BASEVIDHEIGHT/2);
-		if (r_splitscreen > 1)	// 3P : bottom right
-		{
-			MM_X = (3*BASEVIDWIDTH/4);
-			MM_Y = (3*BASEVIDHEIGHT/4);
-
-			if (r_splitscreen > 2) // 4P: centered
-			{
-				MM_X = (BASEVIDWIDTH/2);
-				MM_Y = (BASEVIDHEIGHT/2);
-			}
-		}
-	}
-
-	// splitscreen flags
-	splitflags = (r_splitscreen == 3 ? 0 : V_SNAPTORIGHT);	// flags should only be 0 when it's centered (4p split)
-
-	{
-		const tic_t length = TICRATE/2;
-
-		if (!lt_exitticker)
-			return 0;
-		minimaptrans = 4;
-		if (lt_exitticker < length)
-			minimaptrans = (((INT32)lt_exitticker)*minimaptrans)/((INT32)length);
-		if (!minimaptrans)
-			return 0;
-	}
-
-
-	minimaptrans = ((10-minimaptrans)<<FF_TRANSSHIFT);
-	splitflags |= minimaptrans;
-
-	if (!(r_splitscreen == 2))
-	{
-		splitflags &= ~minimaptrans;
-		splitflags |= V_HUDTRANSHALF;
-	}
-
-	splitflags &= ~V_HUDTRANSHALF;
-	splitflags |= V_HUDTRANS;
-
 	// Draw the HUD only when playing in a level.
 	// hu_stuff needs this, unlike st_stuff.
 	if (gamestate != GS_LEVEL)
@@ -669,78 +614,39 @@ static int libd_drawOnMinimap(lua_State *L)
 	if (R_GetViewNumber() != 0)
 		return 0;
 
-	AutomapPic = mapheaderinfo[gamemap-1]->minimapPic;
-
+	AutomapPic = minimapinfo.minimap_pic;
 	if (!AutomapPic)
 	{
 		return 0; // no pic, just get outta here
 	}
 
-	mx = MM_X - (AutomapPic->width/2);
-	my = MM_Y - (AutomapPic->height/2);
+	// Handle offsets and stuff.
+	mm_x = MINI_X;
+	mm_y = MINI_Y - SHORT(AutomapPic->topoffset);
 
-	// let offsets transfer to the heads, too!
 	if (encoremode)
-		mx += SHORT(AutomapPic->leftoffset);
+	{
+		mm_x += SHORT(AutomapPic->leftoffset);
+	}
 	else
-		mx -= SHORT(AutomapPic->leftoffset);
-	my -= SHORT(AutomapPic->topoffset);
+	{
+		mm_x -= SHORT(AutomapPic->leftoffset);
+	}
 
-	// now that we have replicated this behavior, we can draw an icon from our supplied x, y coordinates by replicating k_kart.c's totally understandable uncommented code!!!
-
-	// get map boundaries using nodes
-	maxx = maxy = INT32_MAX;
-	minx = miny = INT32_MIN;
-	minx = bsp->bbox[0][BOXLEFT];
-	maxx = bsp->bbox[0][BOXRIGHT];
-	miny = bsp->bbox[0][BOXBOTTOM];
-	maxy = bsp->bbox[0][BOXTOP];
-
-	if (bsp->bbox[1][BOXLEFT] < minx)
-		minx = bsp->bbox[1][BOXLEFT];
-	if (bsp->bbox[1][BOXRIGHT] > maxx)
-		maxx = bsp->bbox[1][BOXRIGHT];
-	if (bsp->bbox[1][BOXBOTTOM] < miny)
-		miny = bsp->bbox[1][BOXBOTTOM];
-	if (bsp->bbox[1][BOXTOP] > maxy)
-		maxy = bsp->bbox[1][BOXTOP];
-
-	// You might be wondering why these are being bitshift here
-	// it's because mapwidth and height would otherwise overflow for maps larger than half the size possible...
-	// map boundaries and sizes will ALWAYS be whole numbers thankfully
-	// later calculations take into consideration that these are actually not in terms of FRACUNIT though
-	minx >>= FRACBITS;
-	maxx >>= FRACBITS;
-	miny >>= FRACBITS;
-	maxy >>= FRACBITS;
-
-	// these are our final map boundaries:
-	mapwidth = maxx - minx;
-	mapheight = maxy - miny;
-
-	// These should always be small enough to be bitshift back right now
-	xoffset = (minx + mapwidth/2)<<FRACBITS;
-	yoffset = (miny + mapheight/2)<<FRACBITS;
-
-	xscale = FixedDiv(AutomapPic->width, mapwidth);
-	yscale = FixedDiv(AutomapPic->height, mapheight);
-	zoom = FixedMul(min(xscale, yscale), FRACUNIT-FRACUNIT/20);
-
-	amnumxpos = (FixedMul(x, zoom) - FixedMul(xoffset, zoom));
-	amnumypos = -(FixedMul(y, zoom) - FixedMul(yoffset, zoom));
-
-	if (encoremode)
-		amnumxpos = -amnumxpos;
+	// Minimap flags:
+	minimapflags = K_GetMinimapSplitFlags(false)|K_GetMinimapTransFlags(false);
 
 	// scale patch coords
-	patchw = patch->width*scale /2;
-	patchh = patch->height*scale /2;
+	patchw = (SHORT(patch->width) / 2) * scale;
+	patchh = (SHORT(patch->height) / 2) * scale;
 
 	if (centered)
 		patchw = patchh = 0;	// patch is supposedly already centered, don't butt in.
 
-	amxpos = amnumxpos + ((mx + AutomapPic->width/2)<<FRACBITS) - patchw;
-	amypos = amnumypos + ((my + AutomapPic->height/2)<<FRACBITS) - patchh;
+	amnumpos = K_GetKartObjectPosToMinimapPos(x, y);
+
+	amxpos = amnumpos.x + (mm_x<<FRACBITS) - patchw;
+	amypos = amnumpos.y + (mm_y<<FRACBITS) - patchh;
 
 	// and NOW we can FINALLY DRAW OUR GOD DAMN PATCH :V
 	lua_getfield(L, LUA_REGISTRYINDEX, "HUD_DRAW_LIST");
@@ -748,9 +654,9 @@ static int libd_drawOnMinimap(lua_State *L)
 	lua_pop(L, 1);
 
 	if (LUA_HUD_IsDrawListValid(list))
-		LUA_HUD_AddDrawScaled(list, amxpos, amypos, scale, patch, splitflags, colormap);
+		LUA_HUD_AddDrawScaled(list, amxpos, amypos, scale, patch, minimapflags, colormap);
 	else
-		V_DrawFixedPatch(amxpos, amypos, scale, splitflags, patch, colormap);
+		V_DrawFixedPatch(amxpos, amypos, scale, minimapflags, patch, colormap);
 	return 0;
 }
 
@@ -989,6 +895,45 @@ static int libd_drawKartString(lua_State *L)
 	return 0;
 }
 
+static int libd_setClipRect(lua_State *L)
+{
+	fixed_t x = luaL_checkinteger(L, 1);
+	fixed_t y = luaL_checkinteger(L, 2);
+	fixed_t w = luaL_checkinteger(L, 3);
+	fixed_t h = luaL_checkinteger(L, 4);
+	INT32 flags = luaL_optinteger(L, 5, 0);
+	huddrawlist_h list;
+
+	flags &= ~V_PARAMMASK; // Don't let crashes happen.
+
+	HUDONLY
+	lua_getfield(L, LUA_REGISTRYINDEX, "HUD_DRAW_LIST");
+	list = (huddrawlist_h) lua_touserdata(L, -1);
+	lua_pop(L, 1);
+
+	if (LUA_HUD_IsDrawListValid(list))
+		LUA_HUD_AddSetClipRect(list, x, y, w, h, flags);
+	else
+		V_SetClipRect(x, y, w, h, flags);
+	return 0;
+}
+
+static int libd_clearClipRect(lua_State *L)
+{
+	huddrawlist_h list;
+
+	HUDONLY
+	lua_getfield(L, LUA_REGISTRYINDEX, "HUD_DRAW_LIST");
+	list = (huddrawlist_h) lua_touserdata(L, -1);
+	lua_pop(L, 1);
+
+	if (LUA_HUD_IsDrawListValid(list))
+		LUA_HUD_AddClearClipRect(list);
+	else
+		V_ClearClipRect();
+	return 0;
+}
+
 static int libd_titleCardStringWidth(lua_State *L)
 {
 	const char *str = luaL_checkstring(L, 1);
@@ -1021,6 +966,21 @@ static int libd_stringWidth(lua_State *L)
 	return 1;
 }
 
+static int libd_parseText(lua_State *L)
+{
+	HUDONLY
+
+	const char *rawText = luaL_checkstring(L, 1);
+
+	if (!rawText)
+		return luaL_error(L, "no string provided to v.parseText");
+
+	char *newText = V_ParseText(rawText);
+	lua_pushstring(gL, newText);
+	Z_Free(newText);
+	return 1;
+}
+
 static int libd_getColormap(lua_State *L)
 {
 	INT32 skinnum = TC_DEFAULT;
@@ -1045,7 +1005,7 @@ static int libd_getColormap(lua_State *L)
 			skinnum = i;
 	}
 
-	if (demo.playback)
+	if (demo.playback && skinnum >= 0)
 		skinnum = demo.skinlist[skinnum].mapping;
 
 	// all was successful above, now we generate the colormap at last!
@@ -1106,6 +1066,13 @@ static int libd_renderer(lua_State *L)
 		case render_soft:   lua_pushliteral(L, "software"); break; // Software renderer
 		default:            lua_pushliteral(L, "none");     break; // render_none (for dedicated), in case there's any reason this should be run
 	}
+	return 1;
+}
+
+static int libd_splitscreen(lua_State *L)
+{
+	HUDONLY
+	lua_pushinteger(L, r_splitscreen); // push splitscreen
 	return 1;
 }
 
@@ -1207,9 +1174,12 @@ static luaL_Reg lib_draw[] = {
 	{"drawString", libd_drawString},
 	{"drawTitleCardString", libd_drawTitleCardString},
 	{"drawKartString", libd_drawKartString},
+	{"setClipRect", libd_setClipRect},
+	{"clearClipRect", libd_clearClipRect},
 	// misc
 	{"stringWidth", libd_stringWidth},
 	{"titleCardStringWidth", libd_titleCardStringWidth},
+	{"parseText", libd_parseText},
 	// m_random
 	{"RandomFixed",libd_RandomFixed},
 	{"RandomByte",libd_RandomByte},
@@ -1223,6 +1193,7 @@ static luaL_Reg lib_draw[] = {
 	{"dupx", libd_dupx},
 	{"dupy", libd_dupy},
 	{"renderer", libd_renderer},
+	{"splitscreen", libd_splitscreen},
 	{"localTransFlag", libd_getlocaltransflag},
 	{"drawOnMinimap", libd_drawOnMinimap},
 	{"getDeltaTime", libd_getDeltaTime},

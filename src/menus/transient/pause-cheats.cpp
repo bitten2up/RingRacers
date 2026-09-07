@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -79,7 +79,7 @@ void list_cvars()
 			height += 16;
 		}
 
-		g_menu.push_back(menuitem_t {status, var->name, var->description, nullptr, {.cvar = var}, 0, height});
+		g_menu.push_back(menuitem_t {status, var->name, var->description, nullptr, srb2::itemaction(var), 0, height});
 	}
 }
 
@@ -94,7 +94,7 @@ void list_commands()
 			continue;
 		}
 
-		g_menu.push_back(menuitem_t {IT_STRING | IT_CALL, cmd->name, nullptr, nullptr, {.routine = call}, 0, 8});
+		g_menu.push_back(menuitem_t {IT_STRING | IT_CALL, cmd->name, nullptr, nullptr, srb2::itemaction(call), 0, 8});
 	}
 }
 
@@ -208,7 +208,8 @@ void draw_menu()
 	draw = draw.y(27 + kMargin);
 
 	draw.x(BASEVIDWIDTH/2).font(Draw::Font::kGamemode).text(mode_strings[menu_mode()]);
-	K_drawButton((draw.x() + 8) * FRACUNIT, (draw.y() + 8) * FRACUNIT, 0, kp_button_y[0], M_MenuButtonHeld(0, MBT_Y));
+	K_DrawGameControl(draw.x() + 8, draw.y()-6, 0, M_MenuButtonHeld(0, MBT_Y) ? "<y_pressed> Switch Page" : "<y> Switch Page", 0, MENU_FONT, 0);
+	// K_drawButton((draw.x() + 8) * FRACUNIT, (draw.y() + 8) * FRACUNIT, 0, kp_button_y[0], M_MenuButtonHeld(0, MBT_Y));
 	draw = draw.y(32 + kMargin);
 
 	currentMenu->y = std::min(static_cast<INT32>(draw.y()), (BASEVIDHEIGHT/2) - g_menu_offsets[itemOn]);

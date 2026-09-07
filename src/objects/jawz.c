@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -33,7 +33,7 @@
 #define jawz_dropped(o) ((o)->flags2 & MF2_AMBUSH)
 #define jawz_droptime(o) ((o)->movecount)
 
-#define jawz_retcolor(o) ((o)->cvmem)
+#define jawz_retcolor(o) ((o)->extravalue2)
 #define jawz_stillturn(o) ((o)->cusval)
 
 #define jawz_owner(o) ((o)->target)
@@ -222,7 +222,7 @@ void Obj_JawzThink(mobj_t *th)
 		ghost->colorized = true;
 	}
 
-	if (JawzSteersBetter() == true)
+	if (JawzSteersBetter() == true && !jawz_stillturn(th) && (th->momx != 0 && th->momy != 0))
 	{
 		th->friction = max(0, 3 * th->friction / 4);
 	}
@@ -253,7 +253,7 @@ void Obj_JawzThink(mobj_t *th)
 	}
 }
 
-void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
+void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir)
 {
 	INT32 lastTarg = -1;
 	player_t *owner = NULL;
@@ -270,7 +270,7 @@ void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
 		jawz_retcolor(th) = SKINCOLOR_KETCHUP;
 	}
 
-	if (dir == -1)
+	if (dir < 0)
 	{
 		// Thrown backwards, init self-chase
 		P_SetTarget(&jawz_chase(th), jawz_owner(th));
@@ -279,8 +279,16 @@ void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
 		th->momx = 0;
 		th->momy = 0;
 
-		// Slow down the top speed.
-		finalSpeed = FixedMul(finalSpeed, 4*FRACUNIT/5);
+		// Return at absolutely 120% of the owner's speed if it's any less than that.
+		fixed_t min_backthrowspeed = 6*(K_GetKartSpeed(owner, false, false))/5;
+		if (owner->speed >= min_backthrowspeed)
+		{
+			finalSpeed = 6*(owner->speed)/5;
+		}
+		else
+		{
+			finalSpeed = min_backthrowspeed;
+		}
 
 		// Set a fuse.
 		th->fuse = RR_PROJECTILE_FUSE;

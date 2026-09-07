@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -35,6 +35,7 @@
 #include "k_terrain.h"
 #include "k_objects.h"
 #include "k_boss.h"
+#include "k_hitlag.h" // K_AddHitlag
 
 #include "r_splats.h"
 
@@ -271,22 +272,22 @@ P_DoSpringEx
 		return;
 	}
 
+	object->eflags |= MFE_SPRUNG; // apply this flag asap!
+
 	if (horizspeed < 0)
 	{
 		horizspeed = -(horizspeed);
 		finalAngle += ANGLE_180;
 	}
 
-	object->standingslope = NULL; // Okay, now we know it's not going to be relevant - no launching off at silly angles for you.
-	object->terrain = NULL;
-
-	object->eflags |= MFE_SPRUNG; // apply this flag asap!
-
-	if ((vertispeed < 0) ^ P_IsObjectFlipped(object))
-		vertispeed *= 2;
-
 	if (vertispeed)
 	{
+		object->standingslope = NULL; // Okay, now we know it's not going to be relevant - no launching off at silly angles for you.
+		object->terrain = NULL;
+
+		if ((vertispeed < 0) ^ P_IsObjectFlipped(object))
+			vertispeed *= 2;
+
 		object->momz = FixedMul(vertispeed, scaleVal);
 	}
 
@@ -322,7 +323,7 @@ P_DoSpringEx
 		P_InstaThrust(object, finalAngle, finalSpeed);
 	}
 
-	if (object->player)
+	if (object->player && starcolor != SKINCOLOR_NONE)
 	{
 		K_TumbleInterrupt(object->player);
 		P_ResetPlayer(object->player);
@@ -456,6 +457,8 @@ boolean P_DoSpring(mobj_t *spring, mobj_t *object)
 
 			spring->reactiontime++;
 		}
+
+		object->player->transfer = 0;
 	}
 
 	P_SetMobjState(spring, raisestate);
@@ -648,6 +651,13 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 			return BMIT_CONTINUE; // force no collide
 	}
 
+	// markedfordeath players will phase through most things, unless its funny
+	if (g_tm.thing->player && g_tm.thing->player->markedfordeath && !(K_IsMissileOrKartItem(thing) || thing->type == MT_INSTAWHIP || thing->type == MT_PLAYER))
+		return BMIT_CONTINUE;
+
+	if (thing->player && thing->player->markedfordeath && !(K_IsMissileOrKartItem(g_tm.thing) || g_tm.thing->type == MT_INSTAWHIP || g_tm.thing->type == MT_PLAYER))
+		return BMIT_CONTINUE;
+
 	// Blend-Eye internal noclip
 	if ((thing->type == MT_BLENDEYE_GLASS || thing->type == MT_BLENDEYE_SHIELD || thing->type == MT_BLENDEYE_EGGBEATER)
 	&& (g_tm.thing->type == MT_BLENDEYE_MAIN || g_tm.thing->type == MT_BLENDEYE_EYE || g_tm.thing->type == MT_BLENDEYE_PUYO))
@@ -746,7 +756,14 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 			return BMIT_CONTINUE; // overhead
 		if (g_tm.thing->z + g_tm.thing->height < thing->z)
 			return BMIT_CONTINUE; // underneath
-		K_InstaWhipCollide(g_tm.thing, thing);
+
+		boolean hit = K_InstaWhipCollide(g_tm.thing, thing);
+		if (hit && g_tm.thing->target && !P_MobjWasRemoved(g_tm.thing->target) && g_tm.thing->target->player)
+		{
+			player_t *attacker = g_tm.thing->target->player;
+			if (attacker->defenseLockout > PUNISHWINDOW)
+				attacker->defenseLockout -= PUNISHWINDOW;
+		}
 		return BMIT_CONTINUE;
 	}
 
@@ -1022,6 +1039,7 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 		|| g_tm.thing->type == MT_MONITOR
 		|| g_tm.thing->type == MT_BATTLECAPSULE
 		|| g_tm.thing->type == MT_KART_LEFTOVER
+		|| g_tm.thing->type == MT_TOXOMISTER_POLE
 		|| (g_tm.thing->type == MT_PLAYER)))
 	{
 		// see if it went over / under
@@ -1040,6 +1058,7 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 		|| thing->type == MT_MONITOR
 		|| thing->type == MT_BATTLECAPSULE
 		|| thing->type == MT_KART_LEFTOVER
+		|| thing->type == MT_TOXOMISTER_POLE
 		|| (thing->type == MT_PLAYER)))
 	{
 		// see if it went over / under
@@ -1081,7 +1100,7 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 		return Obj_OrbinautJawzCollide(thing, g_tm.thing) ? BMIT_CONTINUE : BMIT_ABORT;
 	}
 
-	if (g_tm.thing->type == MT_BANANA || g_tm.thing->type == MT_BANANA_SHIELD || g_tm.thing->type == MT_BALLHOG)
+	if (g_tm.thing->type == MT_BANANA || g_tm.thing->type == MT_BANANA_SHIELD || g_tm.thing->type == MT_BALLHOG || g_tm.thing->type == MT_BALLHOGBOOM)
 	{
 		// see if it went over / under
 		if (g_tm.thing->z > thing->z + thing->height)
@@ -1091,7 +1110,7 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 
 		return K_BananaBallhogCollide(g_tm.thing, thing) ? BMIT_CONTINUE : BMIT_ABORT;
 	}
-	else if (thing->type == MT_BANANA || thing->type == MT_BANANA_SHIELD || thing->type == MT_BALLHOG)
+	else if (thing->type == MT_BANANA || thing->type == MT_BANANA_SHIELD || thing->type == MT_BALLHOG || thing->type == MT_BALLHOGBOOM)
 	{
 		// see if it went over / under
 		if (g_tm.thing->z > thing->z + thing->height)
@@ -1336,6 +1355,11 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 						thing->y,
 						g_tm.thing->z + (P_MobjFlip(thing) > 0 ? g_tm.thing->height : -thing->height)
 					);
+
+					if (g_tm.thing->type == MT_WALLSPIKE)
+					{
+						K_KartSolidBounce(thing, g_tm.thing);
+					}
 				}
 			}
 			else
@@ -1354,18 +1378,39 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 		if (g_tm.thing->z + g_tm.thing->height < thing->z)
 			return BMIT_CONTINUE; // underneath
 
-		if (g_tm.thing->player && g_tm.thing->player && g_tm.thing->player->tumbleBounces > 0)
+		if (g_tm.thing->player && g_tm.thing->player->tumbleBounces)
 		{
-			return BMIT_CONTINUE;
+			if (thing->type == MT_SPIKE || G_CompatLevel(0x0011))
+				return BMIT_CONTINUE;
 		}
-
-		if (!P_IsObjectOnGround(g_tm.thing) && g_tm.thing->momz * P_MobjFlip(g_tm.thing) < 0) // fell into it
+		else if (!P_IsObjectOnGround(g_tm.thing) && g_tm.thing->momz * P_MobjFlip(g_tm.thing) < 0) // fell into it
 		{
 			P_DamageMobj(g_tm.thing, thing, thing, 1, DMG_TUMBLE);
+
+			if (thing->type == MT_WALLSPIKE)
+			{
+				K_KartSolidBounce(g_tm.thing, thing);
+			}
+
 			return BMIT_CONTINUE;
 		}
 		else
 		{
+			if (
+				thing->type == MT_WALLSPIKE
+				&& G_CompatLevel(0x0011)
+				&& g_tm.thing->health
+				&& g_tm.thing->player
+				&& (g_tm.thing->player->justbumped < bumptime-2)
+				&& (
+					g_tm.thing->player->flashing
+					|| P_PlayerInPain(g_tm.thing->player)
+				)
+			)
+			{
+				K_StumblePlayer(g_tm.thing->player);
+			}
+
 			// Do not return because solidity code comes below.
 			P_DamageMobj(g_tm.thing, thing, thing, 1, DMG_NORMAL);
 		}
@@ -1528,6 +1573,17 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 			K_KartBouncing(g_tm.thing, thing);
 			return BMIT_CONTINUE;
 		}
+		else if (thing->type == MT_STONESHOE)
+		{
+			// see if it went over / under
+			if (g_tm.thing->z > thing->z + thing->height)
+				return BMIT_CONTINUE; // overhead
+			if (g_tm.thing->z + g_tm.thing->height < thing->z)
+				return BMIT_CONTINUE; // underneath
+
+			Obj_CollideStoneShoe(g_tm.thing, thing);
+			return BMIT_CONTINUE;
+		}
 		else if ((thing->flags & MF_SHOOTABLE) && K_PlayerCanPunt(g_tm.thing->player))
 		{
 			// see if it went over / under
@@ -1549,7 +1605,19 @@ static BlockItReturn_t PIT_CheckThing(mobj_t *thing)
 
 			if (!K_PuntCollide(thing, g_tm.thing))
 			{
-				K_KartSolidBounce(g_tm.thing, thing);
+				state_t *st = &states[thing->info->spawnstate];
+
+				if (st->action.acp1 == A_GenericBumper)
+				{
+					P_SetTarget(&thing->target, g_tm.thing);
+
+					var1 = -1;
+					var2 = 0;
+					astate = st;
+					st->action.acp1(thing);
+				}
+				else
+					K_KartSolidBounce(g_tm.thing, thing);
 			}
 			return BMIT_CONTINUE;
 		}
@@ -1788,6 +1856,7 @@ boolean P_IsLineTripWire(const line_t *ld)
 {
 	return ld->tripwire;
 }
+
 
 static boolean P_UsingStepUp(mobj_t *thing)
 {
@@ -2747,6 +2816,18 @@ fixed_t P_BaseStepUp(void)
 
 fixed_t P_GetThingStepUp(mobj_t *thing, fixed_t destX, fixed_t destY)
 {
+
+	// I have no idea why this check caused Ballhog to step up on EVERYTHING,
+	// but it sure did step up on everything.
+
+	/*
+	if (thing->type == MT_BALLHOG || thing->type == MT_BALLHOG_RETICULE_TEST)
+	{
+		// these should explode, not go up stairs
+		return 0;
+	}
+	*/
+
 	const fixed_t maxstepmove = P_BaseStepUp();
 	fixed_t maxstep = maxstepmove;
 
@@ -2754,6 +2835,21 @@ fixed_t P_GetThingStepUp(mobj_t *thing, fixed_t destX, fixed_t destY)
 	{
 		// Add some extra stepmove when waterskipping
 		maxstep += maxstepmove;
+	}
+
+	if (thing->standingslope && thing->standingslope->zdelta != 0 && (thing->momx || thing->momy))
+	{
+		vector3_t slopemom = {0,0,0};
+		slopemom.x = thing->momx;
+		slopemom.y = thing->momy;
+		P_QuantizeMomentumToSlope(&slopemom, thing->standingslope);
+		fixed_t momentumzdelta = FixedDiv(slopemom.z, FixedHypot(slopemom.x, slopemom.y)); // so this lets us know what the zdelta is for the vector the player is travelling along, in addition to the slope's zdelta in its xydirection
+		// if (thing->player)
+		// 	CONS_Printf("%s P_GetThingStepUp %d +", player_names[thing->player-players], maxstep);
+		maxstep += abs(momentumzdelta);
+		// if (thing->player)
+		// 	CONS_Printf(" %d = %d\n", momentumzdelta, maxstep);
+
 	}
 
 	if (P_MobjTouchingSectorSpecialFlag(thing, SSF_DOUBLESTEPUP)
@@ -2796,7 +2892,10 @@ increment_move
 	radius = max(radius, mapobjectscale);
 
 	// And Big Large (tm) movements can skip over slopes.
-	radius = min(radius, 16*mapobjectscale);
+	radius = min(radius, 8*mapobjectscale);
+
+	// if (thing->player)
+	// 	CONS_Printf("increment_move\n");
 
 	do {
 		// Sal 12/19/2022 -- PIT_CheckThing code now runs
@@ -2917,6 +3016,9 @@ increment_move
 				{
 					// If the floor difference is MAXSTEPMOVE or less, and the sector isn't Section1:14, ALWAYS
 					// step down! Formerly required a Section1:13 sector for the full MAXSTEPMOVE, but no more.
+
+					// if (thing->player && !(thingtop == thing->ceilingz && g_tm.ceilingz > thingtop && g_tm.ceilingz - thingtop <= maxstep))
+					// 	CONS_Printf("%d == %d && %d < %d && %d - %d <= %d  %s\n", thing->z, thing->floorz, g_tm.floorz, thing->z, thing->z, g_tm.floorz, maxstep, thing->z == thing->floorz && g_tm.floorz < thing->z && thing->z - g_tm.floorz <= maxstep ? "True" : "False");
 
 					if (thingtop == thing->ceilingz && g_tm.ceilingz > thingtop && g_tm.ceilingz - thingtop <= maxstep)
 					{
@@ -3169,16 +3271,16 @@ boolean P_TryMove(mobj_t *thing, fixed_t x, fixed_t y, boolean allowdropoff, Try
 				thing->player->pflags |= PF_FREEZEWAYPOINTS;
 			}
 		}
+	}
 
-		// Currently this just iterates all checkpoints.
-		// Pretty shitty way to do it, but only players can
-		// cross it, so it's good enough. Works as long as the
-		// move doesn't cross multiple -- it can only evaluate
-		// one.
-		if (thing->player)
-		{
-			Obj_CrossCheckpoints(thing->player, oldx, oldy);
-		}
+	// Currently this just iterates all checkpoints.
+	// Pretty shitty way to do it, but only players can
+	// cross it, so it's good enough. Works as long as the
+	// move doesn't cross multiple -- it can only evaluate
+	// one.
+	if (thing->player)
+	{
+		Obj_CrossCheckpoints(thing->player, oldx, oldy);
 	}
 
 	if (result != NULL)
@@ -4004,8 +4106,6 @@ papercollision:
 
 static void P_BouncePlayerMove(mobj_t *mo, TryMoveResult_t *result)
 {
-	extern consvar_t cv_showgremlins;
-
 	fixed_t mmomx = 0, mmomy = 0;
 	fixed_t oldmomx = mo->momx, oldmomy = mo->momy;
 
@@ -4029,24 +4129,6 @@ static void P_BouncePlayerMove(mobj_t *mo, TryMoveResult_t *result)
 
 	slidemo = mo;
 	bestslideline = result->line;
-
-	if (bestslideline == NULL && cv_showgremlins.value)
-	{
-		// debug
-		mobj_t*x = P_SpawnMobj(mo->x, mo->y, mo->z, MT_THOK);
-		x->frame = FF_FULLBRIGHT | FF_ADD;
-		x->renderflags = RF_ALWAYSONTOP;
-		x->color = SKINCOLOR_RED;
-
-		CONS_Printf(
-			"GREMLIN: leveltime=%u x=%f y=%f z=%f angle=%f\n",
-			leveltime,
-			FixedToFloat(mo->x),
-			FixedToFloat(mo->y),
-			FixedToFloat(mo->z),
-			AngleToFloat(R_PointToAngle2(0, 0, oldmomx, oldmomy))
-		);
-	}
 
 	if (mo->health <= 0)
 	{
@@ -4072,7 +4154,8 @@ static void P_BouncePlayerMove(mobj_t *mo, TryMoveResult_t *result)
 	else
 	{
 		// Some walls aren't bouncy even if you are
-		if (bestslideline && (bestslideline->flags & ML_NOTBOUNCY))
+		if ((bestslideline && (bestslideline->flags & ML_NOTBOUNCY))
+			|| (mo->player && mo->player->transfer))
 		{
 			// SRB2Kart: Non-bouncy line!
 			P_SlideMove(mo, result);
@@ -4088,13 +4171,29 @@ static void P_BouncePlayerMove(mobj_t *mo, TryMoveResult_t *result)
 	if (mo->player)
 		mo->player->bumpUnstuck += 5;
 
+	K_BotHitPenalty(mo->player);
+
 	// Combo avoidance!
 	if (mo->player && P_PlayerInPain(mo->player) && gametyperules & GTR_BUMPERS && mo->health == 1)
 	{
-		K_StumblePlayer(mo->player);
-		K_BumperInflate(mo->player);
-		mo->player->tumbleBounces = TUMBLEBOUNCES;
-		mo->hitlag = max(mo->hitlag, 6);
+		P_ResetPlayer(mo->player);
+		mo->player->spinouttimer = 0;
+		mo->player->wipeoutslow = 0;
+		mo->player->tumbleBounces = 0;
+
+		K_AddHitLag(mo, 3, false);
+
+		// "I dunno man, just fuckin' do it" - jart
+		S_StartSound(mo, sfx_mbs45);
+		S_StartSound(mo, sfx_mbs45);
+		S_StartSound(mo, sfx_mbs45);
+		S_StartSound(mo, sfx_mbs45);
+		S_StartSound(mo, sfx_mbv84);
+
+		if (mo->eflags & MFE_VERTICALFLIP)
+			mo->momz -= 40*mo->scale;
+		else
+			mo->momz += 40*mo->scale;
 	}
 
 	mo->momx = tmxmove;
@@ -4114,6 +4213,8 @@ static void P_BouncePlayerMove(mobj_t *mo, TryMoveResult_t *result)
 			P_TryMove(mo, mo->x - oldmomx, mo->y - oldmomy, true, NULL);
 		}
 	}
+
+	K_DappleEmployment(mo->player);
 }
 
 //
@@ -4613,13 +4714,8 @@ boolean P_CheckSector(sector_t *sector, boolean crunch)
  Lots of new Boom functions that work faster and add functionality.
 */
 
-static msecnode_t *headsecnode = NULL;
-static mprecipsecnode_t *headprecipsecnode = NULL;
-
 void P_Initsecnode(void)
 {
-	headsecnode = NULL;
-	headprecipsecnode = NULL;
 }
 
 // P_GetSecnode() retrieves a node from the freelist. The calling routine
@@ -4627,45 +4723,25 @@ void P_Initsecnode(void)
 
 static msecnode_t *P_GetSecnode(void)
 {
-	msecnode_t *node;
-
-	if (headsecnode)
-	{
-		node = headsecnode;
-		headsecnode = headsecnode->m_thinglist_next;
-	}
-	else
-		node = Z_Calloc(sizeof (*node), PU_LEVEL, NULL);
-	return node;
+	return Z_LevelPoolCalloc(sizeof(msecnode_t));
 }
 
 static mprecipsecnode_t *P_GetPrecipSecnode(void)
 {
-	mprecipsecnode_t *node;
-
-	if (headprecipsecnode)
-	{
-		node = headprecipsecnode;
-		headprecipsecnode = headprecipsecnode->m_thinglist_next;
-	}
-	else
-		node = Z_Calloc(sizeof (*node), PU_LEVEL, NULL);
-	return node;
+	return Z_LevelPoolCalloc(sizeof(mprecipsecnode_t));
 }
 
 // P_PutSecnode() returns a node to the freelist.
 
 static inline void P_PutSecnode(msecnode_t *node)
 {
-	node->m_thinglist_next = headsecnode;
-	headsecnode = node;
+	Z_LevelPoolFree(node, sizeof(msecnode_t));
 }
 
 // Tails 08-25-2002
 static inline void P_PutPrecipSecnode(mprecipsecnode_t *node)
 {
-	node->m_thinglist_next = headprecipsecnode;
-	headprecipsecnode = node;
+	Z_LevelPoolFree(node, sizeof(mprecipsecnode_t));
 }
 
 // P_AddSecnode() searches the current list to see if this sector is

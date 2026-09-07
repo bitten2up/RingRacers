@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -12,6 +12,7 @@
 /// \file
 /// \brief SRB2 graphics stuff for SDL
 
+#include <SDL_video.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <memory>
@@ -33,6 +34,8 @@
 #include "SDL.h"
 
 #ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
+#define RPC_NO_WINDOWS_H
 #include <windows.h>
 #pragma warning(default : 4214 4244)
 #endif
@@ -91,7 +94,7 @@
 #endif
 
 // maximum number of windowed modes (see windowedModes[][])
-#define MAXWINMODES (18)
+#define MAXWINMODES (19)
 
 using namespace srb2;
 
@@ -131,7 +134,6 @@ static      SDL_Color    localPalette[256];
 Uint16      realwidth = BASEVIDWIDTH;
 Uint16      realheight = BASEVIDHEIGHT;
 static       SDL_bool    mousegrabok = SDL_TRUE;
-static       SDL_bool    wrapmouseok = SDL_FALSE;
 static       SDL_bool    exposevideo = SDL_FALSE;
 static       SDL_bool    borderlesswindow = SDL_FALSE;
 
@@ -158,6 +160,7 @@ static INT32 windowedModes[MAXWINMODES][2] =
 	{1280, 800}, // 1.60,4.00
 	{1280, 720}, // 1.66
 	{1152, 864}, // 1.33,3.60
+	{1024,1024}, // SPECIAL, for snapshot taker
 	{1024, 768}, // 1.33,3.20
 	{ 800, 600}, // 1.33,2.50
 	{ 640, 480}, // 1.33,2.00
@@ -171,6 +174,23 @@ static SDL_bool Impl_CreateWindow(SDL_bool fullscreen);
 //static void Impl_SetWindowName(const char *title);
 static void Impl_SetWindowIcon(void);
 
+static void ValidateDisplay(void)
+{
+	// Validate display index, otherwise use main display
+	if (cv_display.value >= SDL_GetNumVideoDisplays())
+	{
+		CV_SetValue(&cv_display, 0);
+	}
+}
+
+static void CenterWindow(void)
+{
+	SDL_SetWindowPosition(window,
+		SDL_WINDOWPOS_CENTERED_DISPLAY(cv_display.value),
+		SDL_WINDOWPOS_CENTERED_DISPLAY(cv_display.value)
+	);
+}
+
 static void SDLSetMode(int width, int height, SDL_bool fullscreen, SDL_bool reposition)
 {
 	static SDL_bool wasfullscreen = SDL_FALSE;
@@ -182,6 +202,14 @@ static void SDLSetMode(int width, int height, SDL_bool fullscreen, SDL_bool repo
 	{
 		if (fullscreen)
 		{
+			if (reposition)
+			{
+				ValidateDisplay();
+				if (SDL_GetWindowDisplayIndex(window) != cv_display.value)
+				{
+					CenterWindow();
+				}
+			}
 			wasfullscreen = SDL_TRUE;
 			SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 		}
@@ -196,10 +224,8 @@ static void SDLSetMode(int width, int height, SDL_bool fullscreen, SDL_bool repo
 			SDL_SetWindowSize(window, width, height);
 			if (reposition)
 			{
-				SDL_SetWindowPosition(window,
-					SDL_WINDOWPOS_CENTERED_DISPLAY(SDL_GetWindowDisplayIndex(window)),
-					SDL_WINDOWPOS_CENTERED_DISPLAY(SDL_GetWindowDisplayIndex(window))
-				);
+				ValidateDisplay();
+				CenterWindow();
 			}
 		}
 	}
@@ -324,9 +350,10 @@ static INT32 Impl_SDL_Scancode_To_Keycode(SDL_Scancode code)
 	return 0;
 }
 
+extern "C" consvar_t cv_alwaysgrabmouse;
+
 static boolean IgnoreMouse(void)
 {
-	extern consvar_t cv_alwaysgrabmouse;
 	if (cv_alwaysgrabmouse.value)
 		return false;
 	if (menuactive)
@@ -339,34 +366,8 @@ static boolean IgnoreMouse(void)
 	return false;
 }
 
-static void SDLdoGrabMouse(void)
-{
-	SDL_ShowCursor(SDL_DISABLE);
-	SDL_SetWindowGrab(window, SDL_TRUE);
-	if (SDL_SetRelativeMouseMode(SDL_TRUE) == 0) // already warps mouse if successful
-		wrapmouseok = SDL_TRUE; // TODO: is wrapmouseok or HalfWarpMouse needed anymore?
-}
-
-static void SDLdoUngrabMouse(void)
-{
-	SDL_ShowCursor(SDL_ENABLE);
-	SDL_SetWindowGrab(window, SDL_FALSE);
-	wrapmouseok = SDL_FALSE;
-	SDL_SetRelativeMouseMode(SDL_FALSE);
-}
-
-void SDLforceUngrabMouse(void)
-{
-	if (SDL_WasInit(SDL_INIT_VIDEO)==SDL_INIT_VIDEO && window != NULL)
-		SDLdoUngrabMouse();
-}
-
 void I_UpdateMouseGrab(void)
 {
-	if (SDL_WasInit(SDL_INIT_VIDEO) == SDL_INIT_VIDEO && window != NULL
-	&& SDL_GetMouseFocus() == window && SDL_GetKeyboardFocus() == window
-	&& USE_MOUSEINPUT && !IgnoreMouse())
-		SDLdoGrabMouse();
 }
 
 static void VID_Command_NumModes_f (void)
@@ -489,10 +490,12 @@ static void Impl_HandleWindowEvent(SDL_WindowEvent evt)
 		case SDL_WINDOWEVENT_FOCUS_GAINED:
 			kbfocus = SDL_TRUE;
 			mousefocus = SDL_TRUE;
+			SDL_ShowCursor(SDL_FALSE);
 			break;
 		case SDL_WINDOWEVENT_FOCUS_LOST:
 			kbfocus = SDL_FALSE;
 			mousefocus = SDL_FALSE;
+			SDL_ShowCursor(SDL_TRUE);
 			break;
 		case SDL_WINDOWEVENT_MAXIMIZED:
 			break;
@@ -503,6 +506,9 @@ static void Impl_HandleWindowEvent(SDL_WindowEvent evt)
 		case SDL_WINDOWEVENT_SIZE_CHANGED:
 			vid.realwidth = evt.data1;
 			vid.realheight = evt.data2;
+			break;
+		case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+			CV_SetValue(&cv_display, evt.data1);
 			break;
 	}
 
@@ -517,15 +523,12 @@ static void Impl_HandleWindowEvent(SDL_WindowEvent evt)
 		window_notinfocus = false;
 
 		S_SetMusicVolume();
+		g_voice_disabled = cv_voice_selfdeafen.value;
 
 		if (!firsttimeonmouse)
 		{
 			if (cv_usemouse.value) I_StartupMouse();
 		}
-		//else firsttimeonmouse = SDL_FALSE;
-
-		if (USE_MOUSEINPUT && !IgnoreMouse())
-			SDLdoGrabMouse();
 	}
 	else if (!mousefocus && !kbfocus)
 	{
@@ -535,18 +538,11 @@ static void Impl_HandleWindowEvent(SDL_WindowEvent evt)
 			I_SetMusicVolume(0);
 		if (!(cv_bgaudio.value & 2))
 			S_StopSounds();
+		if (!(cv_bgaudio.value & 4))
+			g_voice_disabled = true;
 
-		if (!disable_mouse)
-		{
-			SDLforceUngrabMouse();
-		}
 		G_ResetAllDeviceGameKeyDown();
 		G_ResetAllDeviceResponding();
-
-		if (MOUSE_MENU)
-		{
-			SDLdoUngrabMouse();
-		}
 	}
 #undef FOCUSUNION
 }
@@ -576,50 +572,6 @@ static void Impl_HandleKeyboardEvent(SDL_KeyboardEvent evt, Uint32 type)
 
 static void Impl_HandleMouseMotionEvent(SDL_MouseMotionEvent evt)
 {
-	static boolean firstmove = true;
-
-	if (USE_MOUSEINPUT)
-	{
-		if ((SDL_GetMouseFocus() != window && SDL_GetKeyboardFocus() != window) || (IgnoreMouse() && !firstmove))
-		{
-			SDLdoUngrabMouse();
-			firstmove = false;
-			return;
-		}
-
-		// If using relative mouse mode, don't post an event_t just now,
-		// add on the offsets so we can make an overall event later.
-		if (SDL_GetRelativeMouseMode())
-		{
-			if (SDL_GetMouseFocus() == window && SDL_GetKeyboardFocus() == window)
-			{
-				mousemovex +=  evt.xrel;
-				mousemovey += -evt.yrel;
-				SDL_SetWindowGrab(window, SDL_TRUE);
-			}
-			firstmove = false;
-			return;
-		}
-
-		// If the event is from warping the pointer to middle
-		// of the screen then ignore it.
-		if ((evt.x == realwidth/2) && (evt.y == realheight/2))
-		{
-			firstmove = false;
-			return;
-		}
-
-		// Don't send an event_t if not in relative mouse mode anymore,
-		// just grab and set relative mode
-		// this fixes the stupid camera jerk on mouse entering bug
-		// -- Monster Iestyn
-		if (SDL_GetMouseFocus() == window && SDL_GetKeyboardFocus() == window)
-		{
-			SDLdoGrabMouse();
-		}
-	}
-
-	firstmove = false;
 }
 
 static void Impl_HandleMouseButtonEvent(SDL_MouseButtonEvent evt, Uint32 type)
@@ -1098,30 +1050,12 @@ void I_GetEvent(void)
 	G_GetDeviceGameKeyDownArray(0)[KEY_MOUSEWHEELDOWN] = G_GetDeviceGameKeyDownArray(0)[KEY_MOUSEWHEELUP] = 0;
 }
 
-static void half_warp_mouse(uint16_t x, uint16_t y) {
-	if (wrapmouseok)
-	{
-		SDL_WarpMouseInWindow(window, (Uint16)(x/2),(Uint16)(y/2));
-	}
-}
-
 void I_StartupMouse(void)
 {
-	static SDL_bool firsttimeonmouse = SDL_TRUE;
-
 	if (disable_mouse)
 		return;
 
-	if (!firsttimeonmouse)
-	{
-		half_warp_mouse(realwidth, realheight); // warp to center
-	}
-	else
-		firsttimeonmouse = SDL_FALSE;
-	if (cv_usemouse.value && !IgnoreMouse())
-		SDLdoGrabMouse();
-	else
-		SDLdoUngrabMouse();
+	SDL_ShowCursor(SDL_FALSE);
 }
 
 //
@@ -1192,8 +1126,8 @@ void I_UpdateNoVsync(void)
 //
 void I_ReadScreen(UINT8 *scr)
 {
-	if (rendermode != render_soft)
-		I_Error ("I_ReadScreen: called while in non-software mode");
+	if (rendermode == render_opengl)
+		I_Error ("I_ReadScreen: called while in Legacy GL mode");
 	else
 		VID_BlitLinearScreen(screens[0], scr,
 			vid.width*vid.bpp, vid.height,
@@ -1512,8 +1446,6 @@ static UINT32 VID_GetRefreshRate(void)
 
 INT32 VID_SetMode(INT32 modeNum)
 {
-	SDLdoUngrabMouse();
-
 	vid.recalc = 1;
 	vid.bpp = 1;
 
@@ -1591,6 +1523,8 @@ static void Impl_VideoSetupBuffer(void)
 	}
 }
 
+extern "C" CVarList* cvlist_graphics_driver;
+
 void I_StartupGraphics(void)
 {
 	if (dedicated)
@@ -1605,10 +1539,7 @@ void I_StartupGraphics(void)
 	COM_AddCommand ("vid_info", VID_Command_Info_f);
 	COM_AddCommand ("vid_modelist", VID_Command_ModeList_f);
 	COM_AddCommand ("vid_mode", VID_Command_Mode_f);
-	{
-		extern CVarList *cvlist_graphics_driver;
-		CV_RegisterList(cvlist_graphics_driver);
-	}
+	CV_RegisterList(cvlist_graphics_driver);
 	disable_mouse = static_cast<SDL_bool>(M_CheckParm("-nomouse"));
 	disable_fullscreen = M_CheckParm("-win") ? SDL_TRUE : SDL_FALSE;
 
@@ -1693,12 +1624,8 @@ void I_StartupGraphics(void)
 	realheight = (Uint16)vid.height;
 
 	VID_Command_Info_f();
-	SDLdoUngrabMouse();
 
 	SDL_RaiseWindow(window);
-
-	if (mousegrabok && !disable_mouse)
-		SDLdoGrabMouse();
 
 	graphics_started = true;
 }
