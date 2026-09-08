@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -92,7 +92,7 @@ void I_OsPolling(void);
 
 /**	\brief Called by M_Responder when quit is selected, return exit code 0
 */
-void I_Quit(void) FUNCNORETURN;
+FUNCNORETURN void ATTRNORETURN I_Quit(void);
 
 typedef enum
 {

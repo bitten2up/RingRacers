@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -93,10 +93,16 @@ struct IvoBall : Mobj
 			return;
 		}
 
+		if (!P_CanPickupItem(toucher->player, PICKUP_RINGORSPHERE))
+		{
+			return;
+		}
+
 		renderflags |= RF_DONTDRAW;
 		timer(kCooldown);
 
-		toucher->player->ringboost += 30;
+		toucher->player->ringboost += 10;
+		K_AwardPlayerRings(toucher->player, 1, false);
 
 		if (P_IsDisplayPlayer(toucher->player))
 		{

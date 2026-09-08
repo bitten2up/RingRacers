@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Jaime "Lactozilla" Passos.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
@@ -52,6 +52,11 @@ INT32 R_GetRollAngle(angle_t rollangle);
 angle_t R_GetPitchRollAngle(mobj_t *mobj, player_t *viewPlayer);
 angle_t R_ModelRotationAngle(mobj_t *mobj, player_t *viewPlayer);
 angle_t R_SpriteRotationAngle(mobj_t *mobj, player_t *viewPlayer);
+vector2_t* R_RotateSpriteOffsetsByPitchRoll(
+	mobj_t* mobj,
+	boolean vflip,
+	boolean hflip,
+	vector2_t* out);
 #endif
 
 #ifdef __cplusplus

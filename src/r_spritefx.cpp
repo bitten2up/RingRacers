@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -45,9 +45,8 @@ INT32 R_ThingLightLevel(mobj_t* thing)
 			lightlevel -= 255;
 		}
 
-		if (!R_CanShowSkinInDemo((skin_t*)thing->skin-skins)
-		&& !thing->colorized
-		&& !thing->hitlag)
+		if (!R_CanShowSkinInDemo(((skin_t*)thing->skin)->skinnum)
+		&& ((cv_reducevfx.value) || (!thing->colorized && !thing->hitlag)))
 		{
 			lightlevel -= 128;
 		}

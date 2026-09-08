@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -53,8 +53,7 @@ void M_FirstPickProfile(INT32 c)
 {
 	if (c == MA_YES)
 	{
-		M_ResetOptions();			// Reset all options variables otherwise things are gonna go reaaal bad lol.
-		optionsmenu.profile = NULL;	// Make sure to get rid of that, too.
+		M_ResetOptions(); // Reset all options variables otherwise things are gonna go reaaal bad lol.
 
 		PR_ApplyProfile(optionsmenu.profilen, 0);
 
@@ -83,6 +82,12 @@ void M_StartEditProfile(INT32 c)
 			PR_InitNewProfile();	// initialize the new profile.
 
 		optionsmenu.profile = PR_GetProfile(optionsmenu.profilen);
+		if (cv_kickstartaccel[0].value)
+		{
+			// Primarily for Goner but should help with standard set-up too
+			optionsmenu.profile->kickstartaccel = true;
+		}
+
 		// copy this profile's controls into optionsmenu so that we can edit controls without changing them directly.
 		// we do this so that we don't edit a profile's controls in real-time and end up doing really weird shit.
 		memcpy(&optionsmenu.tempcontrols, optionsmenu.profile->controls, sizeof(gamecontroldefault));
@@ -102,6 +107,8 @@ void M_StartEditProfile(INT32 c)
 			CV_StealthSetValue(&cv_dummyprofilekickstart, optionsmenu.profile->kickstartaccel);
 			CV_StealthSetValue(&cv_dummyprofileautoroulette, optionsmenu.profile->autoroulette);
 			CV_StealthSetValue(&cv_dummyprofilelitesteer, optionsmenu.profile->litesteer);
+			CV_StealthSetValue(&cv_dummyprofilestrictfastfall, optionsmenu.profile->strictfastfall);
+			CV_StealthSetValue(&cv_dummyprofiledescriptiveinput, optionsmenu.profile->descriptiveinput);
 			CV_StealthSetValue(&cv_dummyprofileautoring, optionsmenu.profile->autoring);
 			CV_StealthSetValue(&cv_dummyprofilerumble, optionsmenu.profile->rumble);
 			CV_StealthSetValue(&cv_dummyprofilefov, optionsmenu.profile->fov);
@@ -113,6 +120,8 @@ void M_StartEditProfile(INT32 c)
 			CV_StealthSetValue(&cv_dummyprofilekickstart, 0);	// off
 			CV_StealthSetValue(&cv_dummyprofileautoroulette, 0); // off
 			CV_StealthSetValue(&cv_dummyprofilelitesteer, 1); // on
+			CV_StealthSetValue(&cv_dummyprofilestrictfastfall, 0); // off
+			CV_StealthSetValue(&cv_dummyprofiledescriptiveinput, 1); // Modern
 			CV_StealthSetValue(&cv_dummyprofileautoring, 0); // on
 			CV_StealthSetValue(&cv_dummyprofilerumble, 1);	// on
 			CV_StealthSetValue(&cv_dummyprofilefov, 90);
@@ -152,7 +161,7 @@ void M_HandleProfileSelect(INT32 ch)
 
 	if (menutransition.tics == 0 && optionsmenu.resetprofile)
 	{
-		optionsmenu.profile = NULL;	// Make sure to reset that when transitions are done.'
+		optionsmenu.profile = NULL;	// Make sure to reset that when transitions are done.
 		optionsmenu.resetprofile = false;
 	}
 

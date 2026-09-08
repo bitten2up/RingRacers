@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -260,6 +260,7 @@ static inline VOID OpenTextConsole(void)
 	HANDLE ci, co;
 	const BOOL tco = M_CheckParm("-console") != 0;
 	dedicated = M_CheckParm("-dedicated") != 0;
+	connectedtodedicated = dedicated;
 	if (!(dedicated || tco))
 		return;
 	FreeConsole();

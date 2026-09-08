@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -41,6 +41,7 @@
 #include "doomstat.h" // MAXSPLITSCREENPLAYERS
 #include "r_fps.h" // Frame interpolation/uncapped
 #include "core/thread_pool.h"
+#include "m_misc.h"
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -307,8 +308,18 @@ angle_t R_PointToAnglePlayer(player_t *player, fixed_t x, fixed_t y)
 	{
 		refx = cam->x;
 		refy = cam->y;
-	}
 
+		// Bandaid for two very specific bugs that arise with chasecam off.
+		// 1: Camera tilt from slopes wouldn't apply correctly in first person.
+		// 2: Trick pies would appear strangely in first person.
+		if (player->mo)
+		{
+			if ((!cam->chase) && player->mo->x == x && player->mo->y == y)
+			{
+				return player->mo->angle;
+			}
+		}
+	}
 	return R_PointToAngle2(refx, refy, x, y);
 }
 
@@ -969,6 +980,16 @@ void R_CheckFOV(void)
 	}
 }
 
+boolean R_ShowHUD(void)
+{
+	if (g_takemapthumbnail != TMT_NO)
+	{
+		return false;
+	}
+
+	return (boolean)cv_showhud.value;
+}
+
 //
 // R_ExecuteSetViewSize
 //
@@ -988,7 +1009,7 @@ void R_ExecuteSetViewSize(void)
 		return;
 
 	// status bar overlay
-	st_overlay = cv_showhud.value;
+	st_overlay = R_ShowHUD();
 
 	scaledviewwidth = vid.width;
 	viewheight = vid.height;
@@ -1079,7 +1100,7 @@ void R_ExecuteSetViewSize(void)
 
 	// continue to do the software setviewsize as long as we use the reference software view
 #ifdef HWRENDER
-	if (rendermode != render_soft)
+	if (rendermode == render_opengl)
 		HWR_SetViewSize();
 #endif
 
@@ -1420,7 +1441,13 @@ boolean R_ViewpointHasChasecam(player_t *player)
 
 boolean R_IsViewpointThirdPerson(player_t *player, boolean skybox)
 {
-	boolean chasecam = R_ViewpointHasChasecam(player);
+	boolean chasecam = false;
+
+	// Prevent game crash if player is ever invalid.
+	if (!player)
+		return false;
+		
+	chasecam = R_ViewpointHasChasecam(player);
 
 	// cut-away view stuff
 	if (player->awayview.tics || skybox)

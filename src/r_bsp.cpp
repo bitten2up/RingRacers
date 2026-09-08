@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -427,6 +427,13 @@ boolean R_IsDebugLine(seg_t *line)
 	}
 
 	return false;
+}
+
+boolean R_ShouldFlipTripWire(const line_t *ld)
+{
+	// Flip tripwire textures when they are unpegged
+	// so the energy flows downward instead of upward, matching collision behavior
+	return (ld->tripwire && !(ld->flags & ML_MIDPEG));
 }
 
 //

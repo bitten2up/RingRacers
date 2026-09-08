@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -54,6 +54,8 @@ void D_PostEvent_end(void);    // delimiter for locking memory
 void D_ProcessEvents(boolean callresponders);
 
 const char *D_Home(void);
+
+void D_TakeMapSnapshots(void);
 
 //
 // BASE LEVEL

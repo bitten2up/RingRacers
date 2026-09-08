@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -76,6 +76,7 @@ void R_ClearSprites(void);
 UINT8 R_GetBoundingBoxColor(mobj_t *thing);
 boolean R_ThingBoundingBoxVisible(mobj_t *thing);
 
+boolean R_DrawPickups(void);
 boolean R_ThingVisible (mobj_t *thing);
 
 boolean R_ThingWithinDist (mobj_t *thing,
@@ -95,6 +96,8 @@ boolean R_ThingIsFullDark (mobj_t *thing);
 boolean R_ThingModelUsesDirectionalLighting(mobj_t *thing);
 
 boolean R_ThingIsFlashing(mobj_t *thing);
+
+boolean R_ThingIsUsingBakedOffsets(mobj_t *thing);
 
 INT32 R_ThingLightLevel(mobj_t *thing);
 boolean R_SplatSlope(mobj_t *thing, vector3_t position, pslope_t *slope);

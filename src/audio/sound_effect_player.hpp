@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,7 +21,7 @@
 namespace srb2::audio
 {
 
-class SoundEffectPlayer : public Source<2>
+class SoundEffectPlayer final : public Source<2>
 {
 public:
 	virtual std::size_t generate(tcb::span<Sample<2>> buffer) override final;

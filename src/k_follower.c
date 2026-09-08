@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -29,8 +29,10 @@
 INT32 numfollowers = 0;
 follower_t followers[MAXFOLLOWERS];
 
-INT32 numfollowercategories;
+INT32 numfollowercategories = 0;
 followercategory_t followercategories[MAXFOLLOWERCATEGORIES];
+
+boolean horngoner = false;
 
 CV_PossibleValue_t Followercolor_cons_t[MAXSKINCOLORS+3];	// +3 to account for "Match", "Opposite" & NULL
 
@@ -174,8 +176,6 @@ void K_SetFollowerByNum(INT32 playernum, INT32 skinnum)
 {
 	player_t *player = &players[playernum];
 
-	player->followerready = true; // we are ready to perform follower related actions in the player thinker, now.
-
 	if (skinnum >= -1 && skinnum <= numfollowers) // Make sure it exists!
 	{
 		/*
@@ -273,7 +273,7 @@ UINT16 K_GetEffectiveFollowerColor(UINT16 followercolor, follower_t *follower, U
 		if (playerskin == NULL)
 		{
 			// Nothing from this line down is valid if playerskin is invalid, just guess Eggman?
-			playerskin = &skins[0];
+			playerskin = skins[0];
 		}
 
 		playercolor = playerskin->prefcolor;
@@ -424,7 +424,7 @@ void K_HandleFollower(player_t *player)
 	if (player->followerskin < 0) // using a fallback follower
 		color = fl->defaultcolor;
 	else
-		color = K_GetEffectiveFollowerColor(player->followercolor, fl, player->skincolor, &skins[player->skin]);
+		color = K_GetEffectiveFollowerColor(player->followercolor, fl, player->skincolor, skins[player->skin]);
 
 	if (player->follower == NULL || P_MobjWasRemoved(player->follower)) // follower doesn't exist / isn't valid
 	{
@@ -477,10 +477,8 @@ void K_HandleFollower(player_t *player)
 
 		if (fl->mode == FOLLOWERMODE_GROUND)
 		{
-			sector_t *sec = R_PointInSubsector(sx, sy)->sector;
-
-			fh = min(fh, P_GetFloorZ(player->follower, sec, sx, sy, NULL));
-			ch = max(ch, P_GetCeilingZ(player->follower, sec, sx, sy, NULL) - ourheight);
+			fh = min(fh, P_FloorzAtPos(sx, sy, player->follower->z, ourheight));
+			ch = max(ch, P_CeilingzAtPos(sx, sy, player->follower->z, ourheight) - ourheight);
 
 			if (P_IsObjectOnGround(player->mo) == false)
 			{
@@ -516,7 +514,7 @@ void K_HandleFollower(player_t *player)
 		player->follower->colorized = player->mo->colorized;
 
 		P_SetScale(player->follower, FixedMul(fl->scale, player->mo->scale));
-		K_GenericExtraFlagsNoZAdjust(player->follower, player->mo); // Not K_MatchGenericExtraFlag because the Z adjust it has only works properly if master & mo have the same Z height.
+		K_MatchGenericExtraFlagsNoZAdjust(player->follower, player->mo); // Not K_MatchGenericExtraFlag because the Z adjust it has only works properly if master & mo have the same Z height.
 
 		// Match how the player is being drawn
 		player->follower->renderflags = player->mo->renderflags;
@@ -546,7 +544,7 @@ void K_HandleFollower(player_t *player)
 		}
 
 		// Sal: Turn the follower around when looking backwards.
-		if ( player->cmd.buttons & BT_LOOKBACK )
+		if (K_GetKartButtons(player) & BT_LOOKBACK)
 		{
 			destAngle += ANGLE_180;
 		}
@@ -623,7 +621,7 @@ void K_HandleFollower(player_t *player)
 			P_MoveOrigin(bmobj, player->follower->x, player->follower->y, player->follower->z);
 
 			P_SetScale(bmobj, FixedMul(bubble, player->mo->scale));
-			K_GenericExtraFlagsNoZAdjust(bmobj, player->follower);
+			K_MatchGenericExtraFlagsNoZAdjust(bmobj, player->follower);
 			bmobj->renderflags = player->mo->renderflags;
 
 			if (player->follower->threshold)
@@ -712,7 +710,7 @@ void K_HandleFollower(player_t *player)
 				player->follower->z + player->follower->height
 			);
 
-			K_FlipFromObject(honk, player->follower);
+			K_FlipFromObjectNoInterp(honk, player->follower);
 
 			honk->angle = R_PointToAngle2(
 				player->mo->x,
@@ -856,7 +854,7 @@ void K_FollowerHornTaunt(player_t *taunter, player_t *victim, boolean mysticmelo
 			P_SetTarget(&taunter->follower->hprev, honk);
 			P_SetTarget(&honk->target, taunter->follower);
 
-			K_FlipFromObject(honk, taunter->follower);
+			K_FlipFromObjectNoInterp(honk, taunter->follower);
 
 			honk->color = taunter->skincolor;
 
@@ -896,6 +894,26 @@ void K_FollowerHornTaunt(player_t *taunter, player_t *victim, boolean mysticmelo
 	}
 }
 
+#define AUTORINGFOLLOWERNAME "goddess"
+static INT32 K_AutoRingFollower(void)
+{
+	static INT32 autoringfollower = -2;
+
+	if (autoringfollower == -2)
+	{
+		autoringfollower = K_FollowerAvailable(AUTORINGFOLLOWERNAME);
+
+		if (autoringfollower == -2)
+		{
+			// This shouldn't happen, but just in case
+			autoringfollower = -1;
+		}
+	}
+
+	return (INT32)autoringfollower;
+}
+#undef AUTORINGFOLLOWERNAME
+
 /*--------------------------------------------------
 	INT32 K_GetEffectiveFollowerSkin(const player_t *player);
 
@@ -903,8 +921,8 @@ void K_FollowerHornTaunt(player_t *taunter, player_t *victim, boolean mysticmelo
 --------------------------------------------------*/
 INT32 K_GetEffectiveFollowerSkin(const player_t *player)
 {
-	if ((player->pflags & PF_AUTORING) && player->followerskin == -1)
-		return K_FollowerAvailable("Goddess");
-	else
-		return player->followerskin;
+	if (player->followerskin == -1 && ((player->pflags & PF_AUTORING) == PF_AUTORING))
+		return K_AutoRingFollower();
+
+	return player->followerskin;
 }

@@ -58,6 +58,18 @@ target_sources(SRB2SDL2 PRIVATE
 	adventure-air-booster.c
 	destroyed-kart.cpp
 	pulley.cpp
+	amps.c
+	ballhog.cpp
+	bubble-shield.cpp
+	flybot767.c
+	lightning-shield.cpp
+	flame-shield.cpp
+	stone-shoe.cpp
+	exp.c
+	bail.c
+	toxomister.cpp
+	ancient-gear.c
+	mushroom-hill-pole.c
 )
 
 add_subdirectory(versus)

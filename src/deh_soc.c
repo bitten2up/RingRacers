@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -1494,6 +1494,25 @@ void readlevelheader(MYFILE *f, char * name)
 					deh_warning("Level header %d: invalid lobby size '%s'", num, word2);
 				}
 			}
+			else if (fastcmp(word, "CAMHEIGHT") || fastcmp(word, "CAMERAHEIGHT"))
+			{
+				fixed_t camheight = FloatToFixed(atof(word2));
+
+				if (camheight < 0)
+				{
+					deh_warning("Level header %d: invalid camera height %s", num, word2);
+					continue;
+				}
+
+				mapheaderinfo[num]->cameraHeight = camheight;;
+			}
+			else if (fastcmp(word, "NOCOMMS") || fastcmp(word, "NOCOMM"))
+			{
+				if (i || word2[0] == 'T' || word2[0] == 'Y')
+					mapheaderinfo[num]->levelflags |= LF_NOCOMMS;
+				else
+					mapheaderinfo[num]->levelflags &= ~LF_NOCOMMS;
+			}
 			else
 				deh_warning("Level header %d: unknown word '%s'", num, word);
 		}
@@ -2953,7 +2972,8 @@ static void readcondition(UINT16 set, UINT32 id, char *word2)
 	||        (++offset && fastcmp(params[0], "REPLAY"))
 	||        (++offset && fastcmp(params[0], "CRASH"))
 	||        (++offset && fastcmp(params[0], "TUTORIALSKIP"))
-	||        (++offset && fastcmp(params[0], "TUTORIALDONE")))
+	||        (++offset && fastcmp(params[0], "TUTORIALDONE"))
+	||        (++offset && fastcmp(params[0], "PLAYGROUNDROUTE")))
 	{
 		//PARAMCHECK(1);
 		ty = UC_ADDON + offset;
@@ -3281,7 +3301,8 @@ static void readcondition(UINT16 set, UINT32 id, char *word2)
 	||        (++offset && fastcmp(params[0], "HITMIDAIR"))
 	||        (++offset && fastcmp(params[0], "HITDRAFTERLOOKBACK"))
 	||        (++offset && fastcmp(params[0], "GIANTRACERSHRUNKENORBI"))
-	||        (++offset && fastcmp(params[0], "RETURNMARKTOSENDER")))
+	||        (++offset && fastcmp(params[0], "RETURNMARKTOSENDER"))
+	||        (++offset && fastcmp(params[0], "ALLANCIENTGEARS")))
 	{
 		//PARAMCHECK(1);
 		ty = UCRP_TRIPWIREHYUU + offset;
@@ -3551,22 +3572,6 @@ void readmaincfg(MYFILE *f, boolean mainfile)
 						COM_BufInsertText(W_CacheLumpNum(lumpnum, PU_CACHE));
 				}
 			}
-			else if (fastcmp(word, "REDTEAM"))
-			{
-				skincolor_redteam = (UINT16)get_number(word2);
-			}
-			else if (fastcmp(word, "BLUETEAM"))
-			{
-				skincolor_blueteam = (UINT16)get_number(word2);
-			}
-			else if (fastcmp(word, "REDRING"))
-			{
-				skincolor_redring = (UINT16)get_number(word2);
-			}
-			else if (fastcmp(word, "BLUERING"))
-			{
-				skincolor_bluering = (UINT16)get_number(word2);
-			}
 			else if (fastcmp(word, "INVULNTICS"))
 			{
 				invulntics = (UINT16)get_number(word2);
@@ -3636,6 +3641,11 @@ void readmaincfg(MYFILE *f, boolean mainfile)
 				Z_Free(titlemap);
 				titlemap = Z_StrDup(word2);
 				titlechanged = true;
+			}
+			else if (fastcmp(word, "TUTORIALPLAYGROUNDMAP"))
+			{
+				Z_Free(tutorialplaygroundmap);
+				tutorialplaygroundmap = Z_StrDup(word2);
 			}
 			else if (fastcmp(word, "TUTORIALCHALLENGEMAP"))
 			{
@@ -4105,6 +4115,18 @@ void readcupheader(MYFILE *f, cupheader_t *cup)
 				if (!mainwads || (refreshdirmenu & REFRESHDIR_GAMEDATA))
 				{
 					cup->playcredits = (i != 0 || word2[0] == 'T' || word2[0] == 'Y');
+				}
+				else
+				{
+					deh_warning("You must define a custom gamedata to use \"%s\"", word);
+				}
+			}
+			else if (fastcmp(word, "HINTCONDITION"))
+			{
+				if (!mainwads || (refreshdirmenu & REFRESHDIR_GAMEDATA))
+				{
+					if (i > 0)
+						cup->hintcondition = i-1;
 				}
 				else
 				{

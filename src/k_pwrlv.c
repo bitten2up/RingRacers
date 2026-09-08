@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -19,6 +19,7 @@
 #include "k_grandprix.h"
 #include "k_profiles.h"
 #include "k_serverstats.h"
+#include "k_kart.h" // K_InRaceDuel
 
 // Client-sided calculations done for Power Levels.
 // This is done so that clients will never be able to hack someone else's score over the server.
@@ -77,46 +78,102 @@ void K_ClearClientPowerLevels(void)
 	memset(clientPowerAdd, 0, sizeof clientPowerAdd);
 }
 
-// Adapted from this: http://wiki.tockdom.com/wiki/Player_Rating
-INT16 K_CalculatePowerLevelInc(INT16 diff)
+// "Tyron sneaks mahjong ratings into Ring Racers"
+// A system that allows player ratings to inflate over time, then settle based on their winrate.
+static fixed_t K_CalculatePowerLevelInc(UINT16 you, UINT16 them, boolean won)
 {
-	INT16 control[10] = {0,0,0,1,8,50,125,125,125,125};
-	fixed_t increment = 0;
-	fixed_t x;
-	UINT8 j;
+	// == ★ TUNING ZONE ★ ==
 
-#define MAXDIFF (PWRLVRECORD_MAX - 1)
-	if (diff > MAXDIFF)
-		diff = MAXDIFF;
-	if (diff < -MAXDIFF)
-		diff = -MAXDIFF;
-#undef MAXDIFF
+	fixed_t BASE_CHANGE = 20*FRACUNIT; // The base amount that ratings should change per comparison. Higher = more volatile
 
-	x = ((diff-2)<<FRACBITS) / PWRLVRECORD_MEDIAN;
+	INT16 STABLE_RATE = 4000; // The fulcrum point between positive-sum and even rankings.
+	INT16 CEILING_RATE = 7000; // The fulcrum point between even and negative-sum rankings.
 
-	for (j = 3; j < 10; j++) // Just skipping to 3 since 0 thru 2 will always just add 0...
+	// % modifiers to gains and losses. Positive numbers mean you gain more when gaining and drain more when draining.
+	// Negative numbers mean changes are less volatile; this makes gains less powerful and drains less punishing.
+	// "Strong" players are above STABLE_RATE. "Weak" players are below STABLE_RATE.
+	fixed_t STRONG_GAIN_PER_K = 	-20*FRACUNIT/100; // How much to modify gains per 1000 points above stable.
+	fixed_t STRONG_DRAIN_PER_K = 	20*FRACUNIT/100; // How much to modify losses per 1000 points above stable.
+	fixed_t WEAK_GAIN_PER_K = 		20*FRACUNIT/100; // How much to modify gains per 1000 points BELOW stable.
+	fixed_t WEAK_DRAIN_PER_K = 		-20*FRACUNIT/100; // How much to modify losses per 1000 points BELOW stable.
+
+	fixed_t GAP_INFLUENCE_PER_K = 	20*FRACUNIT/100; // How much to modify changes per 1000 point rating gap between participants.
+	// This affects gains for the weaker player and drains for the stronger player, to reward upsets / reassert the order.
+
+	// == Derived helper vars ==
+
+	INT16 STABLE_DELTA = 0;
+
+	// Positive deltas if your rating is deflationary, negative if you're inflationary.
+	if (you < STABLE_RATE)
+		STABLE_DELTA = you - STABLE_RATE;
+	else if (you > CEILING_RATE)
+		STABLE_DELTA = you - CEILING_RATE;
+
+	INT16 ABS_STABLE_DELTA = abs(STABLE_DELTA);
+
+	INT16 RATING_GAP = you - them;
+	INT16 ABS_RATING_GAP = abs(RATING_GAP);
+
+	fixed_t GAP_INFLUENCE = GAP_INFLUENCE_PER_K / 1000 * ABS_RATING_GAP;
+
+	// == Working vars ==
+
+	fixed_t change = won ? BASE_CHANGE : -1 * BASE_CHANGE; // The rating change to eventually apply.
+	fixed_t gainMod = FRACUNIT; // Multiplier to winnings (change > 0).
+	fixed_t drainMod = FRACUNIT; // Multiplier to lost rating (change < 0).
+	fixed_t gainPerK = 0;
+	fixed_t lossPerK = 0;
+
+	// == ★ FIXED POINT MATH ZONE ★ ==
+
+	if (STABLE_DELTA > 0)
 	{
-		fixed_t f = abs(x - ((j-4)<<FRACBITS));
-		fixed_t add;
-
-		if (f >= (2<<FRACBITS))
-		{
-			continue; //add = 0;
-		}
-		else if (f >= (1<<FRACBITS))
-		{
-			fixed_t f2 = (2<<FRACBITS) - f;
-			add = FixedMul(FixedMul(f2, f2), f2) / 6;
-		}
-		else
-		{
-			add = ((3*FixedMul(FixedMul(f, f), f)) - (6*FixedMul(f, f)) + (4<<FRACBITS)) / 6;
-		}
-
-		increment += (add * control[j]);
+		// Use strong-player modifiers.
+		gainPerK = STRONG_GAIN_PER_K;
+		lossPerK = STRONG_DRAIN_PER_K;
+	}
+	else if (STABLE_DELTA < 0)
+	{
+		// Use weak-player modifiers.
+		gainPerK = WEAK_GAIN_PER_K;
+		lossPerK = WEAK_DRAIN_PER_K;
 	}
 
-	return (INT16)(increment >> FRACBITS);
+	// Apply rating-based modifiers: divide by 1000 so we're in the "right units"
+	// to tune with "per 1000" numbers up top.
+	gainMod += gainPerK / 1000 * ABS_STABLE_DELTA;
+	drainMod += lossPerK / 1000 * ABS_STABLE_DELTA;
+
+	// EXTRA: Weak players gain more versus strong players and vice versa.
+	if (RATING_GAP > 0)
+	{
+		// You're strong. You lose more when losing.
+		drainMod += GAP_INFLUENCE;
+	}
+	else if (RATING_GAP < 0)
+	{
+		// You're the underdog. You win more when winning.
+		gainMod += GAP_INFLUENCE;
+	}
+
+	// Keep negative values etc from causing havoc.
+	gainMod = clamp(gainMod, FRACUNIT/10, FRACUNIT*10);
+	drainMod = clamp(drainMod, FRACUNIT/10, FRACUNIT*10);
+
+	// Winning? Apply gain mod. Losing? Apply drain mod.
+	if (change > 0)
+	{
+		change = FixedMul(change, gainMod);
+	}
+	else if (change < 0)
+	{
+		change = FixedMul(change, drainMod);
+	}
+
+	CONS_Debug(DBG_PWRLV, "R1=%d R2=%d W=%d - G=%d D=%d - C=%d\n", you, them, won, gainMod, drainMod, change/FRACUNIT);
+
+	return change;
 }
 
 INT16 K_PowerLevelPlacementScore(player_t *player)
@@ -181,10 +238,10 @@ INT16 K_CalculatePowerLevelAvg(void)
 	return (INT16)avg;
 }
 
-void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
+void K_UpdatePowerLevels(player_t *player, UINT8 gradingpoint, boolean forfeit)
 {
 	const UINT8 playerNum = player - players;
-	const boolean exitBonus = ((lap > numlaps) || (player->pflags & PF_NOCONTEST));
+	const boolean exitBonus = ((gradingpoint >= K_GetNumGradingPoints()) || (player->pflags & PF_NOCONTEST));
 
 	SINT8 powerType = K_UsingPowerLevels();
 
@@ -203,16 +260,28 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 		return;
 	}
 
-	if (!playeringame[playerNum] || player->spectator)
+	// Spectators don't have immunity if they're forfeiting: we're TRYING to punish them!
+	if (!playeringame[playerNum] || (player->spectator && !forfeit))
+	{
+		return;
+	}
+
+	// Probably being called from some stray codepath or a double exit.
+	// We have already finished calculating PWR, don't touch anything!
+	if (player->finalized)
 	{
 		return;
 	}
 
 	CONS_Debug(DBG_PWRLV, "\n========\n");
-	CONS_Debug(DBG_PWRLV, "* Power Level change for player %s (LAP %d) *\n", player_names[playerNum], lap);
+	CONS_Debug(DBG_PWRLV, "* Power Level change for player %s (CHECKPOINT %d) *\n", player_names[playerNum], gradingpoint);
 	CONS_Debug(DBG_PWRLV, "========\n");
 
 	yourPower = clientpowerlevels[playerNum][powerType];
+
+	if (K_InRaceDuel())
+		yourPower += clientPowerAdd[playerNum];
+
 	if (yourPower == 0)
 	{
 		// Guests don't record power level changes.
@@ -225,13 +294,15 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 	CONS_Debug(DBG_PWRLV, "%s's gametype score: %d\n", player_names[playerNum], yourScore);
 
 	CONS_Debug(DBG_PWRLV, "========\n");
+
+	boolean dueling = K_InRaceDuel();
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		UINT16 theirScore = 0;
 		INT16 theirPower = 0;
 
-		INT16 diff = 0; // Loser PWR.LV - Winner PWR.LV
-		INT16 inc = 0; // Total pt increment
+		fixed_t ourinc = 0; // Total pt increment
+		fixed_t theirinc = 0;
 
 		boolean won = false;
 
@@ -245,9 +316,18 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 			continue;
 		}
 
+		if (G_SameTeam(player, &players[i]) == true)
+		{
+			// You don't win/lose against your teammates.
+			continue;
+		}
+
 		CONS_Debug(DBG_PWRLV, "%s VS %s:\n", player_names[playerNum], player_names[i]);
 
 		theirPower = clientpowerlevels[i][powerType];
+		if (K_InRaceDuel())
+			theirPower += clientPowerAdd[i];
+
 		if (theirPower == 0)
 		{
 			// No power level (splitscreen guests, bots)
@@ -258,9 +338,9 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 
 		if (forfeit == true)
 		{
-			diff = yourPower - theirPower;
-			inc -= K_CalculatePowerLevelInc(diff);
-			CONS_Debug(DBG_PWRLV, "FORFEIT! Diff is %d, increment is %d\n", diff, inc);
+			ourinc = K_CalculatePowerLevelInc(yourPower, theirPower, false);
+			theirinc = K_CalculatePowerLevelInc(theirPower, yourPower, true);
+			CONS_Debug(DBG_PWRLV, "FORFEIT! increment is %d\n", ourinc);
 		}
 		else
 		{
@@ -277,56 +357,63 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 
 			if (won == true && forfeit == false) // This player won!
 			{
-				diff = theirPower - yourPower;
-				inc += K_CalculatePowerLevelInc(diff);
-				CONS_Debug(DBG_PWRLV, "WON! Diff is %d, increment is %d\n", diff, inc);
+				ourinc = K_CalculatePowerLevelInc(yourPower, theirPower, true);
+				theirinc = K_CalculatePowerLevelInc(theirPower, yourPower, false);
+				CONS_Debug(DBG_PWRLV, "WON! increment is %d\n", ourinc);
 			}
 			else // This player lost...
 			{
-				diff = yourPower - theirPower;
-				inc -= K_CalculatePowerLevelInc(diff);
-				CONS_Debug(DBG_PWRLV, "LOST... Diff is %d, increment is %d\n", diff, inc);
+				ourinc = K_CalculatePowerLevelInc(yourPower, theirPower, false);
+				theirinc = K_CalculatePowerLevelInc(theirPower, yourPower, true);
+				CONS_Debug(DBG_PWRLV, "LOST... increment is %d\n", ourinc);
 			}
 		}
 
-		if (exitBonus == false)
+		if (dueling)
 		{
-			INT16 prevInc = inc;
+			fixed_t prevInc = ourinc;
 
-			inc /= max(numlaps-1, 1);
+			// INT32 winnerscore = (yourScore > theirScore) ? player->duelscore : players[i].duelscore;
+			INT16 multiplier = 2;
+			ourinc *= multiplier;
+			theirinc *= multiplier;
 
-			if (inc == 0)
+			// CONS_Printf("%s PWR UPDATE: %d\n", player_names[player - players], inc);
+
+			CONS_Debug(DBG_PWRLV, "DUELING: Boosted (%d * %d = %d)\n", prevInc/FRACUNIT, multiplier, ourinc/FRACUNIT);
+		}
+		else
+		{
+			fixed_t prevInc = ourinc;
+
+			INT16 dvs = max(K_GetNumGradingPoints(), 1);
+			ourinc = FixedDiv(ourinc, dvs*FRACUNIT);
+			theirinc = FixedDiv(theirinc, dvs*FRACUNIT);
+
+			if (exitBonus)
 			{
-				if (prevInc > 0)
-				{
-					inc = 1;
-				}
-				else if (prevInc < 0)
-				{
-					inc = -1;
-				}
+				ourinc = FixedMul(ourinc, FRACUNIT + K_FinalCheckpointPower());
+				theirinc = FixedMul(theirinc, FRACUNIT + K_FinalCheckpointPower());
+				CONS_Debug(DBG_PWRLV, "Final check bonus (%d / %d * %d = %d)\n", prevInc/FRACUNIT, dvs, K_FinalCheckpointPower(), ourinc/FRACUNIT);
 			}
-
-			CONS_Debug(DBG_PWRLV, "Reduced (%d / %d = %d) because it's not the end of the race\n", prevInc, numlaps, inc);
+			else
+			{
+				CONS_Debug(DBG_PWRLV, "Reduced (%d / %d = %d) because it's not the end of the race\n", prevInc/FRACUNIT, dvs, ourinc/FRACUNIT);
+			}
 		}
 
 		CONS_Debug(DBG_PWRLV, "========\n");
 
-		if (inc == 0)
-		{
-			CONS_Debug(DBG_PWRLV, "Total Result: No increment, no change.\n");
-			continue;
-		}
-
 		CONS_Debug(DBG_PWRLV, "Total Result:\n");
-		CONS_Debug(DBG_PWRLV, "Increment: %d\n", inc);
+		CONS_Debug(DBG_PWRLV, "Our increment: %d\n", ourinc / FRACUNIT);
+		CONS_Debug(DBG_PWRLV, "Their increment: %d\n", theirinc / FRACUNIT);
 
 		CONS_Debug(DBG_PWRLV, "%s current: %d\n", player_names[playerNum], clientPowerAdd[playerNum]);
-		clientPowerAdd[playerNum] += inc;
+		clientPowerAdd[playerNum] += ourinc/FRACUNIT;
 		CONS_Debug(DBG_PWRLV, "%s final: %d\n", player_names[playerNum], clientPowerAdd[playerNum]);
 
 		CONS_Debug(DBG_PWRLV, "%s current: %d\n", player_names[i], clientPowerAdd[i]);
-		clientPowerAdd[i] -= inc;
+		clientPowerAdd[i] += theirinc/FRACUNIT;
 		CONS_Debug(DBG_PWRLV, "%s final: %d\n", player_names[i], clientPowerAdd[i]);
 
 		CONS_Debug(DBG_PWRLV, "========\n");
@@ -335,25 +422,34 @@ void K_UpdatePowerLevels(player_t *player, UINT8 lap, boolean forfeit)
 
 void K_UpdatePowerLevelsFinalize(player_t *player, boolean onForfeit)
 {
-	// Finalize power level increments for any laps not yet calculated.
+	if (player->finalized)
+		return;
+
+	// Finalize power level increments for any checkpoints not yet calculated.
 	// For spectate / quit / NO CONTEST
-	INT16 lapsLeft = 0;
+	INT16 checksleft = 0;
 	UINT8 i;
 
-	lapsLeft = (numlaps - player->latestlap) + 1;
+	// No remaining laps in Duel.
+	if (K_InRaceDuel())
+		return;
 
-	if (lapsLeft <= 0)
+	checksleft = K_GetNumGradingPoints() - player->gradingpointnum;
+
+	if (checksleft <= 0)
 	{
-		// We've done every lap already.
+		if (!(gametyperules & GTR_CHECKPOINTS)) // We should probably do at least _one_ PWR update.
+			K_UpdatePowerLevels(player, player->gradingpointnum, onForfeit);
+		// We've done every checkpoint already.
 		return;
 	}
 
-	for (i = 0; i < lapsLeft; i++)
+	for (i = 1; i <= checksleft; i++)
 	{
-		K_UpdatePowerLevels(player, player->latestlap + (i + 1), onForfeit);
+		K_UpdatePowerLevels(player, player->gradingpointnum + i, onForfeit);
 	}
 
-	player->latestlap = numlaps+1;
+	player->finalized = true;
 }
 
 INT16 K_FinalPowerIncrement(player_t *player, INT16 yourPower, INT16 baseInc)
@@ -388,7 +484,7 @@ INT16 K_FinalPowerIncrement(player_t *player, INT16 yourPower, INT16 baseInc)
 
 	if (inc <= 0)
 	{
-		if (player->position == 1 && numPlayers > 1)
+		if (player->position == 1 && numPlayers > 1 && !(K_InRaceDuel()))
 		{
 			// Won the whole match?
 			// Get at least one point.
@@ -464,7 +560,7 @@ void K_SetPowerLevelScrambles(SINT8 powertype)
 		case PWRLV_RACE:
 			if (cv_kartspeed.value == -1 || cv_kartencore.value == -1)
 			{
-				UINT8 speed = KARTSPEED_NORMAL;
+				UINT8 speed = KARTSPEED_EASY;
 				boolean encore = false;
 				INT16 avg = 0, min = 0;
 				UINT8 i, t = 1;
@@ -490,75 +586,58 @@ void K_SetPowerLevelScrambles(SINT8 powertype)
 					return;
 				}
 
-				if (min >= 7800)
-				{
-					if (avg >= 8200)
+					if (avg >= 9500) // 3am 1v1-ers
+						t = 6;
+
+					else if (avg >= 9000) // Unemployed
 						t = 5;
-					else
+
+					else if (avg >= 7000) // Sweaty strangers
 						t = 4;
-				}
-				else if (min >= 6800)
-				{
-					if (avg >= 7200)
-						t = 4;
-					else
+
+					else if (avg >= 6500) // Experienced, lets see something interesting
 						t = 3;
-				}
-				else if (min >= 5800)
-				{
-					if (avg >= 6200)
-						t = 3;
-					else
+
+					else if (avg >= 4000) // Getting into it, likely experienced but just building power
 						t = 2;
-				}
-				else if (min >= 3800)
-				{
-					if (avg >= 4200)
-						t = 2;
-					else
-						t = 1;
-				}
-#if 1
-				else
-					t = 1;
-#else
-				else if (min >= 1800)
-				{
-					if (avg >= 2200)
-						t = 1;
-					else
+
+					else if (avg < 3300 || (avg <= 4000 && min < 2000)) // Casual group, mandatory first impressions; or if mostly new & 1 guy is really coping
 						t = 0;
-				}
-				else
-					t = 0;
-#endif
+
+					else if (avg >= 3300) // Transition point
+						t = 1;
+
 
 				CONS_Debug(DBG_GAMELOGIC, "Table position: %d\n", t);
 
 				switch (t)
 				{
-					case 5:
+					case 6:
 						speed = KARTSPEED_HARD;
-						encore = P_RandomChance(PR_RULESCRAMBLE, FRACUNIT>>1);
+						encore = true;
 						break;
-					case 4:
+					case 5:
 						speed = P_RandomChance(PR_RULESCRAMBLE, (7<<FRACBITS)/10) ? KARTSPEED_HARD : KARTSPEED_NORMAL;
 						encore = P_RandomChance(PR_RULESCRAMBLE, FRACUNIT>>1);
 						break;
-					case 3:
+					case 4:
 						speed = P_RandomChance(PR_RULESCRAMBLE, (3<<FRACBITS)/10) ? KARTSPEED_HARD : KARTSPEED_NORMAL;
 						encore = P_RandomChance(PR_RULESCRAMBLE, FRACUNIT>>2);
 						break;
-					case 2:
+					case 3:
 						speed = KARTSPEED_NORMAL;
 						encore = P_RandomChance(PR_RULESCRAMBLE, FRACUNIT>>3);
 						break;
+					case 2:
+						speed = P_RandomChance(PR_RULESCRAMBLE, (3<<FRACBITS)/10) ? KARTSPEED_NORMAL : KARTSPEED_EASY;
+						encore = P_RandomChance(PR_RULESCRAMBLE, FRACUNIT>>5);
+						break;
 					case 1: default:
-						speed = KARTSPEED_NORMAL;
+						speed = KARTSPEED_EASY;
 						encore = false;
 						break;
 					case 0:
-						speed = P_RandomChance(PR_RULESCRAMBLE, (3<<FRACBITS)/10) ? KARTSPEED_EASY : KARTSPEED_NORMAL;
+						speed = KARTSPEED_EASY;
 						encore = false;
 						break;
 				}
@@ -658,7 +737,7 @@ void K_PlayerForfeit(UINT8 playerNum, boolean pointLoss)
 
 	if (pointLoss)
 	{
-		clientpowerlevels[playerNum][powerType] += clientPowerAdd[playerNum];
+		clientpowerlevels[playerNum][powerType] += inc;
 		clientPowerAdd[playerNum] = 0;
 		SV_UpdateStats();
 	}

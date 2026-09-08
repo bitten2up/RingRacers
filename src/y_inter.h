@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -25,17 +25,16 @@ typedef struct
 	boolean showrank; // show rank-restricted queue entry at the end, if it exists
 	boolean encore; // encore mode
 	boolean isduel; // duel mode
+	UINT8 winningteam; // teamplay
 	boolean showroundnum; // round number
 
 	char headerstring[64]; // holds levelnames up to 64 characters
 
 	UINT8 numplayers; // Number of players being displayed
+	UINT8 halfway; // Position at which column switches
 
 	SINT8 num[MAXPLAYERS]; // Player #
 	UINT8 pos[MAXPLAYERS]; // player positions. used for ties
-
-	UINT8 character[MAXPLAYERS]; // Character #
-	UINT16 color[MAXPLAYERS]; // Color #
 
 	UINT32 val[MAXPLAYERS]; // Gametype-specific value
 	char strval[MAXPLAYERS][MAXPLAYERNAME+1];
@@ -55,16 +54,17 @@ void Y_Ticker(void);
 
 // Specific sub-drawers
 void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset);
-void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations, boolean widescreen);
+void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations, boolean widescreen, boolean adminmode);
 void Y_DrawIntermissionButton(INT32 startslide, INT32 through, boolean widescreen);
+void Y_DrawRankMode(INT32 x, INT32 y, boolean center);
 
 void Y_StartIntermission(void);
+void Y_MidIntermission(void);
 void Y_EndIntermission(void);
 
-boolean Y_ShouldDoIntermission(void);
-void Y_DetermineIntermissionType(void);
-
 void Y_PlayIntermissionMusic(void);
+
+boolean Y_IntermissionPlayerLock(void);
 
 typedef enum
 {
@@ -75,6 +75,10 @@ typedef enum
 } intertype_t;
 
 extern intertype_t intertype;
+
+boolean Y_ShouldDoIntermission(void);
+intertype_t Y_GetIntermissionType(void);
+void Y_DetermineIntermissionType(void);
 
 #ifdef __cplusplus
 } // extern "C"

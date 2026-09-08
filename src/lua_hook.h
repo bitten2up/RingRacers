@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2022 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -79,6 +79,11 @@ automatically.
 	X (GameQuit),\
 	X (PlayerCmd),/* building the player's ticcmd struct */\
 	X (VoteThinker),/* Y_VoteTicker */\
+	X (PreFillItemRoulette),/* K_FillItemRouletteData, before attempted reel build */\
+	X (FillItemRoulette),/* K_FillItemRouletteData, after built reel is in place */\
+	X (PlayerUsesBotMovement),/* K_PlayerUsesBotMovement */\
+	X (BotJoin),\
+	X (GPRankPoints),/* K_CalculateGPRankPoints */\
 
 #define STRING_HOOK_LIST(X) \
 	X (SpecialExecute),\
@@ -126,6 +131,7 @@ int  LUA_Hook2Mobj(mobj_t *, mobj_t *, int hook);
 void LUA_HookInt(INT32 integer, int hook);
 void LUA_HookBool(boolean value, int hook);
 int  LUA_HookPlayer(player_t *, int hook);
+int  LUA_HookPlayerForceResults(player_t *, int hook);
 int  LUA_HookTiccmd(player_t *, ticcmd_t *, int hook);
 int  LUA_HookKey(event_t *event, int hook); // Hooks for key events
 
@@ -137,15 +143,18 @@ int  LUA_HookMobjDamage(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32
 int  LUA_HookMobjDeath(mobj_t *target, mobj_t *inflictor, mobj_t *source, UINT8 damagetype);
 int  LUA_HookMobjMoveBlocked(mobj_t *, mobj_t *, line_t *);
 void LUA_HookSpecialExecute(activator_t *activator, INT32 *args, char **stringargs);
-int  LUA_HookPlayerMsg(int source, int target, int flags, char *msg, int mute);
+int  LUA_HookPlayerMsg(int source, int target, int flags, char *msg);
 int  LUA_HookHurtMsg(player_t *, mobj_t *inflictor, mobj_t *source, UINT8 damagetype);
 int  LUA_HookMapThingSpawn(mobj_t *, mapthing_t *);
 int  LUA_HookFollowMobj(player_t *, mobj_t *);
 int  LUA_HookPlayerCanDamage(player_t *, mobj_t *);
 void LUA_HookPlayerQuit(player_t *, kickreason_t);
-int  LUA_HookTeamSwitch(player_t *, int newteam, boolean fromspectators, boolean tryingautobalance, boolean tryingscramble);
+//int  LUA_HookTeamSwitch(player_t *, int newteam, boolean fromspectators, boolean tryingautobalance, boolean tryingscramble);
 int  LUA_HookViewpointSwitch(player_t *player, player_t *newdisplayplayer, boolean forced);
 int  LUA_HookSeenPlayer(player_t *player, player_t *seenfriend);
+int  LUA_HookPreFillItemRoulette(player_t *player, itemroulette_t *const roulette, boolean ringbox);
+int  LUA_HookFillItemRoulette(player_t *player, itemroulette_t *const roulette, boolean ringbox);
+int LUA_HookGPRankPoints(UINT8 position, UINT8 numplayers, INT16 *points);
 
 #ifdef __cplusplus
 } // extern "C"

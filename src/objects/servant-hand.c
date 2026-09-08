@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -28,26 +28,17 @@ void Obj_ServantHandSpawning(player_t *player)
 		{
 			player->handtimer++;
 			if (player->hand == NULL && player->handtimer == TICRATE)
-			{	
-				fixed_t heightOffset = player->mo->height + 30*mapobjectscale;
-				if (P_IsObjectFlipped(player->mo))
-				{
-					// This counteracts the offset added by K_FlipFromObject so it looks seamless from non-flipped.
-					heightOffset += player->mo->height - FixedMul(player->mo->scale, player->mo->height);
-					heightOffset *= P_MobjFlip(player->mo); // Fleep.
-				}
-				
+			{				
 				mobj_t *hand = P_SpawnMobj(
 					player->mo->x,
 					player->mo->y,
-					player->mo->z + heightOffset,
+					player->mo->z + player->mo->height + 30*mapobjectscale,
 					MT_SERVANTHAND
 				);
 
 				if (hand)
 				{
-					K_FlipFromObject(hand, player->mo);
-					hand->old_z = hand->z;
+					K_FlipFromObjectNoInterp(hand, player->mo);
 
 					P_SetTarget(&hand->target, player->mo);
 					P_SetTarget(&player->hand, hand);
@@ -124,16 +115,12 @@ void Obj_ServantHandThink(mobj_t *hand)
 			hand->color = player->skincolor;
 			hand->angle = player->besthanddirection;
 			
-			fixed_t heightOffset = player->mo->height + 30*mapobjectscale;
-			if (P_IsObjectFlipped(player->mo))
-				heightOffset *= P_MobjFlip(player->mo); // Fleep.
-
-			K_FlipFromObject(hand, player->mo);
 			P_MoveOrigin(hand,
 				player->mo->x + xoffs,
 				player->mo->y + yoffs,
-				player->mo->z + heightOffset
+				player->mo->z + player->mo->height + 30*mapobjectscale
 			);
+			K_FlipFromObject(hand, player->mo);
 
 			hand->sprzoff = player->mo->sprzoff;
 

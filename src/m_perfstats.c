@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -60,6 +60,8 @@ int ps_checkposition_calls = 0;
 
 precise_t ps_lua_thinkframe_time = 0;
 int ps_lua_mobjhooks = 0;
+
+precise_t ps_voiceupdatetime = 0;
 
 // dynamically allocated resizeable array for thinkframe hook stats
 ps_hookinfo_t *thinkframe_hooks = NULL;
@@ -208,6 +210,7 @@ static void M_DrawRenderStats(void)
 
 	perfstatrow_t tictime_row[] = {
 		{"logic  ", "Game logic:    ", &ps_tictime},
+		{"voice  ", "Voice update:  ", &ps_voiceupdatetime},
 		{0}
 	};
 
@@ -453,7 +456,7 @@ static void M_DrawTickStats(void)
 						regularcount++;
 				}
 			}
-			else if (i == THINK_DYNSLOPE)
+			else if (i == THINK_DYNSLOPE || i == THINK_DYNSLOPEDEMO)
 				dynslopethcount++;
 			else if (i == THINK_PRECIP)
 				precipcount++;

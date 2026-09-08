@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -1386,8 +1386,18 @@ static void HWR_ProcessSeg(void) // Sort of like GLWall::Process in GZDoom
 
 				grTex = HWR_GetTexture(gl_midtexture, gl_sidedef->midtexture);
 
-				wallVerts[3].t = wallVerts[2].t = texturevpeg * grTex->scaleY;
-				wallVerts[0].t = wallVerts[1].t = (h - l + texturevpeg) * grTex->scaleY;
+				// Check if we should flip tripwire texture vertically for unpegged tripwires
+				if (R_ShouldFlipTripWire(gl_linedef))
+				{
+					// Flip texture coordinates vertically
+					wallVerts[0].t = wallVerts[1].t = texturevpeg * grTex->scaleY;
+					wallVerts[3].t = wallVerts[2].t = (h - l + texturevpeg) * grTex->scaleY;
+				}
+				else
+				{
+					wallVerts[3].t = wallVerts[2].t = texturevpeg * grTex->scaleY;
+					wallVerts[0].t = wallVerts[1].t = (h - l + texturevpeg) * grTex->scaleY;
+				}
 				wallVerts[0].s = wallVerts[3].s = cliplow * grTex->scaleX;
 				wallVerts[2].s = wallVerts[1].s = cliphigh * grTex->scaleX;
 			}
@@ -1433,8 +1443,19 @@ static void HWR_ProcessSeg(void) // Sort of like GLWall::Process in GZDoom
 						texturevpeg = textureheight[gl_sidedef->midtexture]*repeats - h + polybottom;
 					else
 						texturevpeg = polytop - h;
-					wallVerts[2].t = texturevpeg * grTex->scaleY;
-					wallVerts[1].t = (h - l + texturevpeg) * grTex->scaleY;
+					
+					// Apply tripwire flipping for slope correction as well
+					if (R_ShouldFlipTripWire(gl_linedef))
+					{
+						// Flip texture coordinates vertically
+						wallVerts[1].t = texturevpeg * grTex->scaleY;
+						wallVerts[2].t = (h - l + texturevpeg) * grTex->scaleY;
+					}
+					else
+					{
+						wallVerts[2].t = texturevpeg * grTex->scaleY;
+						wallVerts[1].t = (h - l + texturevpeg) * grTex->scaleY;
+					}
 				}
 
 				wallVerts[2].y = FIXED_TO_FLOAT(h);
@@ -1531,8 +1552,18 @@ static void HWR_ProcessSeg(void) // Sort of like GLWall::Process in GZDoom
 
 				grTex = HWR_GetTexture(gl_midtexture, gl_sidedef->midtexture);
 
-				wallVerts[3].t = wallVerts[2].t = texturevpeg * grTex->scaleY;
-				wallVerts[0].t = wallVerts[1].t = (texturevpeg + gl_frontsector->ceilingheight - gl_frontsector->floorheight) * grTex->scaleY;
+				// Check if we should flip tripwire texture vertically for single-sided lines too
+				if (R_ShouldFlipTripWire(gl_linedef))
+				{
+					// Flip texture coordinates vertically
+					wallVerts[0].t = wallVerts[1].t = texturevpeg * grTex->scaleY;
+					wallVerts[3].t = wallVerts[2].t = (texturevpeg + gl_frontsector->ceilingheight - gl_frontsector->floorheight) * grTex->scaleY;
+				}
+				else
+				{
+					wallVerts[3].t = wallVerts[2].t = texturevpeg * grTex->scaleY;
+					wallVerts[0].t = wallVerts[1].t = (texturevpeg + gl_frontsector->ceilingheight - gl_frontsector->floorheight) * grTex->scaleY;
+				}
 				wallVerts[0].s = wallVerts[3].s = cliplow * grTex->scaleX;
 				wallVerts[2].s = wallVerts[1].s = cliphigh * grTex->scaleX;
 
@@ -1762,7 +1793,7 @@ static void HWR_ProcessSeg(void) // Sort of like GLWall::Process in GZDoom
 						if (rover->alpha < 256 || rover->blend)
 						{
 							blendmode = HWR_GetBlendModeFlag(rover->blend);
-							Surf.PolyColor.s.alpha = (UINT8)(rover->alpha-1);
+							Surf.PolyColor.s.alpha = max(0, min(rover->alpha, 255));
 						}
 					}
 
@@ -1891,7 +1922,7 @@ static void HWR_ProcessSeg(void) // Sort of like GLWall::Process in GZDoom
 						if (rover->alpha < 256 || rover->blend)
 						{
 							blendmode = HWR_GetBlendModeFlag(rover->blend);
-							Surf.PolyColor.s.alpha = (UINT8)(rover->alpha-1);
+							Surf.PolyColor.s.alpha = max(0, min(rover->alpha, 255));
 						}
 					}
 
@@ -2636,7 +2667,7 @@ static void HWR_Subsector(size_t num)
 										   false,
 					                       *rover->bottomheight,
 					                       *gl_frontsector->lightlist[light].lightlevel,
-					                       rover->alpha-1, rover->master->frontsector, blendmode,
+										   max(0, min(rover->alpha, 255)), rover->master->frontsector, blendmode,
 					                       false, *gl_frontsector->lightlist[light].extra_colormap);
 				}
 				else
@@ -2684,7 +2715,7 @@ static void HWR_Subsector(size_t num)
 											true,
 					                        *rover->topheight,
 					                        *gl_frontsector->lightlist[light].lightlevel,
-					                        rover->alpha-1, rover->master->frontsector, blendmode,
+											max(0, min(rover->alpha, 255)), rover->master->frontsector, blendmode,
 					                        false, *gl_frontsector->lightlist[light].extra_colormap);
 				}
 				else
@@ -3115,11 +3146,15 @@ static void HWR_DrawDropShadow(mobj_t *thing, fixed_t scale)
 		R_InterpolateMobjState(thing, FRACUNIT, &interp);
 	}
 
-	// hitlag vibrating (todo: interp somehow?)
+	// hitlag vibrating
 	if (thing->hitlag > 0 && (thing->eflags & MFE_DAMAGEHITLAG))
 	{
-		fixed_t mul = thing->hitlag * HITLAGJITTERS;
+		fixed_t jitters = HITLAGJITTERS;
+		if (R_UsingFrameInterpolation() && !paused)
+			jitters += (rendertimefrac / HITLAGDIV);
+		fixed_t mul = thing->hitlag * jitters;
 
+		// perhaps there could be a way to interp this too?
 		if (leveltime & 1)
 		{
 			mul = -mul;
@@ -3411,6 +3446,11 @@ static void HWR_SplitSprite(gl_vissprite_t *spr)
 			return; // cap
 
 		blend = HWR_SurfaceBlend(blendmode, trans, &Surf);
+
+		// if sprite has PF_ALWAYSONTOP, draw on top of everything.
+		if (cv_debugrender_spriteclip.value || spr->mobj->renderflags & RF_ALWAYSONTOP)
+			blend |= PF_NoDepthTest;
+
 		if (!trans && !blendmode)
 		{
 			// BP: i agree that is little better in environement but it don't
@@ -3892,6 +3932,11 @@ static void HWR_DrawSprite(gl_vissprite_t *spr)
 				return; // cap
 
 			blend = HWR_SurfaceBlend(blendmode, trans, &Surf);
+
+			// if sprite has PF_ALWAYSONTOP, draw on top of everything.
+			if (cv_debugrender_spriteclip.value || spr->mobj->renderflags & RF_ALWAYSONTOP)
+				blend |= PF_NoDepthTest;
+
 			if (!trans && !blendmode)
 			{
 				// BP: i agree that is little better in environement but it don't
@@ -3917,7 +3962,10 @@ static void HWR_DrawSprite(gl_vissprite_t *spr)
 
 		if (HWR_UseShader())
 		{
-			shader = (R_ThingIsPaperSprite(spr->mobj) || R_ThingIsFloorSprite(spr->mobj)) ? SHADER_SPRITE : SHADER_SPRITECLIPHACK;;
+			shader = (R_ThingIsPaperSprite(spr->mobj)
+				|| R_ThingIsFloorSprite(spr->mobj)
+				|| (spr->mobj->terrain && spr->mobj->terrain->floorClip)
+				) ? SHADER_SPRITE : SHADER_SPRITECLIPHACK;
 			blend |= PF_ColorMapped;
 		}
 
@@ -4512,7 +4560,7 @@ static void HWR_DrawSprites(void)
 
 			if (spr->mobj && spr->mobj->skin && spr->mobj->sprite == SPR_PLAY)
 			{
-				if (!cv_glmodels.value || md2_playermodels[(skin_t*)spr->mobj->skin-skins].notfound || md2_playermodels[(skin_t*)spr->mobj->skin-skins].scale < 0.0f)
+				if (!cv_glmodels.value || md2_playermodels[((skin_t*)(spr->mobj->skin))->skinnum].notfound || md2_playermodels[((skin_t*)(spr->mobj->skin))->skinnum].scale < 0.0f)
 					HWR_DrawSprite(spr);
 				else
 				{
@@ -4666,6 +4714,7 @@ static void HWR_ProjectSprite(mobj_t *thing)
 	patch_t *rotsprite = NULL;
 	INT32 rollangle = 0;
 	angle_t spriterotangle = 0;
+	vector2_t visoffs;
 #endif
 
 	// uncapped/interpolation
@@ -4685,10 +4734,14 @@ static void HWR_ProjectSprite(mobj_t *thing)
 
 	dispoffset = thing->dispoffset;
 
-	// hitlag vibrating (todo: interp somehow?)
+	// hitlag vibrating
 	if (thing->hitlag > 0 && (thing->eflags & MFE_DAMAGEHITLAG))
 	{
-		fixed_t mul = thing->hitlag * HITLAGJITTERS;
+		fixed_t jitters = HITLAGJITTERS;
+		if (R_UsingFrameInterpolation() && !paused)
+			jitters += (rendertimefrac / HITLAGDIV);
+			
+		fixed_t mul = thing->hitlag * jitters;
 
 		if (leveltime & 1)
 		{
@@ -4725,7 +4778,7 @@ static void HWR_ProjectSprite(mobj_t *thing)
 		if (cv_glmodels.value) //Yellow: Only MD2's dont disappear
 		{
 			if (thing->skin && thing->sprite == SPR_PLAY)
-				md2 = &md2_playermodels[( (skin_t *)thing->skin - skins )];
+				md2 = &md2_playermodels[((skin_t *)thing->skin)->skinnum];
 			else
 				md2 = &md2_models[thing->sprite];
 
@@ -4861,12 +4914,31 @@ static void HWR_ProjectSprite(mobj_t *thing)
 			flip = 0;
 		}
 	}
+
+	// initialize and rotate pitch/roll vector
+	visoffs.x = 0;
+	visoffs.y = 0;
+
+	const fixed_t visoffymul = (vflip ? -FRACUNIT : FRACUNIT);
+
+	if (R_ThingIsUsingBakedOffsets(thing))
+	{
+		R_RotateSpriteOffsetsByPitchRoll(thing,
+										 vflip,
+										 hflip,
+										 &visoffs);
+	}
 #endif
 
 	if (thing->renderflags & RF_ABSOLUTEOFFSETS)
 	{
 		spr_offset = interp.spritexoffset;
+#ifdef ROTSPRITE
+		spr_topoffset = (interp.spriteyoffset + FixedDiv((visoffs.y * visoffymul),
+																mapobjectscale));
+#else
 		spr_topoffset = interp.spriteyoffset;
+#endif
 	}
 	else
 	{
@@ -4876,7 +4948,13 @@ static void HWR_ProjectSprite(mobj_t *thing)
 			flipoffset = -1;
 
 		spr_offset += interp.spritexoffset * flipoffset;
+#ifdef ROTSPRITE
+		spr_topoffset += (interp.spriteyoffset + FixedDiv((visoffs.y * visoffymul),
+															mapobjectscale))
+																* flipoffset;
+#else
 		spr_topoffset += interp.spriteyoffset * flipoffset;
+#endif
 	}
 
 	if (papersprite)
@@ -4934,17 +5012,28 @@ static void HWR_ProjectSprite(mobj_t *thing)
 	}
 	else
 	{
+#ifdef ROTSPRITE
+		if (visoffs.x)
+		{
+			visoffs.x = (FixedDiv((visoffs.x * FRACUNIT), mapobjectscale));
+		}
+#endif
 		if (flip)
 		{
-			x1 = (FIXED_TO_FLOAT(spr_width - spr_offset) * this_xscale);
+#ifdef ROTSPRITE
+			spr_offset -= visoffs.x;
+#endif
+			x1 = (FIXED_TO_FLOAT((spr_width - spr_offset)) * this_xscale);
 			x2 = (FIXED_TO_FLOAT(spr_offset) * this_xscale);
 		}
 		else
 		{
+#ifdef ROTSPRITE
+			spr_offset += visoffs.x;
+#endif
 			x1 = (FIXED_TO_FLOAT(spr_offset) * this_xscale);
 			x2 = (FIXED_TO_FLOAT(spr_width - spr_offset) * this_xscale);
 		}
-
 		// test if too close
 	/*
 		if (papersprite)
@@ -4961,6 +5050,9 @@ static void HWR_ProjectSprite(mobj_t *thing)
 		z2 = tr_y - x2 * rightsin;
 		x1 = tr_x + x1 * rightcos;
 		x2 = tr_x - x2 * rightcos;
+
+		if (thing->terrain && thing->terrain->floorClip)
+			spr_topoffset -=  thing->terrain->floorClip;
 
 		if (vflip)
 		{
@@ -5077,7 +5169,7 @@ static void HWR_ProjectSprite(mobj_t *thing)
 
 	if (vis->mobj->skin && vis->mobj->sprite == SPR_PLAY) // This thing is a player!
 	{
-		skinnum = (skin_t*)vis->mobj->skin-skins;
+		skinnum = ((skin_t*)vis->mobj->skin)->skinnum;
 	}
 
 	// Hide not-yet-unlocked characters in replays from other people

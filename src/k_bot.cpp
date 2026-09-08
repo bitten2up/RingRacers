@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -49,36 +49,22 @@
 extern "C" consvar_t cv_forcebots;
 
 /*--------------------------------------------------
-	void K_SetNameForBot(UINT8 playerNum, UINT8 skinnum)
+	void K_SetNameForBot(UINT8 playerNum, const char *realname)
 
 		See header file for description.
 --------------------------------------------------*/
 void K_SetNameForBot(UINT8 newplayernum, const char *realname)
 {
-	UINT8 ix = MAXPLAYERS;
-
 	// These names are generally sourced from skins.
 	I_Assert(MAXPLAYERNAME >= SKINNAMESIZE+2);
 
+	boolean canApplyNameChange = true;
 	if (netgame == true)
 	{
-		// Check if a player is currently using the name, case-insensitively.
-		// We only do this if online, because it doesn't matter if there are multiple Eggrobo *off*line.
-		// See also EnsurePlayerNameIsGood
-		for (ix = 0; ix < MAXPLAYERS; ix++)
-		{
-			if (ix == newplayernum)
-				continue;
-			if (playeringame[ix] == false)
-				continue;
-			if (strcasecmp(realname, player_names[ix]) != 0)
-				continue;
-
-			break;
-		}
+		canApplyNameChange = IsPlayerNameUnique(realname, newplayernum);
 	}
 
-	if (ix == MAXPLAYERS)
+	if (canApplyNameChange)
 	{
 		// No conflict detected!
 		sprintf(player_names[newplayernum], "%s", realname);
@@ -102,11 +88,11 @@ void K_SetNameForBot(UINT8 newplayernum, const char *realname)
 }
 
 /*--------------------------------------------------
-	void K_SetBot(UINT8 playerNum, UINT8 skinnum, UINT8 difficulty, botStyle_e style)
+	void K_SetBot(UINT8 playerNum, UINT16 skinnum, UINT8 difficulty, botStyle_e style)
 
 		See header file for description.
 --------------------------------------------------*/
-void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e style)
+void K_SetBot(UINT8 newplayernum, UINT16 skinnum, UINT8 difficulty, botStyle_e style)
 {
 	CONS_Debug(DBG_NETPLAY, "addbot: %d\n", newplayernum);
 
@@ -133,8 +119,8 @@ void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e st
 	// For each subsequent round of GP, K_UpdateGrandPrixBots will handle this.
 	players[newplayernum].spectator = grandprixinfo.gp && grandprixinfo.initalize && K_BotDefaultSpectator();
 
-	skincolornum_t color = static_cast<skincolornum_t>(skins[skinnum].prefcolor);
-	const char *realname = skins[skinnum].realname;
+	skincolornum_t color = static_cast<skincolornum_t>(skins[skinnum]->prefcolor);
+	const char *realname = skins[skinnum]->realname;
 	if (tutorialchallenge == TUTORIALSKIP_INPROGRESS)
 	{
 		// The ROYGBIV Rangers
@@ -174,15 +160,21 @@ void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e st
 				break;
 		}
 	}
-	players[newplayernum].skincolor = color;
+
 	K_SetNameForBot(newplayernum, realname);
 
-	SetPlayerSkinByNum(newplayernum, skinnum);
+	LUA_HookPlayer(&players[newplayernum], HOOK(BotJoin));
 
 	for (UINT8 i = 0; i < PWRLV_NUMTYPES; i++)
 	{
 		clientpowerlevels[newplayernum][i] = 0;
 	}
+
+	players[newplayernum].prefcolor = color;
+	players[newplayernum].prefskin = skinnum;
+	players[newplayernum].preffollower = -1;
+	players[newplayernum].preffollowercolor = SKINCOLOR_NONE;
+	G_UpdatePlayerPreferences(&players[newplayernum]);
 
 	if (netgame)
 	{
@@ -193,11 +185,11 @@ void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e st
 }
 
 /*--------------------------------------------------
-	boolean K_AddBot(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p)
+	boolean K_AddBot(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *p)
 
 		See header file for description.
 --------------------------------------------------*/
-boolean K_AddBot(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p)
+boolean K_AddBot(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *p)
 {
 	UINT8 newplayernum = *p;
 
@@ -233,16 +225,16 @@ boolean K_AddBot(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p)
 --------------------------------------------------*/
 void K_UpdateMatchRaceBots(void)
 {
-	const UINT8 defaultbotskin = R_BotDefaultSkin();
+	const UINT16 defaultbotskin = R_BotDefaultSkin();
 	UINT8 difficulty;
-	UINT8 pmax = (dedicated ? MAXPLAYERS-1 : MAXPLAYERS);
+	UINT8 pmax = (InADedicatedServer() ? MAXPLAYERS-1 : MAXPLAYERS);
 	UINT8 numplayers = 0;
 	UINT8 numbots = 0;
 	UINT8 numwaiting = 0;
 	SINT8 wantedbots = 0;
-	UINT8 usableskins = 0, skincount = (demo.playback ? demo.numskins : numskins);;
-	UINT8 grabskins[MAXSKINS+1];
-	UINT8 i;
+	UINT16 usableskins = 0, skincount = (demo.playback ? demo.numskins : numskins);;
+	UINT16 grabskins[MAXSKINS+1];
+	UINT16 i;
 
 	// Init usable bot skins list
 	for (i = 0; i < skincount; i++)
@@ -351,12 +343,7 @@ void K_UpdateMatchRaceBots(void)
 	if (numbots < wantedbots)
 	{
 		// We require MORE bots!
-		UINT8 newplayernum = 0;
-
-		if (dedicated)
-		{
-			newplayernum = 1;
-		}
+		UINT8 newplayernum = InADedicatedServer() ? 1 : 0;
 
 		// Rearrange usable bot skins list to prevent gaps for randomised selection
 		if (tutorialchallenge == TUTORIALSKIP_INPROGRESS)
@@ -381,11 +368,11 @@ void K_UpdateMatchRaceBots(void)
 
 		while (numbots < wantedbots)
 		{
-			UINT8 skinnum = defaultbotskin;
+			UINT16 skinnum = defaultbotskin;
 
 			if (usableskins > 0)
 			{
-				UINT8 index = P_RandomKey(PR_BOTS, usableskins);
+				UINT16 index = P_RandomKey(PR_BOTS, usableskins);
 				skinnum = grabskins[index];
 				grabskins[index] = grabskins[--usableskins];
 			}
@@ -403,6 +390,8 @@ void K_UpdateMatchRaceBots(void)
 	{
 		clear_bots(wantedbots);
 	}
+
+	K_AssignFoes();
 
 	// We should have enough bots now :)
 
@@ -422,11 +411,28 @@ boolean K_PlayerUsesBotMovement(const player_t *player)
 	if (K_PodiumSequence() == true)
 		return true;
 
+	// Lua can't override the podium sequence result, but it can
+	// override the following results:
+	{
+		UINT8 shouldOverride = LUA_HookPlayerForceResults(const_cast<player_t*>(player),
+			HOOK(PlayerUsesBotMovement));
+		if (shouldOverride == 1)
+			return true;
+		if (shouldOverride == 2)
+			return false;
+	}
+
+
 	if (player->exiting)
 		return true;
 
 	if (player->bot)
 		return true;
+
+#ifdef DEVELOP
+	if (cv_takeover.value)
+		return true;
+#endif
 
 	return false;
 }
@@ -523,11 +529,11 @@ static fixed_t K_BotSpeedScaled(const player_t *player, fixed_t speed)
 }
 
 /*--------------------------------------------------
-	const botcontroller_t *K_GetBotController(const mobj_t *mobj)
+	botcontroller_t *K_GetBotController(const mobj_t *mobj)
 
 		See header file for description.
 --------------------------------------------------*/
-const botcontroller_t *K_GetBotController(const mobj_t *mobj)
+botcontroller_t *K_GetBotController(const mobj_t *mobj)
 {
 	botcontroller_t *ret = nullptr;
 
@@ -576,12 +582,16 @@ const botcontroller_t *K_GetBotController(const mobj_t *mobj)
 --------------------------------------------------*/
 fixed_t K_BotMapModifier(void)
 {
+	// fuck it we ball
+	return 5*FRACUNIT/10;
+
 	constexpr INT32 complexity_scale = 10000;
-	constexpr fixed_t modifier_max = FRACUNIT * 2;
+	fixed_t modifier_max = (10 * FRACUNIT / 10) - FRACUNIT;
+	fixed_t modifier_min = (5 * FRACUNIT / 10) - FRACUNIT;
 
 	const fixed_t complexity_value = std::clamp<fixed_t>(
 		FixedDiv(K_GetTrackComplexity(), complexity_scale),
-		-FixedDiv(FRACUNIT, modifier_max),
+		modifier_min,
 		modifier_max
 	);
 
@@ -602,7 +612,7 @@ fixed_t K_BotMapModifier(void)
 --------------------------------------------------*/
 static UINT32 K_BotRubberbandDistance(const player_t *player)
 {
-	const UINT32 spacing = FixedDiv(640 * mapobjectscale, K_GetKartGameSpeedScalar(gamespeed)) / FRACUNIT;
+	UINT32 spacing = FixedDiv(640 * mapobjectscale, K_GetKartGameSpeedScalar(gamespeed)) / FRACUNIT;
 	const UINT8 portpriority = player - players;
 	UINT8 pos = 1;
 	UINT8 i;
@@ -612,6 +622,11 @@ static UINT32 K_BotRubberbandDistance(const player_t *player)
 		// The rival should always try to be the front runner for the race.
 		return 0;
 	}
+
+	/*
+	if (player->botvars.foe)
+		spacing /= 2;
+	*/
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
@@ -626,6 +641,17 @@ static UINT32 K_BotRubberbandDistance(const player_t *player)
 		}
 
 		if (!players[i].bot)
+		{
+			continue;
+		}
+
+		if (G_SameTeam(player, &players[i]) == true)
+		{
+			// Don't consider friendlies with your rubberbanding.
+			continue;
+		}
+
+		if (player->botvars.foe && !players[i].botvars.foe)
 		{
 			continue;
 		}
@@ -667,16 +693,31 @@ fixed_t K_BotRubberband(const player_t *player)
 		return FRACUNIT;
 	}
 
-	fixed_t difficultyEase = ((player->botvars.difficulty - 1) * FRACUNIT) / (MAXBOTDIFFICULTY - 1);
+	fixed_t expreduce = 0;
+
+	// Allow the status quo to assert itself a bit. Bots get most of their speed from their
+	// mechanics adjustments, not from items, so kill some bot speed if they've got bad EXP.
+	if (player->gradingfactor < FRACUNIT && !(player->botvars.rival) && player->botvars.difficulty > 1)
+	{
+		UINT8 levelreduce = std::min<UINT8>(3, player->botvars.difficulty/4); // How much to drop the "effective level" of bots that are consistently behind
+		expreduce = Easing_Linear((K_EffectiveGradingFactor(player) - MINGRADINGFACTOR) * 2, levelreduce*FRACUNIT, 0);
+		if (player->botvars.foe)
+			expreduce /= 2;
+	}
+
+	fixed_t difficultyEase = (((player->botvars.difficulty - 1) * FRACUNIT) - expreduce) / (MAXBOTDIFFICULTY - 1);
+
+	if (difficultyEase < 0)
+		difficultyEase = 0;
 
 	if (cv_levelskull.value)
 		difficultyEase = FRACUNIT;
 
-	// Lv.   1: x0.65 avg
+	// Lv.   1: x0.75 avg
 	// Lv. MAX: x1.05 avg
 	const fixed_t rubberBase = Easing_OutSine(
 		difficultyEase,
-		FRACUNIT * 65 / 100,
+		FRACUNIT * 75 / 100,
 		FRACUNIT * 105 / 100
 	);
 
@@ -712,6 +753,12 @@ fixed_t K_BotRubberband(const player_t *player)
 
 		// Don't rubberband to ourselves...
 		if (player == &players[i])
+		{
+			continue;
+		}
+
+		// Don't rubberband to friendlies...
+		if (G_SameTeam(player, &players[i]) == true)
 		{
 			continue;
 		}
@@ -767,7 +814,13 @@ fixed_t K_BotRubberband(const player_t *player)
 		scaled_dist = FixedDiv(scaled_dist, mapobjectscale);
 	}
 
-	constexpr UINT32 END_DIST = 2048 * 14;
+	UINT32 END_DIST = 2048 * 14;
+
+	if (K_EffectiveGradingFactor(player) <= FRACUNIT)
+	{
+		END_DIST = Easing_Linear((K_EffectiveGradingFactor(player) - MINGRADINGFACTOR) * 2, END_DIST * 2, END_DIST);
+	}
+
 	if (scaled_dist < END_DIST)
 	{
 		// At the end of tracks, start slowing down.
@@ -785,10 +838,26 @@ fixed_t K_BotRubberband(const player_t *player)
 fixed_t K_UpdateRubberband(player_t *player)
 {
 	fixed_t dest = K_BotRubberband(player);
+
+	fixed_t deflect = player->botvars.recentDeflection;
+	if (deflect > BOTMAXDEFLECTION)
+		deflect = BOTMAXDEFLECTION;
+
+	dest = FixedMul(dest, Easing_Linear(
+		FixedDiv(deflect, BOTMAXDEFLECTION),
+		BOTSTRAIGHTSPEED,
+		BOTTURNSPEED
+	));
+
 	fixed_t ret = player->botvars.rubberband;
 
+	UINT8 ease_soften = (ret > dest) ? 3 : 8;
+
+	if (player->botvars.bumpslow && dest > ret)
+		ease_soften = 80;
+
 	// Ease into the new value.
-	ret += (dest - player->botvars.rubberband) / 8;
+	ret += (dest - player->botvars.rubberband) / ease_soften;
 
 	return ret;
 }
@@ -1406,9 +1475,11 @@ static INT32 K_HandleBotTrack(const player_t *player, ticcmd_t *cmd, botpredicti
 	I_Assert(predict != nullptr);
 
 	destangle = K_BotSmoothLanding(player, destangle);
-
 	moveangle = player->mo->angle + K_GetUnderwaterTurnAdjust(player);
 	anglediff = AngleDeltaSigned(moveangle, destangle);
+
+	// predictionerror
+	cmd->angle = std::min(destangle - moveangle, moveangle - destangle) >> TICCMD_REDUCE;
 
 	if (anglediff < 0)
 	{
@@ -1691,7 +1762,7 @@ static void K_BuildBotPodiumTiccmd(const player_t *player, ticcmd_t *cmd)
 
 		Build ticcmd for bots with a style of BOT_STYLE_NORMAL
 --------------------------------------------------*/
-static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
+static void K_BuildBotTiccmdNormal(player_t *player, ticcmd_t *cmd)
 {
 	precise_t t = 0;
 
@@ -1702,6 +1773,9 @@ static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
 	angle_t destangle = 0;
 	UINT8 spindash = 0;
 	INT32 turnamt = 0;
+
+	cmd->angle = 0; // For bots, this is used to transmit predictionerror to gamelogic.
+	// Will be overwritten by K_HandleBotTrack if we have a destination.
 
 	if (!(gametyperules & GTR_BOTS) // No bot behaviors
 		|| K_GetNumWaypoints() == 0 // No waypoints
@@ -1744,7 +1818,7 @@ static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
 	if (K_TryRingShooter(player, botController) == true && player->botvars.respawnconfirm >= BOTRESPAWNCONFIRM)
 	{
 		// We want to respawn. Simply hold Y and stop here!
-		cmd->buttons |= (BT_RESPAWN | BT_EBRAKEMASK);
+		cmd->buttons |= BT_RESPAWNMASK;
 		return;
 	}
 
@@ -1918,6 +1992,9 @@ static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
 		ps_bots[player - players].item = I_GetPreciseTime() - t;
 	}
 
+	// Update turning quicker if we're moving at high speeds.
+	UINT8 turndelta = (player->speed > (7 * K_GetKartSpeed(player, false, false) / 4)) ? 2 : 1;
+
 	if (turnamt != 0)
 	{
 		if (turnamt > KART_FULLTURN)
@@ -1934,7 +2011,7 @@ static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
 			// Count up
 			if (player->botvars.turnconfirm < BOTTURNCONFIRM)
 			{
-				cmd->bot.turnconfirm++;
+				cmd->bot.turnconfirm += turndelta;
 			}
 		}
 		else if (turnamt < 0)
@@ -1942,7 +2019,7 @@ static void K_BuildBotTiccmdNormal(const player_t *player, ticcmd_t *cmd)
 			// Count down
 			if (player->botvars.turnconfirm > -BOTTURNCONFIRM)
 			{
-				cmd->bot.turnconfirm--;
+				cmd->bot.turnconfirm -= turndelta;
 			}
 		}
 		else
@@ -2046,6 +2123,11 @@ void K_UpdateBotGameplayVars(player_t *player)
 	if (cv_levelskull.value)
 		player->botvars.difficulty = MAXBOTDIFFICULTY;
 
+	if (K_InRaceDuel())
+		player->botvars.rival = true;
+	else if (grandprixinfo.gp != true)
+		player->botvars.rival = false;
+
 	player->botvars.rubberband = K_UpdateRubberband(player);
 
 	player->botvars.turnconfirm += player->cmd.bot.turnconfirm;
@@ -2067,6 +2149,21 @@ void K_UpdateBotGameplayVars(player_t *player)
 		}
 	}
 
+	angle_t mangle = K_MomentumAngleEx(player->mo, 5*mapobjectscale); // magic threshold
+	angle_t langle = player->botvars.lastAngle;
+	angle_t dangle = 0;
+	if (mangle >= langle)
+		dangle = mangle - langle;
+	else
+		dangle = langle - mangle;
+	// Writing this made me move my tongue around in my mouth
+
+	UINT32 smo = BOTANGLESAMPLES - 1;
+
+	player->botvars.recentDeflection = (smo * player->botvars.recentDeflection / BOTANGLESAMPLES) + (dangle / BOTANGLESAMPLES);
+
+	player->botvars.lastAngle = mangle;
+
 	const botcontroller_t *botController = K_GetBotController(player->mo);
 	if (K_TryRingShooter(player, botController) == true)
 	{
@@ -2077,4 +2174,11 @@ void K_UpdateBotGameplayVars(player_t *player)
 	}
 
 	K_UpdateBotGameplayVarsItemUsage(player);
+}
+
+boolean K_BotUnderstandsItem(kartitems_t item)
+{
+	if (item == KITEM_BALLHOG)
+		return false; // Sorry. MRs welcome!
+	return true;
 }

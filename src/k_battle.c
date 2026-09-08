@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -105,6 +105,9 @@ void K_SpawnBattlePoints(player_t *source, player_t *victim, UINT8 amount)
 	if (!source || !source->mo)
 		return;
 
+	if (source->exiting)
+		return;
+
 	if (amount == 1)
 		st = S_BATTLEPOINT1A;
 	else if (amount == 2)
@@ -130,8 +133,12 @@ void K_CheckBumpers(void)
 {
 	UINT8 i;
 	UINT8 numingame = 0;
+	UINT8 rednumingame = 0;
+	UINT8 bluenumingame = 0;
 	UINT8 nobumpers = 0;
 	UINT8 eliminated = 0;
+	UINT8 redeliminated = 0;
+	UINT8 blueeliminated = 0;
 	SINT8 kingofthehill = -1;
 
 	if (!(gametyperules & GTR_BUMPERS))
@@ -139,6 +146,8 @@ void K_CheckBumpers(void)
 
 	if (gameaction == ga_completed)
 		return;
+
+	boolean team = G_GametypeHasTeams();
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
@@ -149,6 +158,11 @@ void K_CheckBumpers(void)
 			return;
 
 		numingame++;
+		if (team)
+		{
+			if (players[i].team == 1) rednumingame++;
+			if (players[i].team == 2) bluenumingame++;
+		}
 
 		if (!P_MobjWasRemoved(players[i].mo) && players[i].mo->health <= 0) // if you don't have any bumpers, you're probably not a winner
 		{
@@ -158,11 +172,22 @@ void K_CheckBumpers(void)
 		if (players[i].pflags & PF_ELIMINATED)
 		{
 			eliminated++;
+			if (team)
+			{
+				if (players[i].team == 1) redeliminated++;
+				else if (players[i].team == 2) blueeliminated++;
+			}
 		}
 		else
 		{
 			kingofthehill = i;
 		}
+	}
+
+	boolean teamwin = false;
+	if (team && (rednumingame - redeliminated == 0 || bluenumingame - blueeliminated == 0))
+	{
+		teamwin = true;
 	}
 
 	if (numingame - eliminated == 2 && battleovertime.enabled && battleovertime.radius <= BARRIER_MIN_RADIUS)
@@ -183,9 +208,28 @@ void K_CheckBumpers(void)
 	{
 		// If every other player is eliminated, the
 		// last player standing wins by default.
-		if (eliminated >= numingame - 1)
+		// Or, if an entire team is eliminated.
+		if (eliminated >= numingame - 1 || teamwin)
 		{
-			K_EndBattleRound(kingofthehill != -1 ? &players[kingofthehill] : NULL);
+			if (teamwin)
+			{
+				// Find the player with the highest individual score
+				UINT32 highestscore = 0;
+				UINT32 highestplayer = 0;
+				for (i = 0; i < MAXPLAYERS; i++)
+				{
+					if (playeringame[i] && players[i].score > highestscore)
+					{
+						highestplayer = i;
+						highestscore = players[i].score;
+					}
+				}
+				K_EndBattleRound(&players[highestplayer]);
+			}
+			else
+			{
+				K_EndBattleRound(kingofthehill != -1 ? &players[kingofthehill] : NULL);
+			}
 			return;
 		}
 	}
@@ -230,7 +274,8 @@ void K_CheckEmeralds(player_t *player)
 			player->angleturn + ANGLE_180,
 			400*mapobjectscale,
 			6*TICRATE,
-			FRACUNIT/16
+			FRACUNIT/16,
+			3*TICRATE
 		);
 
 		g_emeraldWin += g_endcam.swirlDuration;
@@ -267,7 +312,7 @@ mobj_t *K_SpawnChaosEmerald(fixed_t x, fixed_t y, fixed_t z, angle_t angle, SINT
 	mobj_t *overlay;
 
 	P_Thrust(emerald,
-		FixedAngle(P_RandomFixed(PR_ITEM_ROULETTE) * 180) + angle,
+		FixedAngle(P_RandomFixed(PR_ITEM_SPAWNER) * 180) + angle,
 		36 * mapobjectscale);
 
 	emerald->momz = flip * 36 * mapobjectscale;
@@ -314,11 +359,14 @@ mobj_t *K_SpawnChaosEmerald(fixed_t x, fixed_t y, fixed_t z, angle_t angle, SINT
 mobj_t *K_SpawnSphereBox(fixed_t x, fixed_t y, fixed_t z, angle_t angle, SINT8 flip, UINT8 amount)
 {
 	mobj_t *drop = P_SpawnMobj(x, y, z, MT_SPHEREBOX);
+	fixed_t rand_move;
+	angle_t rand_angle;
 
 	drop->angle = angle;
-	P_Thrust(drop,
-		FixedAngle(P_RandomFixed(PR_ITEM_ROULETTE) * 180) + angle,
-		P_RandomRange(PR_ITEM_ROULETTE, 4, 12) * mapobjectscale);
+	// note: determinate random argument eval order
+	rand_move = P_RandomRange(PR_ITEM_SPAWNER, 4, 12) * mapobjectscale;
+	rand_angle = FixedAngle(P_RandomFixed(PR_ITEM_SPAWNER) * 180) + angle;
+	P_Thrust(drop, rand_angle, rand_move);
 
 	drop->momz = flip * 12 * mapobjectscale;
 	if (drop->eflags & MFE_UNDERWATER)
@@ -480,7 +528,7 @@ void K_RunPaperItemSpawners(void)
 		{
 			K_SpawnChaosEmerald(
 				battleovertime.x, battleovertime.y, battleovertime.z + (128 * mapobjectscale * flip),
-				FixedAngle(P_RandomRange(PR_ITEM_ROULETTE, 0, 359) * FRACUNIT), flip,
+				FixedAngle(P_RandomRange(PR_ITEM_SPAWNER, 0, 359) * FRACUNIT), flip,
 				firstUnspawnedEmerald
 			);
 		}
@@ -488,7 +536,7 @@ void K_RunPaperItemSpawners(void)
 		{
 			K_FlingPaperItem(
 				battleovertime.x, battleovertime.y, battleovertime.z + (128 * mapobjectscale * flip),
-				FixedAngle(P_RandomRange(PR_ITEM_ROULETTE, 0, 359) * FRACUNIT), flip,
+				FixedAngle(P_RandomRange(PR_ITEM_SPAWNER, 0, 359) * FRACUNIT), flip,
 				0, 0
 			);
 
@@ -496,7 +544,7 @@ void K_RunPaperItemSpawners(void)
 			{
 				K_SpawnSphereBox(
 					battleovertime.x, battleovertime.y, battleovertime.z + (128 * mapobjectscale * flip),
-					FixedAngle(P_RandomRange(PR_ITEM_ROULETTE, 0, 359) * FRACUNIT), flip,
+					FixedAngle(P_RandomRange(PR_ITEM_SPAWNER, 0, 359) * FRACUNIT), flip,
 					10
 				);
 			}
@@ -570,7 +618,7 @@ void K_RunPaperItemSpawners(void)
 			// Large  = 16 + 1 = 17 / 2 = 8
 			if (spotAvailable > 0 && monitorsSpawned < (mapheaderinfo[gamemap - 1]->playerLimit + 1) / 2)
 			{
-				const UINT8 r = spotMap[P_RandomKey(PR_ITEM_ROULETTE, spotAvailable)];
+				const UINT8 r = spotMap[P_RandomKey(PR_ITEM_SPAWNER, spotAvailable)];
 
 				Obj_ItemSpotAssignMonitor(spotList[r], Obj_SpawnMonitor(
 							spotList[r], 3, firstUnspawnedEmerald));
@@ -603,7 +651,7 @@ void K_RunPaperItemSpawners(void)
 					}
 					else
 					{
-						key = P_RandomKey(PR_ITEM_ROULETTE, spotCount);
+						key = P_RandomKey(PR_ITEM_SPAWNER, spotCount);
 					}
 
 					r = spotMap[key];
@@ -613,12 +661,12 @@ void K_RunPaperItemSpawners(void)
 					flip = P_MobjFlip(spotList[r]);
 
 					drop = K_SpawnSphereBox(
-						spotList[r]->x, spotList[r]->y, spotList[r]->z + (128 * mapobjectscale * flip),
-							FixedAngle(P_RandomRange(PR_ITEM_ROULETTE, 0, 359) * FRACUNIT), flip,
+						spotList[r]->x, spotList[r]->y, spotList[r]->z + (128 * mapobjectscale),
+							FixedAngle(P_RandomRange(PR_ITEM_SPAWNER, 0, 359) * FRACUNIT), flip,
 							10
 					);
 
-					K_FlipFromObject(drop, spotList[r]);
+					K_FlipFromObjectNoInterp(drop, spotList[r]);
 
 					spotCount--;
 					if (key != spotCount)
@@ -692,8 +740,11 @@ static void K_SpawnOvertimeLaser(fixed_t x, fixed_t y, fixed_t scale)
 				case 0:
 					P_SetMobjState(mo, S_OVERTIME_BULB1);
 
-					if (leveltime & 1)
-						mo->frame += 1;
+					if (!cv_reducevfx.value)
+					{
+						if (leveltime & 1)
+							mo->frame += 1;
+					}
 
 					//P_SetScale(mo, mapobjectscale);
 					zpos += 35 * mo->scale * flip;
@@ -701,10 +752,13 @@ static void K_SpawnOvertimeLaser(fixed_t x, fixed_t y, fixed_t scale)
 				case 1:
 					P_SetMobjState(mo, S_OVERTIME_LASER);
 
-					if (leveltime & 1)
-						mo->frame += 3;
-					else
-						mo->frame += (leveltime / 2) % 3;
+					if (!cv_reducevfx.value)
+					{
+						if (leveltime & 1)
+							mo->frame += 3;
+						else
+							mo->frame += (leveltime / 2) % 3;
+					}
 
 					//P_SetScale(mo, scale);
 					zpos += 346 * mo->scale * flip;
@@ -715,8 +769,11 @@ static void K_SpawnOvertimeLaser(fixed_t x, fixed_t y, fixed_t scale)
 				case 2:
 					P_SetMobjState(mo, S_OVERTIME_BULB2);
 
-					if (leveltime & 1)
-						mo->frame += 1;
+					if (!cv_reducevfx.value)
+					{
+						if (leveltime & 1)
+							mo->frame += 1;
+					}
 
 					//P_SetScale(mo, mapobjectscale);
 					break;
@@ -981,11 +1038,42 @@ boolean K_EndBattleRound(player_t *victor)
 			// exiting, the round has already ended.
 			return false;
 		}
+		
+		UINT32 topscore = 0;
 
 		if (gametyperules & GTR_POINTLIMIT)
 		{
 			// Lock the winner in before the round ends.
-			victor->roundscore = 100;
+
+			// TODO: a "won the round" bool used for sorting
+			// position / intermission, so we aren't completely
+			// clobbering the individual scoring.
+			
+			// This isn't quite the above TODO but it's something?
+			// For purposes of score-to-EXP conversion, we need to not lock the winner to an arbitrarily high score.
+			// Instead, let's find the highest score, and if they're not the highest scoring player,
+			// give them a bump so they *are* the highest scoring player.
+			for (INT32 i = 0; i < MAXPLAYERS; i++)
+			{
+				if (!playeringame[i] || players[i].spectator)
+				{
+					continue;
+				}
+				
+				if ((&players[i])->roundscore > topscore)
+				{
+					topscore = (&players[i])->roundscore;
+				}
+			}
+			if (victor->roundscore <= topscore)
+			{
+				victor->roundscore = topscore + 3;
+			}
+
+			if (G_GametypeHasTeams() == true && victor->team != TEAM_UNASSIGNED)
+			{
+				g_teamscores[victor->team] = 100;
+			}
 		}
 	}
 

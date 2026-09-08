@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 //
@@ -33,6 +33,7 @@
 #include "k_podium.h"
 #include "k_pwrlv.h"
 #include "k_profiles.h"
+#include "k_objects.h" // Obj_AllAncientGearsCollected
 
 gamedata_t *gamedata = NULL;
 boolean netUnlocked[MAXUNLOCKABLES];
@@ -660,9 +661,7 @@ void M_ClearStats(void)
 	gamedata->chaokeytutorial = false;
 	gamedata->majorkeyskipattempted = false;
 	gamedata->enteredtutorialchallenge = false;
-	gamedata->finishedtutorialchallenge = false;
 	gamedata->sealedswapalerted = false;
-	gamedata->tutorialdone = false;
 	gamedata->musicstate = GDMUSIC_NONE;
 
 	gamedata->importprofilewins = false;
@@ -671,7 +670,7 @@ void M_ClearStats(void)
 
 	for (i = 0; i < numskins; i++)
 	{
-		memset(&skins[i].records, 0, sizeof(skins[i].records));
+		memset(&skins[i]->records, 0, sizeof(skins[i]->records));
 	}
 
 	unloaded_skin_t *unloadedskin, *nextunloadedskin = NULL;
@@ -743,8 +742,7 @@ void M_ClearSecrets(void)
 			continue;
 
 		mapheaderinfo[i]->records.mapvisited = 0;
-
-		mapheaderinfo[i]->cache_spraycan = UINT16_MAX;
+		mapheaderinfo[i]->records.spraycan = MCAN_INVALID;
 
 		mapheaderinfo[i]->cache_maplock = MAXUNLOCKABLES;
 
@@ -777,6 +775,10 @@ void M_ClearSecrets(void)
 
 	gamedata->chaokeys = GDINIT_CHAOKEYS;
 	gamedata->prisoneggstothispickup = GDINIT_PRISONSTOPRIZE;
+
+	gamedata->tutorialdone = false;
+	gamedata->playgroundroute = false;
+	gamedata->finishedtutorialchallenge = false;
 
 	gamedata->gonerlevel = GDGONER_INIT;
 }
@@ -814,6 +816,30 @@ static void M_AssignSpraycans(void)
 	conditionset_t *c;
 	condition_t *cn;
 
+	UINT16 bonustocanmap = 0;
+
+	// First, turn outstanding bonuses into existing uncollected Spray Cans.
+	while (gamedata->gotspraycans < gamedata->numspraycans)
+	{
+		while (bonustocanmap < basenummapheaders)
+		{
+			if (mapheaderinfo[bonustocanmap]->records.spraycan != MCAN_BONUS)
+			{
+				bonustocanmap++;
+				continue;
+			}
+
+			break;
+		}
+
+		if (bonustocanmap == basenummapheaders)
+			break;
+
+		mapheaderinfo[bonustocanmap]->records.spraycan = gamedata->gotspraycans;
+		gamedata->spraycans[gamedata->gotspraycans].map = bonustocanmap;
+		gamedata->gotspraycans++;
+	}
+
 	const UINT16 prependoffset = MAXSKINCOLORS-1;
 
 	// None of the following accounts for cans being removed, only added...
@@ -829,7 +855,7 @@ static void M_AssignSpraycans(void)
 			if (cn->type != UC_SPRAYCAN)
 				continue;
 
-			// G_LoadGamedata, G_SaveGameData doesn't support custom skincolors right now.
+			// This will likely never support custom skincolors.
 			if (cn->requirement >= SKINCOLOR_FIRSTFREESLOT) //numskincolors)
 				continue;
 
@@ -891,7 +917,24 @@ static void M_AssignSpraycans(void)
 
 	for (i = 0; i < listlen; i++)
 	{
-		gamedata->spraycans[gamedata->numspraycans].map = NEXTMAP_INVALID;
+		// Convert bonus pickups into Spray Cans if new ones have been added.
+		while (bonustocanmap < basenummapheaders)
+		{
+			if (mapheaderinfo[bonustocanmap]->records.spraycan != MCAN_BONUS)
+			{
+				bonustocanmap++;
+				continue;
+			}
+
+			gamedata->gotspraycans++;
+			mapheaderinfo[bonustocanmap]->records.spraycan = gamedata->numspraycans;
+			break;
+		}
+		gamedata->spraycans[gamedata->numspraycans].map = (
+			(bonustocanmap == basenummapheaders)
+				? NEXTMAP_INVALID
+				: bonustocanmap
+		);
 		gamedata->spraycans[gamedata->numspraycans].col = tempcanlist[i];
 
 		skincolors[tempcanlist[i]].cache_spraycan = gamedata->numspraycans;
@@ -1553,7 +1596,7 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 			if (cn->requirement < 0)
 				return false;
 
-			return (skins[cn->requirement].records.wins >= (UINT32)cn->extrainfo1);
+			return (skins[cn->requirement]->records.wins >= (UINT32)cn->extrainfo1);
 
 		case UC_ALLCUPRECORDS:
 		{
@@ -1612,7 +1655,12 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 		case UC_TOTALMEDALS: // Requires number of emblems >= x
 			return (M_GotEnoughMedals(cn->requirement));
 		case UC_EMBLEM: // Requires emblem x to be obtained
-			return gamedata->collected[cn->requirement-1];
+		{
+			INT32 i = cn->requirement-1;
+			if (i >= 0 && i < numemblems && emblemlocations[i].type != ET_NONE)
+				return gamedata->collected[cn->requirement-1];
+			return false;
+		}
 		case UC_UNLOCKABLE: // Requires unlockable x to be obtained
 			return gamedata->unlocked[cn->requirement-1];
 		case UC_CONDITIONSET: // requires condition set x to already be achieved
@@ -1715,6 +1763,8 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 			return (gamedata->finishedtutorialchallenge == true);
 		case UC_TUTORIALDONE:
 			return (gamedata->tutorialdone == true);
+		case UC_PLAYGROUND:
+			return (gamedata->playgroundroute == true);
 		case UC_PASSWORD:
 			return (cn->stringvar == NULL);
 
@@ -1747,7 +1797,7 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 		case UCRP_PREFIX_BONUSROUND:
 			return ((grandprixinfo.gp == true) && (grandprixinfo.eventmode == GPEVENT_BONUS));
 		case UCRP_PREFIX_TIMEATTACK:
-			return (modeattacking != ATTACKING_NONE);
+			return (modeattacking != ATTACKING_NONE && !(skins[player->skin]->flags & SF_HIVOLT));
 		case UCRP_PREFIX_PRISONBREAK:
 			return ((gametyperules & GTR_PRISONS) && battleprisons);
 		case UCRP_PREFIX_SEALEDSTAR:
@@ -1765,9 +1815,9 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 			return (player->roundconditions.switched_skin == false
 				&& player->skin < numskins
 				&& R_GetEngineClass(
-					skins[player->skin].kartspeed,
-					skins[player->skin].kartweight,
-					skins[player->skin].flags
+					skins[player->skin]->kartspeed,
+					skins[player->skin]->kartweight,
+					skins[player->skin]->flags
 				) == (unsigned)cn->requirement);
 		case UCRP_HASFOLLOWER:
 			return (cn->requirement != -1 && player->followerskin == cn->requirement);
@@ -1793,8 +1843,7 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 			if (cn->extrainfo2 != 0)
 				return (K_PodiumGrade() >= cn->extrainfo1);
 			if (cn->extrainfo1 != 0)
-				return (player->position != 0
-					&& player->position <= cn->extrainfo1);
+				return K_GetPodiumPosition(player) <= cn->extrainfo1;
 			return true;
 		case UCRP_PODIUMEMERALD:
 		case UCRP_PODIUMPRIZE:
@@ -1817,8 +1866,11 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 				&& M_NotFreePlay()
 				&& (gamespeed != KARTSPEED_EASY)
 				&& (player->tally.active == true)
-				&& (player->tally.totalLaps > 0) // Only true if not Time Attack
-				&& (player->tally.laps >= player->tally.totalLaps));
+				&& (player->tally.totalExp > 0) // Only true if not Time Attack
+				&& (
+					(player->tally.exp >= player->tally.totalExp)
+					|| (K_InRaceDuel() && player->duelscore == DUELWINNINGSCORE)
+				));
 		case UCRP_FINISHALLPRISONS:
 			return (battleprisons
 				&& !(player->pflags & PF_NOCONTEST)
@@ -1988,6 +2040,8 @@ boolean M_CheckCondition(condition_t *cn, player_t *player)
 			return (player->roundconditions.giant_foe_shrunken_orbi);
 		case UCRP_RETURNMARKTOSENDER:
 			return (player->roundconditions.returntosender_mark);
+		case UCRP_ALLANCIENTGEARS:
+			return Obj_AllAncientGearsCollected();
 
 		case UCRP_TRACKHAZARD:
 		{
@@ -2184,7 +2238,7 @@ static const char *M_GetConditionCharacter(INT32 skin, boolean directlyrequires)
 
 			for (j = 0; j < SKINRIVALS; j++)
 			{
-				const char *rivalname = skins[i].rivals[j];
+				const char *rivalname = skins[i]->rivals[j];
 				INT32 rivalnum = R_SkinAvailableEx(rivalname, false);
 
 				if (rivalnum != skin)
@@ -2207,7 +2261,7 @@ static const char *M_GetConditionCharacter(INT32 skin, boolean directlyrequires)
 	}
 
 	return (permitname)
-		? skins[skin].realname
+		? skins[skin]->realname
 		: "???";
 }
 
@@ -2346,7 +2400,7 @@ static const char *M_GetConditionString(condition_t *cn)
 
 		case UC_CHARACTERWINS:
 		{
-			if (cn->requirement < 0 || !skins[cn->requirement].realname[0])
+			if (cn->requirement < 0 || !skins[cn->requirement]->realname[0])
 				return va("INVALID CHAR CONDITION \"%d:%d:%d\"", cn->type, cn->requirement, cn->extrainfo1);
 			work = M_GetConditionCharacter(cn->requirement, true);
 			return va("win %d Round%s as %s",
@@ -2442,10 +2496,12 @@ static const char *M_GetConditionString(condition_t *cn)
 
 		case UC_EMBLEM: // Requires emblem x to be obtained
 		{
-			INT32 checkLevel;
+			INT32 checkLevel = NEXTMAP_INVALID;
 
 			i = cn->requirement-1;
-			checkLevel = M_EmblemMapNum(&emblemlocations[i]);
+
+			if (i >= 0 && i < numemblems)
+				checkLevel = M_EmblemMapNum(&emblemlocations[i]);
 
 			if (checkLevel >= nummapheaders || !mapheaderinfo[checkLevel] || emblemlocations[i].type == ET_NONE)
 				return va("INVALID MEDAL MAP \"%d:%d\"", cn->requirement, checkLevel);
@@ -2518,6 +2574,10 @@ static const char *M_GetConditionString(condition_t *cn)
 			Z_Free(title);
 			return work;
 		}
+
+		case UC_CONDITIONSET:
+			return va("INVALID CN RECURSION \"%d\"", cn->requirement);
+
 		case UC_UNLOCKABLE: // Requires unlockable x to be obtained
 			return va("get %s",
 				gamedata->unlocked[cn->requirement-1]
@@ -2596,6 +2656,8 @@ static const char *M_GetConditionString(condition_t *cn)
 			return "successfully skip the Tutorial";
 		case UC_TUTORIALDONE:
 			return "complete the Tutorial";
+		case UC_PLAYGROUND:
+			return "pick the Playground";
 		case UC_PASSWORD:
 			return "enter a secret password";
 
@@ -2667,7 +2729,7 @@ static const char *M_GetConditionString(condition_t *cn)
 			Z_Free(title);
 			return work;
 		case UCRP_ISCHARACTER:
-			if (cn->requirement < 0 || !skins[cn->requirement].realname[0])
+			if (cn->requirement < 0 || !skins[cn->requirement]->realname[0])
 				return va("INVALID CHAR CONDITION \"%d:%d\"", cn->type, cn->requirement);
 			work = M_GetConditionCharacter(cn->requirement, true);
 			return va("as %s", work);
@@ -2773,7 +2835,7 @@ static const char *M_GetConditionString(condition_t *cn)
 		case UCRP_FINISHCOOL:
 			return "finish in good standing";
 		case UCRP_FINISHPERFECT:
-			return "finish a perfect round";
+			return "finish a perfect round (excluding Gear 1)";
 		case UCRP_FINISHALLPRISONS:
 			return "break every Prison Egg";
 		case UCRP_SURVIVE:
@@ -2800,7 +2862,7 @@ static const char *M_GetConditionString(condition_t *cn)
 
 		case UCRP_MAKERETIRE:
 		{
-			if (cn->requirement < 0 || !skins[cn->requirement].realname[0])
+			if (cn->requirement < 0 || !skins[cn->requirement]->realname[0])
 				return va("INVALID CHAR CONDITION \"%d:%d\"", cn->type, cn->requirement);
 
 			work = M_GetConditionCharacter(cn->requirement, false);
@@ -2897,6 +2959,8 @@ static const char *M_GetConditionString(condition_t *cn)
 			return "hit a giant racer with a shrunken Orbinaut";
 		case UCRP_RETURNMARKTOSENDER:
 			return "when cursed with Eggmark, blow up the racer responsible";
+		case UCRP_ALLANCIENTGEARS:
+			return "collect all Ancient Gears";
 
 		case UCRP_TRACKHAZARD:
 		{
@@ -2959,20 +3023,17 @@ static const char *M_GetConditionString(condition_t *cn)
 		default:
 			break;
 	}
-	// UC_MAPTRIGGER and UC_CONDITIONSET are explicitly very hard to support proper descriptions for
+	// UC_MAPTRIGGER and the like are explicitly very hard to support proper descriptions for
 	return va("UNSUPPORTED CONDITION \"%d\"", cn->type);
 }
 
 char *M_BuildConditionSetString(UINT16 unlockid)
 {
-	conditionset_t *c = NULL;
-	UINT32 lastID = 0;
 	condition_t *cn;
 	size_t len = 1024, worklen;
 	static char message[1024] = "";
 	const char *work = NULL;
 	size_t i;
-	UINT8 stopasap = 0;
 
 	message[0] = '\0';
 
@@ -2993,61 +3054,102 @@ char *M_BuildConditionSetString(UINT16 unlockid)
 		len--;
 	}
 
-	c = &conditionSets[unlockables[unlockid].conditionset-1];
+	struct conditionset_traverser_s {
+		conditionset_t *c;
+		size_t i;
+		UINT32 lastID;
+		UINT8 stopasap;
+	};
 
-	for (i = 0; i < c->numconditions; ++i)
-	{
-		cn = &c->condition[i];
+	struct conditionset_traverser_s current = {0};
+	current.c = &conditionSets[unlockables[unlockid].conditionset-1];
+	current.i = current.lastID = current.stopasap = 0;
 
-		if (i > 0)
+	struct conditionset_traverser_s restore = {0};
+	restore.c = NULL;
+
+	do {
+		if (current.stopasap == UINT8_MAX)
 		{
-			worklen = 0;
-			if (lastID != cn->id)
+			// Sentinel value for recursion
+			current.stopasap = 0;
+		}
+		else if (restore.c)
+		{
+			// De-recur
+			current = restore;
+			current.i++;
+
+			restore.c = NULL;
+		}
+
+		for (; current.i < current.c->numconditions; ++current.i)
+		{
+			cn = &current.c->condition[current.i];
+
+			if (current.i > 0)
 			{
-				stopasap = 0;
-				worklen = 6;
-				strncat(message, " - OR ", len);
+				worklen = 0;
+				if (current.lastID != cn->id)
+				{
+					current.stopasap = 0;
+					worklen = 6;
+					strncat(message, " - OR ", len);
+				}
+				else if (current.stopasap == 0 && cn->type != UC_COMMA)
+				{
+					worklen = 1;
+					strncat(message, " ", len);
+				}
+				len -= worklen;
 			}
-			else if (stopasap == 0 && cn->type != UC_COMMA)
+
+			current.lastID = cn->id;
+
+			if (current.stopasap == 1)
 			{
-				worklen = 1;
-				strncat(message, " ", len);
+				// Secret challenge -- show unrelated condition IDs
+				continue;
 			}
+
+			if (cn->type == UC_CONDITIONSET
+			&& restore.c == NULL
+			&& cn->requirement
+			&& cn->requirement <= MAXCONDITIONSETS)
+			{
+				// Conditionset description! Can only recursion once at a time
+				restore = current;
+				current.c = &conditionSets[cn->requirement-1];
+				current.i = current.lastID = 0;
+				current.stopasap = UINT8_MAX;
+				break;
+			}
+
+			work = M_GetConditionString(cn);
+			if (work == NULL)
+			{
+				current.stopasap = 1;
+				if (message[0] && message[1])
+					work = "???";
+				else
+					work = "(Find other secrets to learn about this...)";
+			}
+			else if (cn->type == UC_DESCRIPTIONOVERRIDE)
+			{
+				current.stopasap = 2;
+			}
+			worklen = strlen(work);
+
+			strncat(message, work, len);
 			len -= worklen;
-		}
 
-		lastID = cn->id;
-
-		if (stopasap == 1)
-		{
-			// Secret challenge -- show unrelated condition IDs
-			continue;
+			if (current.stopasap == 2)
+			{
+				// Description override - hide all further ones
+				break;
+			}
 		}
-
-		work = M_GetConditionString(cn);
-		if (work == NULL)
-		{
-			stopasap = 1;
-			if (message[0] && message[1])
-				work = "???";
-			else
-				work = "(Find other secrets to learn about this...)";
-		}
-		else if (cn->type == UC_DESCRIPTIONOVERRIDE)
-		{
-			stopasap = 2;
-		}
-		worklen = strlen(work);
-
-		strncat(message, work, len);
-		len -= worklen;
-
-		if (stopasap == 2)
-		{
-			// Description override - hide all further ones
-			break;
-		}
-	}
+	} while (restore.c);
 
 	if (message[0] == '\0')
 	{
@@ -3106,7 +3208,7 @@ static boolean M_CheckUnlockConditions(player_t *player)
 {
 	UINT32 i;
 	conditionset_t *c;
-	boolean ret;
+	boolean ret = false;
 
 	for (i = 0; i < MAXCONDITIONSETS; ++i)
 	{
@@ -3425,6 +3527,23 @@ boolean M_GameTrulyStarted(void)
 	return (gamedata->gonerlevel == GDGONER_DONE);
 }
 
+boolean M_GameAboutToStart(void)
+{
+	// Fail safe
+	if (gamedata == NULL)
+		return false;
+
+	// Not set
+	if (gamestartchallenge >= MAXUNLOCKABLES)
+		return true;
+
+	// Pending unlocked, but not unlocked
+	return (
+		gamedata->unlockpending[gamestartchallenge]
+		&& !gamedata->unlocked[gamestartchallenge]
+	);
+}
+
 boolean M_CheckNetUnlockByID(UINT16 unlockid)
 {
 	if (unlockid >= MAXUNLOCKABLES
@@ -3689,6 +3808,11 @@ INT32 M_UnlockableSkinNum(unlockable_t *unlock)
 		skinnum = R_SkinAvailableEx(unlock->stringVar, false);
 		if (skinnum != -1)
 		{
+			if (skinnum >= MAXSKINUNAVAILABLE)
+			{
+				CONS_Alert(CONS_WARNING,"Unlockable ID %s: Skin %s (id %d) is greater than %u, and will not be locked in this session.", sizeu1((unlock-unlockables)+1), unlock->stringVar, skinnum, MAXSKINUNAVAILABLE);
+			}
+
 			unlock->stringVarCache = skinnum;
 			return skinnum;
 		}
@@ -3869,7 +3993,7 @@ UINT16 M_UnlockableMapNum(unlockable_t *unlock)
 
 UINT16 M_EmblemMapNum(emblem_t *emblem)
 {
-	if (emblem->levelCache == NEXTMAP_INVALID)
+	if (emblem->levelCache == NEXTMAP_INVALID && emblem->level)
 	{
 		UINT16 result = G_MapNumber(emblem->level);
 
@@ -3877,6 +4001,8 @@ UINT16 M_EmblemMapNum(emblem_t *emblem)
 			return result;
 
 		emblem->levelCache = result;
+		Z_Free(emblem->level);
+		emblem->level = NULL;
 	}
 
 	return emblem->levelCache;

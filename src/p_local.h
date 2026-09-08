@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -64,10 +64,12 @@ extern "C" {
 
 typedef enum
 {
+	THINK_DYNSLOPE,
 	THINK_POLYOBJ,
 	THINK_MAIN,
 	THINK_MOBJ,
-	THINK_DYNSLOPE,
+	// This is kept for backwards compat with old demos.
+	THINK_DYNSLOPEDEMO,
 
 	// Lists after this may exist but they do not call an
 	// action in P_RunThinkers
@@ -78,7 +80,6 @@ typedef enum
 	NUM_THINKERLISTS
 } thinklistnum_t; /**< Thinker lists. */
 extern thinker_t thlist[];
-extern mobj_t *mobjcache;
 
 void P_InitThinkers(void);
 void P_InvalidateThinkersWithoutInit(void);
@@ -95,6 +96,8 @@ struct camera_t
 	boolean freecam;
 
 	angle_t aiming;
+
+	fixed_t chaseheight; // Effective chasecam height, unscaled
 
 	// Things used by FS cameras.
 	fixed_t viewheight;
@@ -258,6 +261,7 @@ mobjtype_t P_GetMobjtype(UINT16 mthingtype);
 void P_RespawnSpecials(void);
 
 fixed_t P_GetMobjDefaultScale(mobj_t *mobj);
+mobj_t *P_AllocateMobj(void);
 mobj_t *P_SpawnMobj(fixed_t x, fixed_t y, fixed_t z, mobjtype_t type);
 
 void P_CalculatePrecipFloor(precipmobj_t *mobj);
@@ -274,6 +278,7 @@ void P_RunOverlays(void);
 #define OV_DONT3DOFFSET		1<<1
 #define OV_DONTXYSCALE		1<<2
 #define OV_DONTROLL			1<<3
+#define OV_DONTBAKEOFFSET	1<<4
 
 void P_HandleMinecartSegments(mobj_t *mobj);
 void P_MobjThinker(mobj_t *mobj);
@@ -528,8 +533,8 @@ struct BasicFF_t
 #define DMG_STING   0x04
 #define DMG_KARMA   0x05 // Karma Bomb explosion -- works like DMG_EXPLODE, but steals half of their bumpers & deletes the rest
 #define DMG_VOLTAGE 0x06
-#define DMG_STUMBLE 0x07 // Does not award points in Battle
-#define DMG_WHUMBLE 0x08 // <-- But this one DOES!
+#define DMG_STUMBLE 0x07 // Harmless disruption.
+#define DMG_WHUMBLE 0x08 // Harmful disruption. (Awards points, strips rings, pops shields, etc)
 //// Death types - cannot be combined with damage types
 #define DMG_INSTAKILL  0x80
 #define DMG_DEATHPIT   0x81
@@ -548,7 +553,9 @@ void P_ForceConstant(const BasicFF_t *FFInfo);
 void P_RampConstant(const BasicFF_t *FFInfo, INT32 Start, INT32 End);
 void P_SpecialStageDamage(player_t *player, mobj_t *inflictor, mobj_t *source);
 boolean P_DamageMobj(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32 damage, UINT8 damagetype);
+void P_UpdateRemovedOrbital(mobj_t *target, mobj_t *inflictor, mobj_t *source);
 void P_KillMobj(mobj_t *target, mobj_t *inflictor, mobj_t *source, UINT8 damagetype);
+void P_FlingBurst(player_t *player, angle_t fa, mobjtype_t objType, tic_t objFuse, fixed_t objScale, INT32 i, fixed_t dampen);
 void P_PlayerRingBurst(player_t *player, INT32 num_rings); /// \todo better fit in p_user.c
 
 void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher, boolean heightcheck);
@@ -556,6 +563,17 @@ void P_TouchCheatcheck(mobj_t *cheatcheck, player_t *player, boolean snaptopost)
 void P_CheckTimeLimit(void);
 void P_CheckPointLimit(void);
 boolean P_CheckRacers(void);
+
+// Pickup types
+#define PICKUP_RINGORSPHERE 0
+#define PICKUP_ITEMBOX 1
+#define PICKUP_EGGBOX 2
+#define PICKUP_PAPERITEM 3
+#define PICKUP_ITEMCAPSULE 4
+
+#define CHEESE_ITEMBOX 1
+#define CHEESE_RINGBOX 2
+#define CHEESE_ITEMCAPSULE 3
 
 boolean P_CanPickupItem(player_t *player, UINT8 weapon);
 boolean P_IsPickupCheesy(player_t *player, UINT8 type);
@@ -589,6 +607,7 @@ void P_CheckGravity(mobj_t *mo, boolean affect);
 void P_SetPitchRollFromSlope(mobj_t *mo, pslope_t *slope);
 void P_SetPitchRoll(mobj_t *mo, angle_t pitch, angle_t yaw);
 void P_ResetPitchRoll(mobj_t *mo);
+fixed_t P_MoveFactorFromFriction(fixed_t friction);
 fixed_t P_ScaleFromMap(fixed_t n, fixed_t scale);
 fixed_t P_GetMobjHead(const mobj_t *);
 fixed_t P_GetMobjFeet(const mobj_t *);
@@ -600,6 +619,9 @@ void P_InitTIDHash(void);
 void P_AddThingTID(mobj_t *mo);
 void P_RemoveThingTID(mobj_t *mo);
 void P_SetThingTID(mobj_t *mo, mtag_t tid);
+
+// This function cannot be safely called after *i is removed!
+// Please call at start of loops if *i is to be mutated
 mobj_t *P_FindMobjFromTID(mtag_t tid, mobj_t *i, mobj_t *activator);
 
 void P_DeleteMobjStringArgs(mobj_t *mobj);

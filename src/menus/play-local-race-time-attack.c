@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -266,6 +266,23 @@ menu_t PLAY_TAGhostsDef = {
 	NULL
 };
 
+// See also G_UpdateRecordReplays
+const char *M_GetRecordMode(void)
+{
+	if (cv_dummyspbattack.value)
+	{
+		return "spb-";
+	}
+
+	const INT32 skinid = R_SkinAvailableEx(cv_skin[0].string, false);
+	if (skinid >= 0 && (skins[skinid]->flags & SF_HIVOLT))
+	{
+		return "hivolt-";
+	}
+
+	return "";
+}
+
 void CV_SPBAttackChanged(void);
 void CV_SPBAttackChanged(void)
 {
@@ -275,14 +292,12 @@ void CV_SPBAttackChanged(void)
 	{
 		// see also p_setup.c's P_LoadRecordGhosts
 		char *gpath = Z_StrDup(va("%s"PATHSEP"media"PATHSEP"replay"PATHSEP"%s"PATHSEP"%s", srb2home, timeattackfolder, G_BuildMapName(levellist.choosemap+1)));
-		const char *modeprefix = "";
+		const char *modeprefix = M_GetRecordMode();
 		UINT8 active;
 
 		if (!gpath)
 			return;
 
-		if (cv_dummyspbattack.value)
-			modeprefix = "spb-";
 
 		active = false;
 		PLAY_TimeAttack[ta_guest].status = IT_DISABLED;
@@ -440,7 +455,7 @@ void M_HandleStaffReplay(INT32 choice)
 		staffbrief_t *staffbrief;
 		restoreMenu = &PLAY_TAReplayDef;
 
-		M_ClearMenus(true);
+		M_ClearMenusNoTitle(true);
 		demo.loadfiles = false;
 		demo.ignorefiles = true; // Just assume that record attack replays have the files needed
 
@@ -458,10 +473,7 @@ void M_ReplayTimeAttack(INT32 choice)
 {
 	menudemo_t menudemo = {0};
 	const char *which = NULL;
-	const char *modeprefix = "";
-
-	if (cv_dummyspbattack.value)
-		modeprefix = "spb-";
+	const char *modeprefix = M_GetRecordMode();
 
 	switch (choice)
 	{
@@ -497,7 +509,7 @@ void M_ReplayTimeAttack(INT32 choice)
 
 	restoreMenu = &PLAY_TAReplayDef;
 
-	M_ClearMenus(true);
+	M_ClearMenusNoTitle(true);
 	demo.loadfiles = false;
 	demo.ignorefiles = true; // Just assume that record attack replays have the files needed
 
@@ -518,10 +530,7 @@ static void M_WriteGuestReplay(INT32 ch)
 
 	gpath = Z_StrDup(va("%s"PATHSEP"media"PATHSEP"replay"PATHSEP"%s"PATHSEP"%s", srb2home, timeattackfolder, G_BuildMapName(levellist.choosemap+1)));
 
-	const char *modeprefix = "";
-
-	if (cv_dummyspbattack.value)
-		modeprefix = "spb-";
+	const char *modeprefix = M_GetRecordMode();
 
 	if (TA_GuestReplay_Str != NULL)
 	{
@@ -577,10 +586,7 @@ void M_SetGuestReplay(INT32 choice)
 			break;
 	}
 
-	const char *modeprefix = "";
-
-	if (cv_dummyspbattack.value)
-		modeprefix = "spb-";
+	const char *modeprefix = M_GetRecordMode();
 
 	if (FIL_FileExists(va("%s"PATHSEP"media"PATHSEP"replay"PATHSEP"%s"PATHSEP"%s-%sguest.lmp", srb2home, timeattackfolder, G_BuildMapName(levellist.choosemap+1), modeprefix)))
 	{
@@ -596,7 +602,7 @@ void M_StartTimeAttack(INT32 choice)
 {
 	char *gpath;
 	char nameofdemo[256];
-	const char *modeprefix = "";
+	const char *modeprefix = M_GetRecordMode();
 
 	(void)choice;
 
@@ -614,34 +620,17 @@ void M_StartTimeAttack(INT32 choice)
 		{
 			modeattacking |= ATTACKING_SPB;
 		}
-		modeprefix = "spb-";
+
+		if (gamestate == GS_MENU)
+		{
+			encoremode = true; // guarantees short wipe
+		}
 	}
 
 	// DON'T SOFTLOCK
 	CON_ToggleOff();
 
-	// Still need to reset devmode
-	cht_debug = 0;
-
-	if (demo.playback)
-		G_StopDemo();
-
-	splitscreen = 0;
-	SplitScreen_OnChange();
-
-	S_StartSound(NULL, sfx_s3k63);
-
-	paused = false;
-
-	S_StopMusicCredit();
-
-	// Early fadeout to let the sound finish playing
-	F_WipeStartScreen();
-	V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
-	F_WipeEndScreen();
-	F_RunWipe(wipe_level_toblack, wipedefs[wipe_level_toblack], false, "FADEMAP0", false, false);
-
-	SV_StartSinglePlayerServer(levellist.newgametype, false);
+	M_MenuToLevelPreamble(0, (gamestate != GS_MENU || cv_dummyspbattack.value == 1));
 
 	gpath = va("%s"PATHSEP"media"PATHSEP"replay"PATHSEP"%s",
 			srb2home, timeattackfolder);
@@ -659,8 +648,17 @@ void M_StartTimeAttack(INT32 choice)
 
 	restoreMenu = &PLAY_TimeAttackDef;
 
-	M_ClearMenus(true);
-	D_MapChange(levellist.choosemap+1, levellist.newgametype, (cv_dummyspbattack.value == 1), 1, 1, false, false);
+	D_MapChange(
+		levellist.choosemap+1,
+		levellist.newgametype,
+		(cv_dummyspbattack.value == 1),
+		true,
+		1,
+		false,
+		false
+	);
+
+	M_ClearMenusNoTitle(true);
 
 	G_UpdateTimeStickerMedals(levellist.choosemap, true);
 }

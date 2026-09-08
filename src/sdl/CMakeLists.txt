@@ -83,16 +83,13 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES Windows)
 	target_link_libraries(SRB2SDL2 PRIVATE
 		ws2_32
 	)
-	target_compile_options(SRB2SDL2 PRIVATE
-		-U_WINDOWS
-	)
+	# target_compile_options(SRB2SDL2 PRIVATE
+	# 	-U_WINDOWS
+	# )
 endif()
 
 target_compile_definitions(SRB2SDL2 PRIVATE -DHAVE_MIXER -DSOUND=SOUND_MIXER)
 target_compile_definitions(SRB2SDL2 PRIVATE -DDIRECTFULLSCREEN -DHAVE_SDL)
-
-# NOMUMBLE till WRITE* macros are fixed for C++ or mumble integration is rewritten
-target_compile_definitions(SRB2SDL2 PRIVATE -DNOMUMBLE)
 
 #### Installation ####
 if("${CMAKE_SYSTEM_NAME}" MATCHES Darwin)

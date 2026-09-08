@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
@@ -27,6 +27,7 @@ void M_ServerListFillDebug(void);
 static boolean M_ServerBrowserQuit(void)
 {
 	serverlistultimatecount = 0;
+	serverlistmode = false;
 	return true;
 }
 
@@ -239,6 +240,8 @@ void M_ServersMenu(INT32 choice)
 	(void)choice;
 	// modified game check: no longer handled
 	// we don't request a restart unless the filelist differs
+
+	serverlistmode = true;
 
 	CL_UpdateServerList();
 
@@ -474,6 +477,16 @@ void M_MPServerBrowserTick(void)
 	CL_TimeoutServerList();
 }
 
+static void M_ServerBrowserConfirm(INT32 choice)
+{
+	if (choice != MA_YES)
+		return;
+
+	COM_BufAddText(va("connect node %d\n", serverlist[mpmenu.servernum].node));
+
+	M_PleaseWait();
+}
+
 // Input handler for server browser.
 boolean M_ServerBrowserInputs(INT32 ch)
 {
@@ -513,9 +526,17 @@ boolean M_ServerBrowserInputs(INT32 ch)
 		{
 			M_SetMenuDelay(pid);
 
-			COM_BufAddText(va("connect node %d\n", serverlist[mpmenu.servernum].node));
-
-			M_PleaseWait();
+			if (serverlist[mpmenu.servernum].info.numberofplayer >= 8)
+			{
+				S_StartSound(NULL, sfx_s3k96);
+				M_StartMessage("Some advice...",
+					"Ring Racers was designed for \x82""8 or fewer players""\x80"".\n""\x80""Racing may be ""\x82""more frustrating""\x80"" in large games.\n""\x86""(Some servers allow more spectators than players.)",
+				M_ServerBrowserConfirm, MM_YESNO, "Bring on the imbalance...!", "Never mind!");
+			}
+			else
+			{
+				M_ServerBrowserConfirm(MA_YES);
+			}
 
 			return true;
 		}

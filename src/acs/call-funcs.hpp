@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 // Copyright (C) 2016 by James Haley, David Hill, et al. (Team Eternity)
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -76,6 +76,7 @@ bool CallFunc_CountPushables(ACSVM::Thread *thread, const ACSVM::Word *argV, ACS
 bool CallFunc_HaveUnlockableTrigger(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
 bool CallFunc_HaveUnlockable(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
 bool CallFunc_PlayerSkin(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
+bool CallFunc_PlayerSkinRealName(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
 bool CallFunc_PlayerBot(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
 bool CallFunc_PlayerLosing(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);
 bool CallFunc_PlayerExiting(ACSVM::Thread *thread, const ACSVM::Word *argV, ACSVM::Word argC);

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -43,6 +43,7 @@ typedef enum {
 	CHEAT_GIVEPOWERUP,
 	CHEAT_SPHERES,
 	CHEAT_FREEZE,
+	CHEAT_AMPS,
 
 	NUMBER_OF_CHEATS
 } cheat_t;
@@ -74,12 +75,23 @@ void Command_CheatFreeze_f(void);
 void Command_Savecheckpoint_f(void);
 void Command_Setrings_f(void);
 void Command_Setspheres_f(void);
+void Command_Setamps_f(void);
 void Command_Setlives_f(void);
-void Command_Setscore_f(void);
+void Command_Setroundscore_f(void);
 void Command_Devmode_f(void);
 void Command_Scale_f(void);
 void Command_Gravflip_f(void);
 void Command_Hurtme_f(void);
+
+void Command_Stumble_f(void);
+void Command_Whumble_f(void);
+void Command_Tumble_f(void);
+void Command_Explode_f(void);
+void Command_Spinout_f(void);
+void Command_Wipeout_f(void);
+void Command_Sting_f(void);
+void Command_Kill_f(void);
+
 void Command_Teleport_f(void);
 void Command_RTeleport_f(void);
 void Command_Skynum_f(void);

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -110,7 +110,7 @@ struct Side : Graphic
 
 struct Toucher : Mobj
 {
-	bool boosting() const { return player && (player->sneakertimer || K_PlayerCanPunt(player)); }
+	bool boosting() const { return player && (player->sneakertimer || player->panelsneakertimer || player->weaksneakertimer || K_PlayerCanPunt(player)); }
 };
 
 struct AnyBox : Graphic
@@ -250,7 +250,14 @@ private:
 		}
 
 		auto rng = [&](int x, int y) { return P_RandomRange(PR_DECORATION, x, y) * scale(); };
-		auto rng_xyz = [&](int x) { return std::tuple(rng(-x, x), rng(-x, x), rng(0, x)); };
+		auto rng_xyz = [&](int x)
+		{
+			// note: determinate random argument eval order
+			auto rand_z = rng(0, x);
+			auto rand_y = rng(-x, x);
+			auto rand_x = rng(-x, x);
+			return std::tuple(rand_x, rand_y, rand_z);
+		};
 
 		auto spawn = [&](bool playsound)
 		{

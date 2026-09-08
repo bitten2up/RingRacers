@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -33,6 +33,15 @@ menuitem_t OPTIONS_HUD[] =
 
 	{IT_STRING | IT_CVAR, "Show \"FOCUS LOST\"", "Displays \"FOCUS LOST\" when the game cannot accept inputs.",
 		NULL, {.cvar = &cv_showfocuslost}, 0, 0},
+
+	{IT_SPACE | IT_NOTHING, NULL,  NULL,
+		NULL, {NULL}, 0, 0},
+
+	{IT_STRING | IT_CVAR, "Race Splits", "Display time comparisons during races. Next = closest leading player.",
+		NULL, {.cvar = &cv_racesplits}, 0, 0},
+
+	{IT_STRING | IT_CVAR, "Time Attack Splits", "Display time comparisons during Time Attack. Next = closest leading player.",
+		NULL, {.cvar = &cv_attacksplits}, 0, 0},
 
 	{IT_SPACE | IT_NOTHING, NULL,  NULL,
 		NULL, {NULL}, 0, 0},

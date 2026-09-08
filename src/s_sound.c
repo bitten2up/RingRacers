@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -262,6 +262,15 @@ boolean S_SoundDisabled(void)
 	return (
 			sound_disabled ||
 			( window_notinfocus && ! (cv_bgaudio.value & 2) ) ||
+			(g_fast_forward > 0) ||
+			staffsync
+	);
+}
+
+boolean S_VoiceDisabled(void)
+{
+	return (
+			g_voice_disabled ||
 			(g_fast_forward > 0)
 	);
 }
@@ -511,8 +520,8 @@ void S_StartSoundAtVolume(const void *origin_p, sfxenum_t sfx_id, INT32 volume)
 	if (sfx->skinsound != -1 && origin && (origin->player || origin->skin))
 	{
 		// redirect player sound to the sound in the skin table
-		skin_t *skin = (origin->player ? &skins[origin->player->skin] : ((skin_t *)origin->skin));
-		if (R_CanShowSkinInDemo(skin-skins) == false)
+		skin_t *skin = (origin->player ? skins[origin->player->skin] : ((skin_t *)origin->skin));
+		if (R_CanShowSkinInDemo(skin->skinnum) == false)
 			return;
 		sfx_id = skin->soundsid[sfx->skinsound];
 		sfx = &S_sfx[sfx_id];
@@ -676,6 +685,13 @@ void S_StopSound(void *origin)
 static INT32 actualsfxvolume; // check for change through console
 static INT32 actualdigmusicvolume;
 static INT32 actualmastervolume;
+static INT32 actualvoicevolume;
+
+static boolean PointIsLeft(float ax, float ay, float bx, float by)
+{
+	// return (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x) > 0;
+	return ax * by - ay * bx > 0;
+}
 
 void S_UpdateSounds(void)
 {
@@ -694,6 +710,8 @@ void S_UpdateSounds(void)
 		S_SetMusicVolume();
 	if (actualmastervolume != cv_mastervolume.value)
 		S_SetMasterVolume();
+	if (actualvoicevolume != cv_voicevolume.value)
+		S_SetVoiceVolume();
 
 	// We're done now, if we're not in a level.
 	if (gamestate != GS_LEVEL)
@@ -853,6 +871,172 @@ notinlevel:
 	I_UpdateSound();
 }
 
+void S_UpdateVoicePositionalProperties(void)
+{
+	int i;
+
+	if (gamestate != GS_LEVEL)
+	{
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			I_SetPlayerVoiceProperties(i, 1.0f, 0.0f);
+		}
+		return;
+	}
+
+	player_t *consoleplr = &players[consoleplayer];
+	listener_t listener = {0};
+	mobj_t *listenmobj = NULL;
+
+	if (consoleplr)
+	{
+		if (consoleplr->awayview.tics)
+		{
+			listenmobj = consoleplr->awayview.mobj;
+		}
+		else
+		{
+			listenmobj = consoleplr->mo;
+		}
+
+		if (camera[0].chase && !consoleplr->awayview.tics)
+		{
+			listener.x = camera[0].x;
+			listener.y = camera[0].y;
+			listener.z = camera[0].z;
+			listener.angle = camera[0].angle;
+		}
+		else if (listenmobj)
+		{
+			listener.x = listenmobj->x;
+			listener.y = listenmobj->y;
+			listener.z = listenmobj->z;
+			listener.angle = listenmobj->angle;
+		}
+	}
+
+	float playerdistances[MAXPLAYERS];
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		player_t *plr = &players[i];
+		mobj_t *mo = plr->mo;
+		if (plr->spectator || !mo)
+		{
+			playerdistances[i] = 0.f;
+			continue;
+		}
+		float px = FixedToFloat(mo->x - listener.x);
+		float py = FixedToFloat(mo->y - listener.y);
+		float pz = FixedToFloat(mo->z - listener.z);
+		playerdistances[i] = sqrtf(px * px + py * py + pz * pz);
+	}
+
+	// Positional voice audio
+	boolean voice_proximity_enabled = cv_voice_proximity.value == 1;
+	float voice_distanceattenuation_distance = FixedToFloat(cv_voice_distanceattenuation_distance.value) * FixedToFloat(mapheaderinfo[gamemap-1]->mobj_scale);
+	float voice_distanceattenuation_teamdistance = FixedToFloat(cv_voice_distanceattenuation_teamdistance.value) * FixedToFloat(mapheaderinfo[gamemap-1]->mobj_scale);
+	float voice_distanceattenuation_factor = FixedToFloat(cv_voice_distanceattenuation_factor.value);
+	float voice_stereopanning_factor = FixedToFloat(cv_voice_stereopanning_factor.value);
+	float voice_concurrentattenuation_min = max(0, min(MAXPLAYERS, cv_voice_concurrentattenuation_min.value));
+	float voice_concurrentattenuation_max = max(0, min(MAXPLAYERS, cv_voice_concurrentattenuation_max.value));
+	voice_concurrentattenuation_min = min(voice_concurrentattenuation_max, voice_concurrentattenuation_min);
+	float voice_concurrentattenuation_factor = FixedToFloat(cv_voice_concurrentattenuation_factor.value);
+
+	// Derive concurrent speaker attenuation
+	float speakingplayers = 0;
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		if (S_IsPlayerVoiceActive(i))
+		{
+			float attenuation_distance = voice_distanceattenuation_distance;
+			if (G_GametypeHasTeams() && players[i].team == players[consoleplayer].team)
+			{
+				attenuation_distance = voice_distanceattenuation_teamdistance;
+			}
+
+			if (attenuation_distance > 0)
+			{
+				speakingplayers += 1.f - (playerdistances[i] / attenuation_distance);
+			}
+			else
+			{
+				// invalid distance attenuation
+				speakingplayers += 1.f;
+			}
+		}
+	}
+	speakingplayers = min(voice_concurrentattenuation_max, max(0, speakingplayers - voice_concurrentattenuation_min));
+	float speakingplayerattenuation = 1.f - (speakingplayers * (voice_concurrentattenuation_factor / voice_concurrentattenuation_max));
+
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		if (!playeringame[i])
+		{
+			I_SetPlayerVoiceProperties(i, speakingplayerattenuation, 0.0f);
+			continue;
+		}
+
+		if (i == consoleplayer)
+		{
+			I_SetPlayerVoiceProperties(i, speakingplayerattenuation, 0.0f);
+			continue;
+		}
+
+		player_t *plr = &players[i];
+		if (plr->spectator)
+		{
+			I_SetPlayerVoiceProperties(i, speakingplayerattenuation, 0.0f);
+			continue;
+		}
+
+		mobj_t *plrmobj = plr->mo;
+
+		if (!plrmobj)
+		{
+			I_SetPlayerVoiceProperties(i, 1.0f, 0.0f);
+			continue;
+		}
+
+		float lx = FixedToFloat(listener.x);
+		float ly = FixedToFloat(listener.y);
+		float lz = FixedToFloat(listener.z);
+		float px = FixedToFloat(plrmobj->x) - lx;
+		float py = FixedToFloat(plrmobj->y) - ly;
+		float pz = FixedToFloat(plrmobj->z) - lz;
+
+		float ldirx = cosf(ANG2RAD(listener.angle));
+		float ldiry = sinf(ANG2RAD(listener.angle));
+		float pdistance = sqrtf(px * px + py * py + pz * pz);
+		float p2ddistance = sqrtf(px * px + py * py);
+		float pdirx = px / p2ddistance;
+		float pdiry = py / p2ddistance;
+		float angle = acosf(pdirx * ldirx + pdiry * ldiry);
+		angle = (
+			PointIsLeft(ldirx, ldiry, pdirx, pdiry)
+			^ stereoreverse.value
+			^ encoremode
+		) ? -angle : angle;
+
+		float plrvolume = 1.0f;
+
+		float attenuation_distance = voice_distanceattenuation_distance;
+		if (G_GametypeHasTeams() && players[i].team == players[consoleplayer].team)
+		{
+			attenuation_distance = voice_distanceattenuation_teamdistance;
+		}
+
+		if (voice_proximity_enabled && attenuation_distance > 0 && voice_distanceattenuation_factor >= 0 && voice_distanceattenuation_factor <= 1.0f)
+		{
+			float invfactor = 1.0f - voice_distanceattenuation_factor;
+			float distfactor = max(0.f, min(attenuation_distance, pdistance)) / attenuation_distance;
+			plrvolume = max(0.0f, min(1.0f, 1.0f - (invfactor * distfactor)));
+		}
+
+		float fsep = sinf(angle) * max(0.0f, min(1.0f, voice_stereopanning_factor));
+		I_SetPlayerVoiceProperties(i, plrvolume * speakingplayerattenuation, fsep);
+	}
+}
+
 void S_UpdateClosedCaptions(void)
 {
 	UINT8 i;
@@ -885,6 +1069,13 @@ void S_SetSfxVolume(void)
 
 	// now hardware volume
 	I_SetSfxVolume(actualsfxvolume);
+}
+
+void S_SetVoiceVolume(void)
+{
+	actualvoicevolume = cv_voicevolume.value;
+
+	I_SetVoiceVolume(actualvoicevolume);
 }
 
 void S_SetMasterVolume(void)
@@ -2261,6 +2452,7 @@ void S_ShowMusicCredit(void)
 	cursongcredit.anim = 5*TICRATE;
 	cursongcredit.x = cursongcredit.old_x = 0;
 	cursongcredit.trans = NUMTRANSMAPS;
+	cursongcredit.use_credits_offset = (gamestate == GS_CREDITS || (demo.playback && demo.attract == DEMO_ATTRACT_CREDITS));
 }
 
 void S_StopMusicCredit(void)
@@ -2639,6 +2831,18 @@ void GameDigiMusic_OnChange(void)
 	}
 }
 
+void VoiceSelfDeafen_OnChange(void);
+void weaponPrefChange(INT32 ssplayer);
+void VoiceSelfDeafen_OnChange(void)
+{
+	if (M_CheckParm("-novoice") || M_CheckParm("-noaudio"))
+		return;
+
+	g_voice_disabled = cv_voice_selfdeafen.value;
+
+	weaponPrefChange(0);
+}
+
 void BGAudio_OnChange(void);
 void BGAudio_OnChange(void)
 {
@@ -2655,4 +2859,62 @@ void BGAudio_OnChange(void)
 
 	if (window_notinfocus && !(cv_bgaudio.value & 2))
 		S_StopSounds();
+
+	if (window_notinfocus && !(cv_bgaudio.value & 4))
+		g_voice_disabled = true;
+}
+
+
+boolean S_SoundInputIsEnabled(void)
+{
+	return I_SoundInputIsEnabled();
+}
+
+boolean S_SoundInputSetEnabled(boolean enabled)
+{
+	return I_SoundInputSetEnabled(enabled);
+}
+
+UINT32 S_SoundInputDequeueSamples(void *data, UINT32 len)
+{
+	return I_SoundInputDequeueSamples(data, len);
+}
+
+UINT32 S_SoundInputRemainingSamples(void)
+{
+	return I_SoundInputRemainingSamples();
+}
+
+static INT32 g_playerlastvoiceactive[MAXPLAYERS];
+
+void S_QueueVoiceFrameFromPlayer(INT32 playernum, void *data, UINT32 len, boolean terminal)
+{
+	if (dedicated)
+	{
+		return;
+	}
+	if (cv_voice_selfdeafen.value != 1 && !g_voice_disabled)
+	{
+		I_QueueVoiceFrameFromPlayer(playernum, data, len, terminal);
+	}
+}
+
+void S_SetPlayerVoiceActive(INT32 playernum)
+{
+	g_playerlastvoiceactive[playernum] = I_GetTime();
+}
+
+boolean S_IsPlayerVoiceActive(INT32 playernum)
+{
+	return I_GetTime() - g_playerlastvoiceactive[playernum] < 5;
+}
+
+void S_ResetVoiceQueue(INT32 playernum)
+{
+	if (dedicated)
+	{
+		return;
+	}
+	I_ResetVoiceQueue(playernum);
+	g_playerlastvoiceactive[playernum] = 0;
 }

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -11,16 +11,17 @@
 #ifndef __SRB2_IO_STREAMS_HPP__
 #define __SRB2_IO_STREAMS_HPP__
 
+#include <algorithm>
 #include <cstddef>
-#include <optional>
 #include <stdexcept>
-#include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include <tcb/span.hpp>
 #include <zlib.h>
+
+#include "../core/string.h"
+#include "../core/vector.hpp"
 
 namespace srb2::io
 {
@@ -408,9 +409,9 @@ public:
 		if (head_ >= span_.size())
 			return 0;
 
-		const auto begin = buffer.begin();
-		const auto end = std::copy(
-			span_.begin() + head_, span_.begin() + head_ + std::min(buffer.size(), span_.size() - head_), begin);
+		auto begin = buffer.begin();
+		auto end = std::copy(
+			span_.begin() + head_, span_.begin() + head_ + std::min<size_t>(buffer.size(), span_.size() - head_), begin);
 		head_ += std::distance(begin, end);
 		return std::distance(begin, end);
 	}
@@ -419,9 +420,9 @@ public:
 		if (head_ >= span_.size())
 			return 0;
 
-		const auto begin = span_.begin() + head_;
-		const auto end =
-			std::copy(buffer.begin(), buffer.begin() + std::min(span_.size() - head_, buffer.size()), begin);
+		auto begin = span_.begin() + head_;
+		auto end =
+			std::copy(buffer.begin(), buffer.begin() + std::min<size_t>(span_.size() - head_, buffer.size()), begin);
 		head_ += std::distance(begin, end);
 		return std::distance(begin, end);
 	}
@@ -484,13 +485,13 @@ inline void read_exact(SpanStream& stream, tcb::span<std::byte> buffer)
 }
 
 class VecStream {
-	std::vector<std::byte> vec_;
+	srb2::Vector<std::byte> vec_;
 	std::size_t head_ {0};
 
 public:
 	VecStream() = default;
-	VecStream(const std::vector<std::byte>& vec) : vec_(vec) {}
-	VecStream(std::vector<std::byte>&& vec) : vec_(std::move(vec)) {}
+	VecStream(const srb2::Vector<std::byte>& vec) : vec_(vec) {}
+	VecStream(srb2::Vector<std::byte>&& vec) : vec_(std::move(vec)) {}
 	VecStream(const VecStream& rhs) = default;
 	VecStream(VecStream&& rhs) = default;
 
@@ -501,9 +502,9 @@ public:
 		if (head_ >= vec_.size())
 			return 0;
 
-		const auto begin = buffer.begin();
-		const auto end =
-			std::copy(vec_.begin() + head_, vec_.begin() + head_ + std::min(buffer.size(), vec_.size() - head_), begin);
+		auto begin = buffer.begin();
+		auto end =
+			std::copy(vec_.begin() + head_, vec_.begin() + head_ + std::min<size_t>(buffer.size(), vec_.size() - head_), begin);
 		head_ += std::distance(begin, end);
 		return std::distance(begin, end);
 	}
@@ -514,9 +515,9 @@ public:
 			vec_.resize(head_ + buffer_size);
 		}
 
-		const auto begin = vec_.begin() + head_;
-		const auto end =
-			std::copy(buffer.begin(), buffer.begin() + std::min(vec_.size() - head_, buffer.size()), begin);
+		auto begin = vec_.begin() + head_;
+		auto end =
+			std::copy(buffer.begin(), buffer.begin() + std::min<size_t>(vec_.size() - head_, buffer.size()), begin);
 		head_ += std::distance(begin, end);
 		return std::distance(begin, end);
 	}
@@ -549,7 +550,7 @@ public:
 		return head_;
 	}
 
-	std::vector<std::byte>& vector() { return vec_; }
+	srb2::Vector<std::byte>& vector() { return vec_; }
 
 	friend void read_exact(VecStream& stream, tcb::span<std::byte> buffer);
 };
@@ -674,7 +675,7 @@ template <typename I,
 class ZlibInputStream {
 	I inner_;
 	z_stream stream_;
-	std::vector<std::byte> buf_;
+	srb2::Vector<std::byte> buf_;
 	std::size_t buf_head_;
 	bool zstream_initialized_;
 	bool zstream_ended_;
@@ -820,7 +821,7 @@ template <typename O,
 class BufferedOutputStream final
 {
 	O inner_;
-	std::vector<std::byte> buf_;
+	srb2::Vector<std::byte> buf_;
 	tcb::span<const std::byte>::size_type cap_;
 
 public:
@@ -872,7 +873,7 @@ template <typename I,
 class BufferedInputStream final
 {
 	I inner_;
-	std::vector<std::byte> buf_;
+	srb2::Vector<std::byte> buf_;
 	tcb::span<std::byte>::size_type cap_;
 
 public:
@@ -901,7 +902,7 @@ public:
 			StreamSize bytesread = inner_.read(readspan);
 			buf_.resize(prereadsize + bytesread);
 
-			StreamSize tocopyfrombuf = std::min(buffer.size(), buf_.size());
+			StreamSize tocopyfrombuf = std::min<StreamSize>(buffer.size(), buf_.size());
 			std::copy(buf_.begin(), std::next(buf_.begin(), tocopyfrombuf), buffer.begin());
 			buffer = buffer.subspan(tocopyfrombuf);
 			totalread += tocopyfrombuf;
@@ -933,7 +934,7 @@ extern template class BufferedInputStream<FileStream>;
 
 template <typename I, typename O>
 StreamSize pipe_all(I& input, O& output) {
-	std::vector<std::byte> buf;
+	srb2::Vector<std::byte> buf;
 
 	StreamSize total_written = 0;
 	StreamSize read_this_time = 0;
@@ -951,7 +952,7 @@ StreamSize pipe_all(I& input, O& output) {
 }
 
 template <typename I>
-std::vector<std::byte> read_to_vec(I& input) {
+srb2::Vector<std::byte> read_to_vec(I& input) {
 	VecStream out;
 	pipe_all(input, out);
 	return std::move(out.vector());

@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Lachlan "Lach" Wright
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Lachlan "Lach" Wright
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -66,7 +66,8 @@ static void RemoveRingShooterPointer(mobj_t *base)
 	if (playeringame[ rs_base_playerid(base) ])
 	{
 		player = &players[ rs_base_playerid(base) ];
-		P_SetTarget(&player->ringShooter, NULL);
+		if (player->ringShooter == base)
+			P_SetTarget(&player->ringShooter, NULL);
 	}
 
 	// Remove our player ID
@@ -170,6 +171,7 @@ static void UpdateRingShooterParts(mobj_t *mo)
 	part = mo->tracer;
 	part->z = mo->z + FixedMul(refNipple->height, rs_base_yscale(mo));
 	MovePart(part, mo, refNipple);
+	K_FlipFromObject(part, mo);
 	ScalePart(part, mo);
 }
 
@@ -233,7 +235,7 @@ static void RingShooterCountdown(mobj_t *mo)
 				if (playeringame[rs_base_playerface(mo)] == true)
 				{
 					player_t *player = &players[ rs_base_playerid(mo) ];
-					part->skin = &skins[player->skin];
+					part->skin = skins[player->skin];
 				}
 			}
 
@@ -430,10 +432,6 @@ void Obj_PlayerUsedRingShooter(mobj_t *base, player_t *player)
 		return;
 	}
 
-	// The original player should no longer have control over it,
-	// if they are using it via releasing.
-	RemoveRingShooterPointer(base);
-
 	// Respawn using the respawner's karted value.
 	if (rs_base_karted(base) > 0)
 	{
@@ -442,6 +440,8 @@ void Obj_PlayerUsedRingShooter(mobj_t *base, player_t *player)
 
 	player->respawn.fromRingShooter = true;
 	K_DoIngameRespawn(player);
+
+	P_SetTarget(&player->ringShooter, NULL);
 
 	// Now other players can run into it!
 	base->flags |= MF_SPECIAL;
@@ -517,7 +517,7 @@ static void SpawnRingShooter(player_t *player)
 	rs_base_karted(base) = -(RS_KARTED_INC * TICRATE); // wait for "3"
 	rs_base_grabberdist(base) = RS_GRABBER_START;
 
-	K_FlipFromObject(base, mo);
+	K_FlipFromObjectNoInterp(base, mo);
 	P_SetScale(base, base->destscale = FixedMul(base->destscale, scale));
 	base->angle = mo->angle;
 	base->scalespeed = FRACUNIT/2;
@@ -658,6 +658,7 @@ static boolean AllowRingShooter(const player_t *player)
 		&& player->nocontrol == 0
 		&& player->fastfall == 0
 		&& player->speed < minSpeed
+		&& player->freeRingShooterCooldown == 0
 		&& P_PlayerInPain(player) == false
 		&& P_IsObjectOnGround(player->mo) == true)
 	{
@@ -672,7 +673,7 @@ boolean Obj_PlayerRingShooterFreeze(const player_t *player)
 	const mobj_t *base = player->ringShooter;
 
 	if (AllowRingShooter(player) == true
-		&& (player->cmd.buttons & BT_RESPAWN) == BT_RESPAWN
+		&& (player->cmd.buttons & BT_RESPAWNMASK) == BT_RESPAWNMASK
 		&& P_MobjWasRemoved(base) == false)
 	{
 		return (rs_base_canceled(base) == 0);
@@ -686,7 +687,7 @@ void Obj_RingShooterInput(player_t *player)
 	mobj_t *const base = player->ringShooter;
 
 	if (AllowRingShooter(player) == true
-		&& (player->cmd.buttons & BT_RESPAWN) == BT_RESPAWN)
+		&& (player->cmd.buttons & BT_RESPAWNMASK) == BT_RESPAWNMASK)
 	{
 		// "Freeze" final-failsafe timer if we're eligible to ringshooter, but don't reset it.
 		if (player->finalfailsafe)
@@ -739,6 +740,7 @@ void Obj_RingShooterInput(player_t *player)
 		{
 			// We released during the intro animation.
 			// Cancel it entirely, prevent another one being created for a bit.
+			player->freeRingShooterCooldown = 2*TICRATE;
 			rs_base_canceled(base) = 1;
 
 			if (base->fuse > RS_FUSE_BLINK)
@@ -779,9 +781,9 @@ void Obj_UpdateRingShooterFace(mobj_t *part)
 
 	// it's a good idea to set the actor's skin *before* it uses this action,
 	// but just in case, if it doesn't have the player's skin, set its skin then call the state again to get the correct sprite
-	if (part->skin != &skins[player->skin])
+	if (part->skin != skins[player->skin])
 	{
-		part->skin = &skins[player->skin];
+		part->skin = skins[player->skin];
 		P_SetMobjState(part, (statenum_t)(part->state - states));
 		return;
 	}

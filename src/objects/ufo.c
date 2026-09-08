@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -45,6 +45,8 @@
 
 #define UFO_NUMARMS (3)
 #define UFO_ARMDELTA (ANGLE_MAX / UFO_NUMARMS)
+#define UFO_START_GLASSFRAMES (1)
+#define UFO_NUM_GLASSFRAMES (10)
 
 #define ufo_emeraldnum(o) ((o)->cvmem)
 #define ufo_waypoint(o) ((o)->extravalue1)
@@ -55,6 +57,8 @@
 #define ufo_pieces(o) ((o)->hnext)
 
 #define ufo_piece_type(o) ((o)->extravalue1)
+
+#define ufo_piece_glass_flickerframe(o) ((o)->cusval)
 
 #define ufo_piece_owner(o) ((o)->target)
 #define ufo_piece_next(o) ((o)->hnext)
@@ -78,10 +82,14 @@ static int maxhum = sizeof(hums) / sizeof(hums[0]) - 1;
 
 static void SpawnUFOSpeedLines(mobj_t *ufo)
 {
+	// note: determinate random argument eval order
+	fixed_t rand_z = P_RandomRange(PR_DECORATION, -24, 24);
+	fixed_t rand_y = P_RandomRange(PR_DECORATION, -120, 120);
+	fixed_t rand_x = P_RandomRange(PR_DECORATION, -120, 120);
 	mobj_t *fast = P_SpawnMobjFromMobj(ufo,
-		P_RandomRange(PR_DECORATION, -120, 120) * FRACUNIT,
-		P_RandomRange(PR_DECORATION, -120, 120) * FRACUNIT,
-		(ufo->info->height / 2) + (P_RandomRange(PR_DECORATION, -24, 24) * FRACUNIT),
+		rand_x * FRACUNIT,
+		rand_y * FRACUNIT,
+		(ufo->info->height / 2) + (rand_z * FRACUNIT),
 		MT_FASTLINE
 	);
 
@@ -93,15 +101,19 @@ static void SpawnUFOSpeedLines(mobj_t *ufo)
 	fast->color = SKINCOLOR_WHITE;
 	fast->colorized = true;
 
-	K_MatchGenericExtraFlags(fast, ufo);
+	K_MatchGenericExtraFlagsNoZAdjust(fast, ufo);
 }
 
 static void SpawnEmeraldSpeedLines(mobj_t *mo)
 {
+	// note: determinate random argument eval order
+	fixed_t rand_z = P_RandomRange(PR_DECORATION, 0, 64);
+	fixed_t rand_y = P_RandomRange(PR_DECORATION, -48, 48);
+	fixed_t rand_x = P_RandomRange(PR_DECORATION, -48, 48);
 	mobj_t *fast = P_SpawnMobjFromMobj(mo,
-		P_RandomRange(PR_DECORATION, -48, 48) * FRACUNIT,
-		P_RandomRange(PR_DECORATION, -48, 48) * FRACUNIT,
-		P_RandomRange(PR_DECORATION, 0, 64) * FRACUNIT,
+		rand_x * FRACUNIT,
+		rand_y * FRACUNIT,
+		rand_z * FRACUNIT,
 		MT_FASTLINE);
 	P_SetMobjState(fast, S_KARTINVLINES1);
 
@@ -112,7 +124,7 @@ static void SpawnEmeraldSpeedLines(mobj_t *mo)
 	fast->momy = 3*mo->momy/4;
 	fast->momz = 3*P_GetMobjZMovement(mo)/4;
 
-	K_MatchGenericExtraFlags(fast, mo);
+	K_MatchGenericExtraFlagsNoZAdjust(fast, mo);
 	P_SetTarget(&fast->owner, mo);
 	fast->renderflags |= RF_REDUCEVFX;
 
@@ -644,10 +656,14 @@ spawn_shard
 	const UINT16 rad = (ufo->radius / ufo->scale) / 4;
 	const UINT16 tall = (h / FRACUNIT);
 
+	// note: determinate random argument eval order
+	fixed_t rand_z = P_RandomKey(PR_ITEM_DEBRIS, tall + 1);
+	fixed_t rand_y = P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad);
+	fixed_t rand_x = P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad);
 	mobj_t *p = P_SpawnMobjFromMobj(ufo,
-			P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad) * 8 * FRACUNIT,
-			P_RandomRange(PR_ITEM_DEBRIS, -(rad), rad) * 8 * FRACUNIT,
-			P_RandomKey(PR_ITEM_DEBRIS, tall + 1) * 4 * FRACUNIT,
+			rand_x * 8 * FRACUNIT,
+			rand_y * 8 * FRACUNIT,
+			rand_z * 4 * FRACUNIT,
 			MT_MONITOR_SHARD);
 
 	P_SetScale(p, (p->destscale = p->destscale * 3));
@@ -677,6 +693,40 @@ spawn_shard
 }
 
 static void
+set_flickerframe (mobj_t *ufo, mobj_t *piece)
+{
+	INT32 healthcalc = (UFO_NUM_GLASSFRAMES - 1);
+
+	if (ufo && !P_MobjWasRemoved(ufo))
+	{
+		INT32 maxhealth = mobjinfo[MT_SPECIAL_UFO].spawnhealth;
+		healthcalc = (maxhealth - ufo->health);
+
+		if (healthcalc > 0)
+		{
+			maxhealth /= UFO_NUM_GLASSFRAMES;
+			if (maxhealth <= 0)
+				maxhealth = 1;
+			healthcalc /= maxhealth;
+			if (healthcalc >= UFO_NUM_GLASSFRAMES)
+				healthcalc = (UFO_NUM_GLASSFRAMES - 1);
+			if (healthcalc < 0)
+				healthcalc = 0;
+		}
+		else
+		{
+			healthcalc = 0;
+		}
+	}
+
+	healthcalc = (healthcalc|FF_FULLBRIGHT) + UFO_START_GLASSFRAMES;
+
+	ufo_piece_glass_flickerframe(piece) = healthcalc;
+	piece->frame = healthcalc;
+}
+
+
+static void
 spawn_debris (mobj_t *part)
 {
 	mobj_t *ufo = ufo_piece_owner(part);
@@ -704,6 +754,7 @@ static void UFOCopyHitlagToPieces(mobj_t *ufo)
 
 		if (ufo_piece_type(piece) == UFO_PIECE_TYPE_GLASS)
 		{
+			set_flickerframe (ufo, piece);
 			spawn_debris (piece);
 		}
 
@@ -728,6 +779,11 @@ static void UFOKillPiece(mobj_t *piece)
 	switch (ufo_piece_type(piece))
 	{
 		case UFO_PIECE_TYPE_GLASS:
+		{
+			set_flickerframe(NULL, piece);
+			piece->tics = 1;
+			return;
+		}
 		case UFO_PIECE_TYPE_GLASS_UNDER:
 		case UFO_PIECE_TYPE_STEM:
 		{
@@ -851,7 +907,7 @@ static UINT8 GetUFODamage(mobj_t *inflictor, UINT8 damageType)
 			{
 				// Players deal damage relative to how many sneakers they used.
 				targetdamaging = UFOD_BOOST;
-				ret = 15 * max(1, inflictor->player->numsneakers);
+				ret = 15 * max(1, inflictor->player->numsneakers + inflictor->player->numpanelsneakers + inflictor->player->numweaksneakers);
 				break;
 			}
 			case MT_SPECIAL_UFO:
@@ -924,7 +980,7 @@ boolean Obj_SpecialUFODamage(mobj_t *ufo, mobj_t *inflictor, mobj_t *source, UIN
 	{
 		UINT32 skinflags = (demo.playback)
 			? demo.skinlist[demo.currentskinid[(source->player-players)]].flags
-			: skins[source->player->skin].flags;
+			: skins[source->player->skin]->flags;
 		if (skinflags & SF_IRONMAN)
 			SetRandomFakePlayerSkin(source->player, true, false);
 	}
@@ -1010,6 +1066,10 @@ void Obj_PlayerUFOCollide(mobj_t *ufo, mobj_t *other)
 		Obj_SpecialUFODamage(ufo, other, other, DMG_STEAL);
 		other->player->sneakertimer = 0;
 		other->player->numsneakers = 0;
+		other->player->panelsneakertimer = 0;
+		other->player->numpanelsneakers = 0;
+		other->player->weaksneakertimer = 0;
+		other->player->numweaksneakers = 0;
 
 		// Copied from Obj_OrbinautThrown
 		const ffloor_t *rover = P_IsObjectFlipped(other) ? other->ceilingrover : other->floorrover;
@@ -1113,6 +1173,21 @@ void Obj_UFOPieceThink(mobj_t *piece)
 			break;
 		}
 		case UFO_PIECE_TYPE_GLASS:
+		{
+			// Flicker glass cracks for visibility
+			if (piece->frame == FF_SEMIBRIGHT)
+			{
+				piece->frame = ufo_piece_glass_flickerframe(piece);
+			}
+			else
+			{
+				piece->frame = FF_SEMIBRIGHT;
+			}
+
+			piece->destscale = 5 * ufo->destscale / 3;
+			UFOMoveTo(piece, ufo->x, ufo->y, ufo->z);
+			break;
+		}
 		case UFO_PIECE_TYPE_GLASS_UNDER:
 		{
 			piece->destscale = 5 * ufo->destscale / 3;
@@ -1220,6 +1295,15 @@ static mobj_t *InitSpecialUFO(waypoint_t *start)
 		specialstageinfo.maxDist = ufo_distancetofinish(ufo);
 	}
 
+	// Set specialDamage as early as possible, for glass ball's sake
+	// (...Except if you're on Master difficulty!)
+	if (grandprixinfo.gp && grandprixinfo.specialDamage && grandprixinfo.masterbots == false)
+	{
+		ufo->health -= min(2*(UINT32)mobjinfo[MT_SPECIAL_UFO].spawnhealth/10, grandprixinfo.specialDamage/12);
+		// Use this if you want to spy on what the health ends up being:
+		//CONS_Printf("the UFO weeps: %d hp\n", ufo->health );
+	}
+
 	ufo_speed(ufo) = FixedMul(UFO_START_SPEED, K_GetKartGameSpeedScalar(gamespeed));
 
 	// Adjustable Special Stage emerald color/shape
@@ -1293,6 +1377,8 @@ static mobj_t *InitSpecialUFO(waypoint_t *start)
 		P_SetMobjState(piece, S_SPECIAL_UFO_GLASS);
 		ufo_piece_type(piece) = UFO_PIECE_TYPE_GLASS;
 
+		set_flickerframe(ufo, piece);
+
 		/*overlay = P_SpawnMobjFromMobj(piece, 0, 0, 0, MT_OVERLAY);
 		P_SetTarget(&overlay->target, piece);
 		P_SetMobjState(overlay, S_SPECIAL_UFO_GLASS_UNDER);
@@ -1344,11 +1430,6 @@ static mobj_t *InitSpecialUFO(waypoint_t *start)
 	P_SetTarget(&ufo_piece_next(prevPiece), piece);
 	P_SetTarget(&ufo_piece_prev(piece), prevPiece);
 	prevPiece = piece;
-
-	if (grandprixinfo.gp && grandprixinfo.specialDamage)
-	{
-		ufo->health -= min(4*(UINT32)mobjinfo[MT_SPECIAL_UFO].spawnhealth/10, grandprixinfo.specialDamage/6);
-	}
 
 	return ufo;
 }

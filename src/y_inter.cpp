@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 //
 // This program is free software distributed under the
@@ -50,11 +50,14 @@
 #include "k_hud.h" // K_DrawMapThumbnail
 #include "k_battle.h"
 #include "k_boss.h"
+#include "k_kart.h"
 #include "k_pwrlv.h"
 #include "k_grandprix.h"
 #include "k_serverstats.h" // SV_BumpMatchStats
 #include "m_easing.h"
 #include "music.h"
+
+#include "v_draw.hpp"
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -99,6 +102,11 @@ static boolean Y_CanSkipIntermission(void)
 	}
 
 	return false;
+}
+
+boolean Y_IntermissionPlayerLock(void)
+{
+	return (gamestate == GS_INTERMISSION && data.rankingsmode == false);
 }
 
 static void Y_UnloadData(void);
@@ -154,6 +162,7 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 	boolean completed[MAXPLAYERS];
 	INT32 numplayersingame = 0;
 	boolean getmainplayer = false;
+	UINT32 topscore = 0, btopemeralds = 0;
 
 	// Initialize variables
 	if (rankingsmode > 1)
@@ -182,6 +191,27 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 			data.increase[i] = INT16_MIN;
 			continue;
 		}
+		
+		// for getting the proper maximum value for score-to-EXP conversion
+		if (gametype == GT_BATTLE)
+		{
+			if ((&players[i])->roundscore > topscore)
+			{
+				topscore = (&players[i])->roundscore;
+			}
+			if (K_NumEmeralds(&players[i]) > btopemeralds)
+			{
+				btopemeralds = K_NumEmeralds(&players[i]); // necessary so non-emerald wins can still get max EXP if no one else is holding more emeralds
+			}
+		}
+		
+		if (K_InRaceDuel() == true)
+		{
+			if (((UINT32)(&players[i])->duelscore) > topscore)
+			{
+				topscore = (&players[i])->duelscore;
+			}
+		}
 
 		if (!rankingsmode)
 			data.increase[i] = INT16_MIN;
@@ -189,8 +219,6 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 		numplayersingame++;
 	}
 
-	memset(data.color, 0, sizeof (data.color));
-	memset(data.character, 0, sizeof (data.character));
 	memset(completed, 0, sizeof (completed));
 	data.numplayers = 0;
 	data.showroundnum = false;
@@ -200,9 +228,63 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 	srb2::StandingsJson standings {};
 	bool savestandings = (!rankingsmode && demo.recording);
 
+	// Team stratification (this code only barely supports more than 2 teams)
+	data.winningteam = TEAM_UNASSIGNED;
+	data.halfway = UINT8_MAX;
+
+	UINT8 countteam[TEAM__MAX];
+	UINT8 smallestteam = UINT8_MAX;
+	memset(countteam, 0, sizeof(countteam));
+
+	if (rankingsmode == 0 && G_GametypeHasTeams())
+	{
+		for (i = data.winningteam+1; i < TEAM__MAX; i++)
+		{
+			countteam[i] = G_CountTeam(i);
+
+			if (g_teamscores[data.winningteam] < g_teamscores[i])
+			{
+				data.winningteam = i;
+			}
+
+			if (smallestteam > countteam[i])
+			{
+				smallestteam = countteam[i];
+			}
+		}
+
+		if (countteam[data.winningteam])
+		{
+			data.halfway = countteam[data.winningteam] - 1;
+		}
+	}
+
 	for (j = 0; j < numplayersingame; j++)
 	{
-		for (i = 0; i < MAXPLAYERS; i++)
+		i = 0;
+
+		if (data.winningteam != TEAM_UNASSIGNED)
+		{
+			for (; i < MAXPLAYERS; i++)
+			{
+				if (!playeringame[i] || players[i].spectator || completed[i])
+					continue;
+
+				if (players[i].team != data.winningteam)
+					continue;
+
+				comparison(i);
+			}
+
+			if (data.val[data.numplayers] == UINT32_MAX)
+			{
+				// Only run the un-teamed loop if everybody
+				// on the winning team was previously placed
+				i = 0;
+			}
+		}
+
+		for (; i < MAXPLAYERS; i++)
 		{
 			if (!playeringame[i] || players[i].spectator || completed[i])
 				continue;
@@ -214,9 +296,6 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 
 		completed[i] = true;
 		data.grade[i] = K_PlayerTallyActive(&players[i]) ? players[i].tally.rank : GRADE_INVALID;
-
-		data.color[data.numplayers] = players[i].skincolor;
-		data.character[data.numplayers] = players[i].skin;
 
 		if (data.numplayers && (data.val[data.numplayers] == data.val[data.numplayers-1]))
 		{
@@ -233,22 +312,61 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 
 		if (!rankingsmode)
 		{
-			if ((powertype == PWRLV_DISABLED)
-				&& !(players[i].pflags & PF_NOCONTEST)
-				&& (data.pos[data.numplayers] < (numplayersingame + spectateGriefed)))
+			// Online rank is handled further below in this file.
+			if (powertype == PWRLV_DISABLED)
 			{
-				// Online rank is handled further below in this file.
-				data.increase[i] = K_CalculateGPRankPoints(data.pos[data.numplayers], numplayersingame + spectateGriefed);
-				players[i].score += data.increase[i];
+				UINT8 pointgetters = numplayersingame + spectateGriefed;
+				UINT32 scoreconversion = 0;
+				UINT32 pscore = 0;
+
+				// accept players that nocontest, but not bots
+				if (data.pos[data.numplayers] <= pointgetters &&
+					!((players[i].pflags & PF_NOCONTEST) && players[i].bot))
+				{
+					if (gametype == GT_BATTLE)
+					{
+						pscore = (&players[i])->roundscore + K_NumEmeralds(&players[i]);
+						scoreconversion = FixedRescale(pscore, 0, topscore + btopemeralds, Easing_Linear, EXP_MIN, EXP_MAX);
+						data.increase[i] = K_CalculateGPRankPoints(scoreconversion, data.pos[data.numplayers], pointgetters);
+					}
+					else
+					{
+						// For Duel scoring, convert duelscore into EXP.
+						if (K_InRaceDuel())
+						{
+							pscore = (&players[i])->duelscore;
+							scoreconversion = FixedRescale(pscore, 0, topscore, Easing_Linear, EXP_MIN, EXP_MAX);
+							data.increase[i] = K_CalculateGPRankPoints(scoreconversion, data.pos[data.numplayers], pointgetters);
+						}
+						else
+						{
+							data.increase[i] = K_CalculateGPRankPoints((&players[i])->exp, data.pos[data.numplayers], pointgetters);
+						}
+					}
+
+					if (data.winningteam != TEAM_UNASSIGNED)
+					{
+						if (smallestteam != 0
+						&& players[i].team != data.winningteam)
+						{
+							data.increase[i] /= 2;
+						}
+					}
+				}
+
+				if (data.increase[i] > 0)
+				{
+					players[i].score += data.increase[i];
+				}
 			}
 
 			if (savestandings)
 			{
 				srb2::StandingJson standing {};
 				standing.ranking = data.pos[data.numplayers];
-				standing.name = std::string(player_names[i]);
-				standing.demoskin = data.character[data.numplayers];
-				standing.skincolor = std::string(skincolors[data.color[data.numplayers]].name);
+				standing.name = srb2::String(player_names[i]);
+				standing.demoskin = players[i].skin;
+				standing.skincolor = srb2::String(skincolors[players[i].skincolor].name);
 				standing.timeorscore = data.val[data.numplayers];
 				standings.standings.emplace_back(std::move(standing));
 			}
@@ -288,6 +406,14 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 		data.numplayers++;
 	}
 
+	if (data.numplayers <= 2
+		|| data.halfway == UINT8_MAX
+		|| data.halfway >= 8
+		|| (data.numplayers - data.halfway) >= 8)
+	{
+		data.halfway = (data.numplayers-1)/2;
+	}
+
 	if (savestandings)
 	{
 		srb2::write_current_demo_end_marker();
@@ -315,22 +441,15 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 				if (roundqueue.position == roundqueue.size-1)
 				{
 					// On A rank pace? Then you get a chance for S rank!
-					gp_rank_e rankforline = K_CalculateGPGrade(&grandprixinfo.rank);
+					fixed_t rankforline = K_CalculateGPPercent(&grandprixinfo.rank);
+					fixed_t required = K_SealedStarEntryRequirement(&grandprixinfo.rank);
 
-					data.showrank = (rankforline >= GRADE_A);
+					data.showrank = (rankforline >= required);
 
 					data.linemeter =
-						(std::min(rankforline, GRADE_A)
+						(std::min(rankforline, required)
 							* (2 * TICRATE)
-						) / GRADE_A;
-
-					// G_NextMap will float you to rank-restricted stages on Master wins.
-					// Fudge the rank display.
-					if (grandprixinfo.masterbots && grandprixinfo.rank.position <= 1)
-					{
-						data.showrank = true;
-						data.linemeter = 2*TICRATE;
-					}
+						) / required;
 
 					// A little extra time to take it all in
 					timer += TICRATE;
@@ -384,7 +503,19 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 		{
 			data.mainplayer = i;
 
-			if (!(players[i].pflags & PF_NOCONTEST))
+			if (data.winningteam != TEAM_UNASSIGNED
+			&& players[i].team != TEAM_UNASSIGNED)
+			{
+				data.gotthrough = true;
+
+				snprintf(data.headerstring,
+					sizeof data.headerstring,
+					"%s TEAM",
+					g_teaminfo[players[i].team].name);
+
+				data.showroundnum = true;
+			}
+			else if (!(players[i].pflags & PF_NOCONTEST))
 			{
 				data.gotthrough = true;
 
@@ -393,7 +524,7 @@ static void Y_CalculateMatchData(UINT8 rankingsmode, void (*comparison)(INT32))
 					snprintf(data.headerstring,
 						sizeof data.headerstring,
 						"%s",
-						R_CanShowSkinInDemo(players[i].skin) ? skins[players[i].skin].realname : "???");
+						R_CanShowSkinInDemo(players[i].skin) ? skins[players[i].skin]->realname : "???");
 				}
 
 				data.showroundnum = true;
@@ -478,6 +609,7 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 	INT32 hilicol = highlightflags;
 
 	patch_t *resbar = static_cast<patch_t*>(W_CachePatchName("R_RESBAR", PU_PATCH)); // Results bars for players
+	patch_t *cpu = static_cast<patch_t*>(W_CachePatchName("K_CPU", PU_PATCH));
 
 	if (drawping || standings->rankingsmode != 0)
 	{
@@ -503,11 +635,13 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 		x2 -= 9;
 	}
 
-	if (standings->numplayers > 10)
+	UINT8 halfway = standings->halfway;
+
+	if (halfway > 4)
 	{
 		yspacing--;
 	}
-	else if (standings->numplayers <= 6)
+	else if (halfway <= 2)
 	{
 		yspacing++;
 		if (verticalresults)
@@ -542,7 +676,7 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 	);
 
 	i = 0;
-	UINT8 halfway = (standings->numplayers-1)/2;
+
 	if (doreverse)
 	{
 		i = standings->numplayers-1;
@@ -560,13 +694,13 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 		else
 		{
 			UINT8 *charcolormap = NULL;
-			if (!R_CanShowSkinInDemo(standings->character[i]))
+			if (!R_CanShowSkinInDemo(players[pnum].skin))
 			{
-				charcolormap = R_GetTranslationColormap(TC_BLINK, static_cast<skincolornum_t>(standings->color[i]), GTC_CACHE);
+				charcolormap = R_GetTranslationColormap(TC_BLINK, static_cast<skincolornum_t>(players[pnum].skincolor), GTC_CACHE);
 			}
-			else if (standings->color[i] != SKINCOLOR_NONE)
+			else
 			{
-				charcolormap = R_GetTranslationColormap(standings->character[i], static_cast<skincolornum_t>(standings->color[i]), GTC_CACHE);
+				charcolormap = R_GetTranslationColormap(players[pnum].skin, static_cast<skincolornum_t>(players[pnum].skincolor), GTC_CACHE);
 			}
 
 			if (standings->isduel)
@@ -585,7 +719,7 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 
 				M_DrawCharacterSprite(
 					duelx + 40, duely + 78,
-					standings->character[i],
+					players[pnum].skin,
 					spr2,
 					(datarightofcolumn ? 1 : 7),
 					0,
@@ -635,9 +769,12 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 
 			V_DrawMappedPatch(x, y, 0, resbar, NULL);
 
-			V_DrawRightAlignedThinString(x+13, y-2, 0, va("%d", standings->pos[i]));
+			if (gametype != GT_TUTORIAL)
+			{
+				V_DrawRightAlignedThinString(x+13, y-2, 0, va("%d", standings->pos[i]));
+			}
 
-			if (standings->color[i] != SKINCOLOR_NONE)
+			//if (players[pnum].skincolor != SKINCOLOR_NONE)
 			{
 				if ((players[pnum].pflags & PF_NOCONTEST) && players[pnum].bot)
 				{
@@ -646,15 +783,15 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 						x+14, y-5,
 						0,
 						static_cast<patch_t*>(W_CachePatchName("MINIDEAD", PU_CACHE)),
-						R_GetTranslationColormap(TC_DEFAULT, static_cast<skincolornum_t>(standings->color[i]), GTC_CACHE)
+						R_GetTranslationColormap(TC_DEFAULT, static_cast<skincolornum_t>(players[pnum].skincolor), GTC_CACHE)
 					);
 				}
 				else
 				{
-					charcolormap = R_GetTranslationColormap(standings->character[i], static_cast<skincolornum_t>(standings->color[i]), GTC_CACHE);
+					charcolormap = R_GetTranslationColormap(players[pnum].skin, static_cast<skincolornum_t>(players[pnum].skincolor), GTC_CACHE);
 					V_DrawMappedPatch(x+14, y-5, 0,
-						R_CanShowSkinInDemo(standings->character[i]) ?
-						faceprefix[standings->character[i]][FACE_MINIMAP] : kp_unknownminimap,
+						R_CanShowSkinInDemo(players[pnum].skin) ?
+						faceprefix[players[pnum].skin][FACE_MINIMAP] : kp_unknownminimap,
 						charcolormap);
 				}
 			}
@@ -700,6 +837,40 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 				player_names[pnum]
 			);
 
+			if (netgame && cv_voice_allowservervoice.value)
+			{
+				patch_t *voxpat;
+				int voxxoffs = 0;
+				int voxyoffs = 0;
+				if (players[pnum].pflags2 & (PF2_SELFDEAFEN | PF2_SERVERDEAFEN))
+				{
+					voxpat = (patch_t*) W_CachePatchName("VOXCRD", PU_HUDGFX);
+					voxxoffs = 1;
+					voxyoffs = -5;
+				}
+				else if (players[pnum].pflags2 & (PF2_SELFMUTE | PF2_SERVERMUTE | PF2_SERVERTEMPMUTE))
+				{
+					voxpat = (patch_t*) W_CachePatchName("VOXCRM", PU_HUDGFX);
+					voxxoffs = 1;
+					voxyoffs = -6;
+				}
+				else if (S_IsPlayerVoiceActive(pnum))
+				{
+					voxpat = (patch_t*) W_CachePatchName("VOXCRA", PU_HUDGFX);
+					voxyoffs = -4;
+				}
+				else
+				{
+					voxpat = NULL;
+				}
+
+				if (voxpat)
+				{
+					int namewidth = V_ThinStringWidth(player_names[pnum], 0);
+					V_DrawFixedPatch((x + 27 + namewidth + voxxoffs) * FRACUNIT, (y + voxyoffs) * FRACUNIT, FRACUNIT, 0, voxpat, NULL);
+				}
+			}
+
 			V_DrawRightAlignedThinString(
 				x+118, y-2,
 				0,
@@ -710,11 +881,11 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 			{
 				if (players[pnum].bot)
 				{
-					/*V_DrawScaledPatch(
-						x2, y-1,
+					V_DrawScaledPatch(
+						x2-2 + (datarightofcolumn ? 2 : -2), y-2,
 						0,
-						kp_cpu
-					);*/
+						cpu
+					);
 				}
 				else
 				{
@@ -818,6 +989,22 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 		i--;
 	}
 	while (true);
+
+	if (standings->rankingsmode)
+	{
+		if (standings->numplayers < 2)
+			;
+		else if (standings->isduel)
+		{
+			x = BASEVIDWIDTH / 2 + xoffset;
+			y = roundqueue.size ? (BASEVIDHEIGHT/2) : (BASEVIDHEIGHT - 19);
+			Y_DrawRankMode(x, y, true);
+		}
+		else
+		{
+			Y_DrawRankMode(x + 122, returny - yspacing + 7, false);
+		}
+	}
 }
 
 //
@@ -826,11 +1013,15 @@ void Y_PlayerStandingsDrawer(y_data_t *standings, INT32 xoffset)
 // Handles drawing the bottom-of-screen progression.
 // Currently requires intermission y_data for animation only.
 //
-void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations, boolean widescreen)
+void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations, boolean widescreen, boolean adminmode)
 {
 	if (roundqueue.size == 0)
 	{
-		return;
+		if (!adminmode
+		|| menuqueue.size == 0)
+		{
+			return;
+		}
 	}
 
 	// The following is functionally a hack.
@@ -896,9 +1087,13 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 	prize_dot[BPP_AHEAD] = static_cast<patch_t*>(W_CachePatchName("R_RRMRK4", PU_PATCH));
 	prize_dot[BPP_DONE] = static_cast<patch_t*>(W_CachePatchName("R_RRMRK6", PU_PATCH));
 
+	patch_t *rpmark[2];
+	rpmark[0] = static_cast<patch_t*>(W_CachePatchName("R_RPMARK", PU_PATCH));
+	rpmark[1] = static_cast<patch_t*>(W_CachePatchName("R_R2MARK", PU_PATCH));
+
 	UINT8 *colormap = NULL, *oppositemap = NULL;
 	fixed_t playerx = 0, playery = 0;
-	UINT8 pskin = MAXSKINS;
+	UINT16 pskin = MAXSKINS;
 	UINT16 pcolor = SKINCOLOR_WHITE;
 
 	if (standings->mainplayer == MAXPLAYERS)
@@ -934,10 +1129,37 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 			upwa = true;
 		}
 
-		workingqueuesize--;
+		if (!adminmode)
+		{
+			workingqueuesize--;
+		}
 	}
 
-	INT32 widthofroundqueue = 24*(workingqueuesize - 1);
+	INT32 widthofroundqueue, totalsteps;
+
+	INT32 menusendoffset = 0;
+	if (menuqueue.sending)
+	{
+		if (menuqueue.sending > menuqueue.size)
+		{
+			menusendoffset = menuqueue.size;
+		}
+		else
+		{
+			menusendoffset = menuqueue.sending-1;
+		}
+	}
+
+	if (adminmode)
+	{
+		totalsteps = std::min(workingqueuesize + (menuqueue.size - menusendoffset), ROUNDQUEUE_MAX);
+	}
+	else
+	{
+		totalsteps = workingqueuesize;
+	}
+
+	widthofroundqueue = (totalsteps - 1) * 24;
 
 	INT32 x = (BASEVIDWIDTH - widthofroundqueue) / 2;
 	INT32 y, basey = 167 + offset;
@@ -946,7 +1168,7 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 
 	// The following block handles horizontal easing of the
 	// progression bar on the last non-rankrestricted round.
-	if (standings->showrank == true)
+	if (!adminmode && standings->showrank == true)
 	{
 		fixed_t percentslide = 0;
 		SINT8 deferxoffs = 0;
@@ -1006,12 +1228,22 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 		V_DrawMappedPatch(xiter, basey, baseflags, queuebg_upwa, greymap);
 	}
 
+	// Draw to left side of screen
 	while (xiter > -bufferspace)
 	{
 		xiter -= 24;
 		V_DrawMappedPatch(xiter, basey, baseflags, queuebg_flat, greymap);
 	}
 
+	// Draw to right side of screen
+	xiter = x + widthofroundqueue;
+	while (xiter < BASEVIDWIDTH + bufferspace)
+	{
+		xiter += 24;
+		V_DrawMappedPatch(xiter, basey, baseflags, queuebg_flat, greymap);
+	}
+
+	// Actually queued maps
 	for (i = 0; i < workingqueuesize; i++)
 	{
 		// Draw the background, and grab the appropriate line, to the right of the dot
@@ -1041,7 +1273,13 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 			}
 			else
 			{
-				V_DrawMappedPatch(x, basey, baseflags, queuebg_flat, greymap);
+				V_DrawMappedPatch(
+					x,
+					basey,
+					baseflags,
+					((workingqueuesize == totalsteps) ? queuebg_flat : queuebg_upwa),
+					greymap
+				);
 			}
 		}
 
@@ -1176,17 +1414,9 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 		}
 		else
 		{
-			// No more line! Fill in background to right edge of screen
-			xiter = x;
-			while (xiter < BASEVIDWIDTH + bufferspace)
-			{
-				xiter += 24;
-				V_DrawMappedPatch(xiter, basey, baseflags, queuebg_flat, greymap);
-			}
-
 			// Handle special entry on the end
 			// (has to be drawn before the semifinal dot due to overlap)
-			if (standings->showrank == true)
+			if (!adminmode && standings->showrank == true)
 			{
 				const fixed_t x2 = x + spacetospecial;
 
@@ -1197,7 +1427,7 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 				}
 				else if (
 					doanimations == true
-					&& roundqueue.position == roundqueue.size-1
+					&& roundqueue.position == workingqueuesize
 					&& timer - interpoffs <= 2*TICRATE
 				)
 				{
@@ -1377,13 +1607,62 @@ void Y_RoundQueueDrawer(y_data_t *standings, INT32 offset, boolean doanimations,
 		x += 24;
 	}
 
+	totalsteps -= i;
+
+	// Maps in the progress of being queued on the menu
+	if (adminmode && totalsteps)
+	{
+		for (i = menusendoffset; i < (totalsteps + menusendoffset); i++)
+		{
+			upwa ^= true;
+			if (upwa == false)
+			{
+				y = basey + 4;
+
+				V_DrawMappedPatch(x, basey, baseflags, queuebg_down, greymap);
+			}
+			else
+			{
+				y = basey + 12;
+
+				if (i+1 != menuqueue.size) // no more line?
+				{
+					V_DrawMappedPatch(x, basey, baseflags, queuebg_upwa, greymap);
+				}
+				else
+				{
+					V_DrawMappedPatch(x, basey, baseflags, queuebg_flat, greymap);
+				}
+			}
+
+			V_DrawMappedPatch(
+				x - 8, y,
+				baseflags,
+				level_dot[BPP_AHEAD],
+				NULL
+			);
+
+			V_DrawMappedPatch(
+				x - 10, y - 14,
+				baseflags,
+				rpmark[0],
+				NULL
+			);
+
+			K_DrawMapAsFace(
+				x - 9, y - 13,
+				(baseflags|((menuqueue.entries[i].encore) ? V_FLIP : 0)),
+				menuqueue.entries[i].mapnum,
+				NULL, FRACUNIT, 1
+			);
+
+			x += 24;
+		}
+	}
+
 	// Draw the player position through the round queue!
 	if (playery != 0)
 	{
-		patch_t *rpmark[2];
-		rpmark[0] = static_cast<patch_t*>(W_CachePatchName("R_RPMARK", PU_PATCH));
-		rpmark[1] = static_cast<patch_t*>(W_CachePatchName("R_R2MARK", PU_PATCH));
-
 		// Change alignment
 		playerx -= (10 * FRACUNIT);
 		playery -= (14 * FRACUNIT);
@@ -1473,6 +1752,13 @@ void Y_DrawIntermissionButton(INT32 startslide, INT32 through, boolean widescree
 			);
 		}
 
+		using srb2::Draw;
+
+		Draw::TextElement text = Draw::TextElement().parse(pressed ? "<a_pressed>" : "<a>");
+		Draw draw = Draw(FixedToFloat(2*FRACUNIT - offset), FixedToFloat((BASEVIDHEIGHT - 16)*FRACUNIT)).flags(widescreen ? (V_SNAPTOLEFT|V_SNAPTOBOTTOM) : 0);
+		draw.text(text.string());
+
+		/*
 		K_drawButton(
 			2*FRACUNIT - offset,
 			(BASEVIDHEIGHT - 16)*FRACUNIT,
@@ -1483,7 +1769,90 @@ void Y_DrawIntermissionButton(INT32 startslide, INT32 through, boolean widescree
 			kp_button_a[1],
 			pressed
 		);
+		*/
 	}
+}
+
+//
+// Y_DrawRankMode
+//
+// Draws EXP or MOBIUMS label depending on context.
+// x and y designate the coordinates of the most bottom-right pixel to draw from (because it is the left extent and patch heights that vary),
+// or the bottom-center if center is true.
+//
+void Y_DrawRankMode(INT32 x, INT32 y, boolean center)
+{
+	boolean	useMobiums = (powertype != PWRLV_DISABLED);
+	INT32	textWidth, middleLeftEdge, middleRightEdge, middleWidth;
+
+	char	text[8];
+	char	iconPatchName[8];
+	UINT8	iconWidth; // the graphic paddings are inconsistent...
+	UINT8	*iconColormap;
+	UINT8	*stickerColormap;
+
+	patch_t	*iconPatch;
+	patch_t	*stickerTail = static_cast<patch_t*>(W_CachePatchName("INT_STK1", PU_CACHE));
+	patch_t	*stickerMiddle = static_cast<patch_t*>(W_CachePatchName("INT_STK2", PU_CACHE));
+	patch_t	*stickerHead = center ? stickerTail : static_cast<patch_t*>(W_CachePatchName("INT_STK3", PU_CACHE));
+	UINT32	stickerHeadFlags = 0;
+	UINT8	stickerHeadOffset = 0;
+
+	if (useMobiums)
+	{
+		snprintf(text, sizeof text, "MOBIUMS");
+		snprintf(iconPatchName, sizeof iconPatchName, "K_STMOB");
+		iconWidth = 22;
+		iconColormap = R_GetTranslationColormap(TC_DEFAULT, static_cast<skincolornum_t>(SKINCOLOR_NONE), GTC_CACHE);
+		stickerColormap = R_GetTranslationColormap(TC_DEFAULT, static_cast<skincolornum_t>(SKINCOLOR_TEA), GTC_CACHE);
+	}
+	else
+	{
+		snprintf(text, sizeof text, "EXP");
+		snprintf(iconPatchName, sizeof iconPatchName, "K_STEXP");
+		iconWidth = 16;
+		iconColormap = R_GetTranslationColormap(TC_RAINBOW, static_cast<skincolornum_t>(SKINCOLOR_MUSTARD), GTC_CACHE);
+		stickerColormap = R_GetTranslationColormap(TC_DEFAULT, static_cast<skincolornum_t>(SKINCOLOR_MUSTARD), GTC_CACHE);
+	}
+
+	iconPatch = static_cast<patch_t*>(W_CachePatchName(iconPatchName, PU_CACHE));
+	textWidth = (INT32)V_ThinStringWidth(text, 0);
+	middleLeftEdge = x - iconWidth - textWidth - 8;
+	middleRightEdge = x - stickerHead->width;
+	middleWidth = middleRightEdge - middleLeftEdge;
+
+	if (center)
+	{
+		// flip the right-hand sticker tail and keep it left-aligned
+		stickerHeadFlags |= V_FLIP;
+		stickerHeadOffset += stickerHead->width;
+
+		// sliiightly extend the right side of the sticker
+		middleWidth += 2;
+		middleRightEdge += 2;
+
+		// shift all components to the right so that our x coordinates are center-aligned
+		#define CENTER_SHIFT (stickerHead->width + middleWidth / 2)
+		x += CENTER_SHIFT;
+		middleLeftEdge += CENTER_SHIFT;
+		middleRightEdge += CENTER_SHIFT;
+		#undef CENTER_SHIFT
+	}
+
+	// draw sticker
+	V_DrawMappedPatch(middleRightEdge + stickerHeadOffset, y - stickerHead->height, stickerHeadFlags, stickerHead, stickerColormap);
+	V_DrawStretchyFixedPatch(
+		middleLeftEdge << FRACBITS,
+		(y - stickerMiddle->height) << FRACBITS,
+		(middleWidth << FRACBITS) / stickerMiddle->width + 1,
+		FRACUNIT,
+		0, stickerMiddle, stickerColormap
+	);
+	V_DrawMappedPatch(middleLeftEdge - stickerTail->width, y - stickerTail->height, 0, stickerTail, stickerColormap);
+
+	// draw icon and text
+	V_DrawMappedPatch(x - iconPatch->width - 6, y - iconPatch->height + 4, 0, iconPatch, iconColormap);
+	V_DrawThinString(middleLeftEdge - 1, y - 9, 0, text);
 }
 
 void Y_DrawIntermissionHeader(fixed_t x, fixed_t y, boolean gotthrough, const char *headerstring, boolean showroundnum, boolean small)
@@ -1693,13 +2062,16 @@ void Y_IntermissionDrawer(void)
 	// Returns early if there's no players to draw
 	Y_PlayerStandingsDrawer(&data, x);
 
+	if (sorttic == -1 || ((intertic - sorttic) < 8))
+		K_drawKartTeamScores(true, x);
+
 	// Draw bottom (and top) pieces
 skiptallydrawer:
 	if (!LUA_HudEnabled(hud_intermissionmessages))
 		goto finalcounter;
 
 	// Returns early if there's no roundqueue entries to draw
-	Y_RoundQueueDrawer(&data, 0, true, false);
+	Y_RoundQueueDrawer(&data, 0, true, false, false);
 
 	if (netgame)
 	{
@@ -1809,13 +2181,15 @@ void Y_Ticker(void)
 
 	// Team scramble code for team match and CTF.
 	// Don't do this if we're going to automatically scramble teams next round.
-	/*if (G_GametypeHasTeams() && cv_teamscramble.value && !cv_scrambleonchange.value && server)
+	/*
+	if (G_GametypeHasTeams() && cv_teamscramble.value && !cv_scrambleonchange.value && server)
 	{
 		// If we run out of time in intermission, the beauty is that
 		// the P_Ticker() team scramble code will pick it up.
 		if ((intertic % (TICRATE/7)) == 0)
 			P_DoTeamscrambling();
-	}*/
+	}
+	*/
 
 	if ((timer < INFINITE_TIMER && --timer <= 0)
 		|| (intertic == endtic))
@@ -1881,8 +2255,7 @@ void Y_Ticker(void)
 		{
 			if (!data.rankingsmode && sorttic != -1 && (intertic >= sorttic + 8))
 			{
-				// Anything with post-intermission consequences here should also occur in Y_EndIntermission.
-				K_RetireBots();
+				Y_MidIntermission();
 				Y_CalculateMatchData(1, Y_CompareRank);
 			}
 
@@ -1939,7 +2312,9 @@ void Y_Ticker(void)
 						// Basic bitch points
 						if (data.increase[data.num[q]])
 						{
-							if (--data.increase[data.num[q]])
+							data.increase[data.num[q]] = std::max(data.increase[data.num[q]] - 3, 0);
+
+							if (data.increase[data.num[q]] != 0)
 								kaching = false;
 						}
 					}
@@ -1976,6 +2351,35 @@ boolean Y_ShouldDoIntermission(void)
 }
 
 //
+// Y_GetIntermissionType
+//
+// Returns the intermission type from the current gametype.
+//
+intertype_t Y_GetIntermissionType(void)
+{
+	intertype_t ret = static_cast<intertype_t>(gametypes[gametype]->intermission);
+
+	if (ret == int_scoreortimeattack)
+	{
+		UINT8 i = 0, nump = 0;
+
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			if (!playeringame[i] || players[i].spectator)
+			{
+				continue;
+			}
+
+			nump++;
+		}
+
+		ret = (nump < 2 ? int_time : int_score);
+	}
+
+	return ret;
+}
+
+//
 // Y_DetermineIntermissionType
 //
 // Determines the intermission type from the current gametype.
@@ -1989,21 +2393,7 @@ void Y_DetermineIntermissionType(void)
 		return;
 	}
 
-	// set initially
-	intertype = static_cast<intertype_t>(gametypes[gametype]->intermission);
-
-	// special cases
-	if (intertype == int_scoreortimeattack)
-	{
-		UINT8 i = 0, nump = 0;
-		for (i = 0; i < MAXPLAYERS; i++)
-		{
-			if (!playeringame[i] || players[i].spectator)
-				continue;
-			nump++;
-		}
-		intertype = (nump < 2 ? int_time : int_score);
-	}
+	intertype = Y_GetIntermissionType();
 }
 
 static UINT8 Y_PlayersBestPossiblePosition(player_t *const player)
@@ -2054,10 +2444,7 @@ static UINT32 Y_EstimatePodiumScore(player_t *const player, UINT8 numPlaying)
 	UINT8 pos = Y_PlayersBestPossiblePosition(player);
 	UINT32 ourScore = player->score;
 
-	if (pos < numPlaying)
-	{
-		ourScore += K_CalculateGPRankPoints(pos, numPlaying);
-	}
+	ourScore += K_CalculateGPRankPoints(player->exp, pos, numPlaying);
 
 	return ourScore;
 }
@@ -2173,6 +2560,8 @@ void Y_PlayIntermissionMusic(void)
 		Music_Play("intermission");
 }
 
+extern "C" boolean blockreset;
+
 //
 // Y_StartIntermission
 //
@@ -2194,6 +2583,8 @@ void Y_StartIntermission(void)
 	if (endtic != -1)
 		I_Error("endtic is dirty");
 #endif
+
+	blockreset = false;
 
 	// set player Power Level type
 	powertype = K_UsingPowerLevels();
@@ -2294,10 +2685,17 @@ void Y_StartIntermission(void)
 		}
 
 		K_CashInPowerLevels();
-		SV_BumpMatchStats();
 	}
 
+	SV_BumpMatchStats();
+
 	if (!timer)
+	{
+		Y_EndIntermission();
+		return;
+	}
+
+	if (staffsync)
 	{
 		Y_EndIntermission();
 		return;
@@ -2335,13 +2733,34 @@ void Y_StartIntermission(void)
 // ======
 
 //
+// Y_MidIntermission
+//
+void Y_MidIntermission(void)
+{
+	// Replacing bots that fail out of play
+	K_RetireBots();
+
+	// If tournament play is not in action...
+	if (roundqueue.position == 0)
+	{
+		// Unset player teams in anticipation of P_ShuffleTeams
+
+		UINT8 i;
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			players[i].team = TEAM_UNASSIGNED;
+		}
+	}
+}
+
+//
 // Y_EndIntermission
 //
 void Y_EndIntermission(void)
 {
 	if (!data.rankingsmode)
 	{
-		K_RetireBots();
+		Y_MidIntermission();
 	}
 
 	Y_UnloadData();
@@ -2361,7 +2780,7 @@ static void Y_UnloadData(void)
 {
 	// In hardware mode, don't Z_ChangeTag a pointer returned by W_CachePatchName().
 	// It doesn't work and is unnecessary.
-	if (rendermode != render_soft)
+	if (rendermode == render_opengl)
 		return;
 
 	// unload the background patches

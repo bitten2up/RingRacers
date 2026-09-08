@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -69,7 +69,7 @@ menuitem_t EXTRAS_Main[] =
 		NULL, {.routine = M_Manual}, 0, 0},
 
 	{IT_STRING | IT_CALL, "Tutorial", "Help Dr. Robotnik and Tails test out their new Ring Racers.",
-		NULL, {.routine = M_LevelSelectInit}, 0, GT_TUTORIAL},
+		NULL, {.routine = M_LevelSelectInit}, 3, GT_TUTORIAL},
 
 	{IT_STRING | IT_CALL, "Statistics", "Look back on some of your greatest achievements such as your playtime and wins!",
 		NULL, {.routine = M_Statistics}, 0, 0},

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -64,8 +64,8 @@ mobj_t *Obj_MantaRingCreate(mobj_t *spb, mobj_t *owner, mobj_t *chase);
 /* Orbinaut */
 void Obj_OrbinautThink(mobj_t *th);
 boolean Obj_OrbinautJawzCollide(mobj_t *t1, mobj_t *t2);
-void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir);
-void Obj_GachaBomThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir);
+void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir);
+void Obj_GachaBomThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir);
 void Obj_OrbinautJawzMoveHeld(player_t *player);
 boolean Obj_GachaBomWasTossed(mobj_t *th);
 void Obj_OrbinautDrop(mobj_t *th);
@@ -73,7 +73,7 @@ boolean Obj_OrbinautCanRunOnWater(mobj_t *th);
 
 /* Jawz */
 void Obj_JawzThink(mobj_t *th);
-void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir);
+void Obj_JawzThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir);
 
 /* Duel Bomb */
 void Obj_DuelBombThink(mobj_t *bomb);
@@ -139,10 +139,23 @@ void Obj_BlockRingThink(mobj_t *ring);
 void Obj_BlockBodyThink(mobj_t *body);
 void Obj_GuardBreakThink(mobj_t *fx);
 
+void Obj_AmpRingThink(mobj_t *amp);
+void Obj_AmpBodyThink(mobj_t *amp);
+void Obj_AmpAuraThink(mobj_t *amp);
+void Obj_AmpBurstThink(mobj_t *amp);
+
+void Obj_AmpsThink(mobj_t *amps);
+
+void Obj_ExpThink(mobj_t *exp);
+
 void Obj_ChargeAuraThink(mobj_t *aura);
 void Obj_ChargeFallThink(mobj_t *charge);
 void Obj_ChargeReleaseThink(mobj_t *release);
 void Obj_ChargeExtraThink(mobj_t *extra);
+
+/* Bail VFX */
+void Obj_BailThink(mobj_t *aura);
+void Obj_BailChargeThink(mobj_t *aura);
 
 /* Ring Shooter */
 boolean Obj_RingShooterThinker(mobj_t *mo);
@@ -200,6 +213,7 @@ void Obj_SpawnBattleUFOFromSpawner(void);
 INT32 Obj_RandomBattleUFOSpawnerID(void);
 void Obj_BattleUFOBeamThink(mobj_t *beam);
 INT32 Obj_BattleUFOSpawnerID(const mobj_t *spawner);
+mobj_t *Obj_GetNextUFOSpawner(void);
 
 /* Power-Up Aura */
 void Obj_SpawnPowerUpAura(player_t* player);
@@ -257,6 +271,9 @@ mobj_t *Obj_FindCheckpoint(INT32 id);
 boolean Obj_GetCheckpointRespawnPosition(const mobj_t *checkpoint, vector3_t *return_pos);
 angle_t Obj_GetCheckpointRespawnAngle(const mobj_t *checkpoint);
 void Obj_ActivateCheckpointInstantly(mobj_t* mobj);
+UINT32 Obj_GetCheckpointCount();
+void Obj_ClearCheckpoints();
+void Obj_DeactivateCheckpoints();
 
 /* Rideroid / Rideroid Node */
 void Obj_RideroidThink(mobj_t *mo);
@@ -401,7 +418,6 @@ void Obj_SSGobletMobjThink(mobj_t* mo);
 void Obj_SSLampMapThingSpawn(mobj_t* mo, mapthing_t* mt);
 void Obj_SSWindowMapThingSpawn(mobj_t* mo, mapthing_t* mt);
 void Obj_SLSTMaceMobjThink(mobj_t* mo);
-void Obj_SSBumperTouchSpecial(mobj_t* special, mobj_t* toucher);
 void Obj_SSBumperMobjSpawn(mobj_t* mo);
 void Obj_SSChainMobjThink(mobj_t* mo);
 void Obj_SSGachaTargetMobjSpawn(mobj_t* mo);
@@ -425,9 +441,71 @@ boolean Obj_DestroyKart(mobj_t *kart);
 void Obj_DestroyedKartParticleThink(mobj_t *part);
 void Obj_DestroyedKartParticleLanding(mobj_t *part);
 
+/* Flybot767 (stun) */
+void Obj_SpawnFlybotsForPlayer(player_t *player);
+void Obj_FlybotThink(mobj_t *flybot);
+void Obj_FlybotDeath(mobj_t *flybot);
+void Obj_FlybotRemoved(mobj_t *flybot);
+
 /* Pulley */
 void Obj_PulleyThink(mobj_t *root);
 void Obj_PulleyHookTouch(mobj_t *special, mobj_t *toucher);
+
+/* Ballhog */
+UINT8 K_HogChargeToHogCount(INT32 charge, UINT8 cap);
+void K_UpdateBallhogReticules(player_t *player, UINT8 num_hogs, boolean on_release);
+void K_DoBallhogAttack(player_t *player, UINT8 num_hogs);
+
+/* Bubble Shield */
+void Obj_SpawnBubbleShieldVisuals(mobj_t *source);
+boolean Obj_TickBubbleShieldVisual(mobj_t *mobj);
+
+/* Lightning Shield */
+void Obj_SpawnLightningShieldVisuals(mobj_t *source);
+boolean Obj_TickLightningShieldVisual(mobj_t *mobj);
+
+/* Lightning Attack */
+void Obj_SpawnLightningAttackVisuals(mobj_t *source);
+boolean Obj_TickLightningAttackVisual(mobj_t *mobj);
+
+/* Flame Shield */
+void Obj_SpawnFlameShieldVisuals(mobj_t *source);
+boolean Obj_TickFlameShieldVisual(mobj_t *mobj);
+
+/* Stone Shoe */
+mobj_t *Obj_SpawnStoneShoe(INT32 owner, mobj_t *victim);
+boolean Obj_TickStoneShoe(mobj_t *shoe);
+boolean Obj_TickStoneShoeChain(mobj_t *chain);
+player_t *Obj_StoneShoeOwnerPlayer(mobj_t *shoe);
+void Obj_CollideStoneShoe(mobj_t *mover, mobj_t *mobj);
+
+/* Toxomister */
+void Obj_InitToxomisterPole(mobj_t *pole);
+boolean Obj_TickToxomisterPole(mobj_t *pole);
+boolean Obj_TickToxomisterEye(mobj_t *eye);
+boolean Obj_TickToxomisterCloud(mobj_t *cloud);
+boolean Obj_ToxomisterPoleCollide(mobj_t *pole, mobj_t *toucher);
+boolean Obj_ToxomisterCloudCollide(mobj_t *cloud, mobj_t *toucher);
+fixed_t Obj_GetToxomisterCloudDrag(mobj_t *cloud);
+
+/* Ancient Gear */
+void Obj_AncientGearSpawn(mobj_t *gear);
+void Obj_AncientGearPartThink(mobj_t *part);
+void Obj_AncientGearRemoved(mobj_t *gear);
+void Obj_AncientGearTouch(mobj_t *gear, mobj_t *toucher);
+void Obj_AncientGearDeath(mobj_t *gear, mobj_t *source);
+void Obj_AncientGearDeadThink(mobj_t *gear);
+boolean Obj_AllowNextAncientGearSpawn(void);
+void Obj_AncientGearSetup(mobj_t *gear, mapthing_t *mt);
+void Obj_AncientGearLevelInit(void);
+player_t *Obj_GetAncientGearCollectingPlayer(void);
+boolean Obj_AllAncientGearsCollected(void);
+mobj_t *Obj_GetAncientGearMinimapMobj(void);
+
+void Obj_MushroomHillPolePlayerThink(player_t *player);
+void Obj_MushroomHillPoleTouch(mobj_t *pole, mobj_t *toucher);
+void Obj_MushroomHillPoleFuse(mobj_t *pole);
+
 
 #ifdef __cplusplus
 } // extern "C"

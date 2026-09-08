@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -1239,6 +1239,11 @@ typedef enum
 	sfx_waved3,
 	sfx_waved4,
 	sfx_waved5,
+	
+	// Sonic Boom & Subsonic
+	sfx_sonbo1,
+	sfx_sonbo2,
+	sfx_sonbo3,
 
 	// Passing sounds
 	sfx_pass01,
@@ -1342,6 +1347,9 @@ typedef enum
 	// Tutorial Hint
 	sfx_hint,
 
+	// EXP Crystal
+	sfx_exp,
+
 	// Damage sounds
 	sfx_dmga1,
 	sfx_dmga2,
@@ -1359,6 +1367,9 @@ typedef enum
 	sfx_bpwrud, // Rhythm Badge
 	sfx_bpwrue, // Super Flicky
 	sfx_bpwruf, // Bonus
+
+	// Misc announcer calls
+	sfx_duelmb, // Margin Boost
 
 	// Next up: UNIQUE ENGINE SOUNDS! Hoooooo boy...
 	// Engine class A - Low Speed, Low Weight
@@ -1612,6 +1623,15 @@ typedef enum
 	sfx_die01,
 	sfx_die02,
 	sfx_die03,
+
+	// Walltransfer fuck
+	sfx_ggfall,
+
+	// :apple:
+	sfx_aple,
+
+	// Ancient Gear
+	sfx_gotgea,
 
 	// And LASTLY, Kart's skin sounds.
 	sfx_kwin,

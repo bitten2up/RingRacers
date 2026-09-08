@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -66,9 +66,15 @@ extern "C" {
 
 // If you don't disable ALL debug first, you get ALL debug enabled
 #if !defined (NDEBUG)
+#ifndef PACKETDROP
 #define PACKETDROP
+#endif
+#ifndef PARANOIA
 #define PARANOIA
+#endif
+#ifndef ZDEBUG
 #define ZDEBUG
+#endif
 #endif
 
 // Uncheck this to compile debugging code
@@ -90,7 +96,9 @@ extern char logfilename[1024];
 
 //#define DEVELOP // Disable this for release builds to remove excessive cheat commands and enable MD5 checking and stuff, all in one go. :3
 #ifdef DEVELOP
+#ifndef PARANOIA
 #define PARANOIA // On by default for DEVELOP builds
+#endif
 #define VERSIONSTRING "Development EXE"
 #define VERSIONSTRING_RC "Development EXE" "\0"
 // most interface strings are ignored in development mode.
@@ -126,7 +134,7 @@ extern char logfilename[1024];
 // the other options the same.
 
 // Comment out this line to completely disable update alerts (recommended for testing, but not for release)
-#if !defined(BETAVERSION) && !defined(DEVELOP)
+#if !defined(DEVELOP)
 #define UPDATE_ALERT
 #endif
 
@@ -170,9 +178,10 @@ extern char logfilename[1024];
 #define MAXSPLITSCREENPLAYERS 4 // Max number of players on a single computer
 #define MAXGAMEPADS (MAXSPLITSCREENPLAYERS * 2) // Number of gamepads we'll be allowing
 
-#define MAXSKINS UINT8_MAX
+#define MAXSKINS 1024
 #define SKINNAMESIZE 16
-#define MAXAVAILABILITY ((MAXSKINS + 7)/8)
+#define MAXSKINUNAVAILABLE 128
+#define MAXAVAILABILITY (MAXSKINUNAVAILABLE / 8)
 
 #define COLORRAMPSIZE 16
 #define MAXCOLORNAME 32
@@ -448,7 +457,7 @@ enum {
 
 
 */
-void I_Error(const char *error, ...) FUNCIERROR;
+FUNCIERROR void ATTRNORETURN I_Error(const char *error, ...);
 
 /**	\brief	write a message to stderr (use before I_Quit) for when you need to quit with a msg, but need
  the return code 0 of I_Quit();
@@ -544,6 +553,7 @@ typedef enum
 	DBG_LUA				= 0x00000800,
 	DBG_RNG				= 0x00001000,
 	DBG_DEMO			= 0x00002000,
+	DBG_TEAMS			= 0x00004000,
 } debugFlags_t;
 
 struct debugFlagNames_s
@@ -558,6 +568,9 @@ extern struct debugFlagNames_s const debug_flag_names[];
 // Misc stuff for later...
 // =======================
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #define ANG2RAD(angle) ((float)((angle)*M_PI)/ANGLE_180)
 
 // Modifier key variables, accessible anywhere
@@ -606,6 +619,9 @@ typedef enum {
 #endif
 #ifndef max // Double-Check with WATTCP-32's cdefs.h
 #define max(x, y) (((x) > (y)) ? (x) : (y))
+#endif
+#ifndef clamp
+#define clamp(x, y, z) (((x) < (y)) ? (y) : (((x) > (z)) ? (z) : (x)))
 #endif
 #endif
 
@@ -658,9 +674,6 @@ extern int
 // Disabled code and code under testing
 // None of these that are disabled in the normal build are guaranteed to work perfectly
 // Compile them at your own risk!
-
-///	Dumps the contents of a network save game upon consistency failure for debugging.
-//#define DUMPCONSISTENCY
 
 ///	Who put weights on my recycler?  ... Inuyasha did.
 ///	\note	XMOD port.
@@ -736,6 +749,16 @@ extern int
 
 /// Other karma comeback modes
 //#define OTHERKARMAMODES
+
+// Amp scaling
+#define MAXAMPSCALINGDIST 18000
+
+// Exp
+#define EXP_STABLERATE 3*FRACUNIT/10 // how low is your placement before losing XP? 4*FRACUNIT/10 = top 40% of race will gain
+#define EXP_POWER 3*FRACUNIT/100 // adjust to change overall xp volatility
+#define EXP_MIN 25 // The min value target
+#define EXP_TARGET 150 // Used for grading ...
+#define EXP_MAX 150 // The max value displayed by the hud and in the tally screen and GP results screen
 
 #ifdef __cplusplus
 } // extern "C"

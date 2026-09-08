@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -11,9 +11,11 @@
 /// \file  menus/transient/pause-game.c
 /// \brief In-game/pause menus
 
+#include "../../byteptr.h"
 #include "../../d_netcmd.h"
 #include "../../i_time.h"
 #include "../../k_menu.h"
+#include "../../hu_stuff.h"
 #include "../../k_grandprix.h" // K_CanChangeRules
 #include "../../m_cond.h"
 #include "../../s_sound.h"
@@ -124,6 +126,9 @@ void M_OpenPauseMenu(void)
 	pausemenu.openoffset.dist = 0;
 	pausemenu.closing = false;
 
+	// Fix specific input error regarding closing netgame chat with escape while a controller is connected (only on Windows?)
+	chat_keydown = false;
+
 	itemOn = currentMenu->lastOn = mpause_continue;	// Make sure we select "RESUME GAME" by default
 
 	// Now the hilarious balancing act of deciding what options should be enabled and which ones shouldn't be!
@@ -158,6 +163,13 @@ void M_OpenPauseMenu(void)
 	{
 		PAUSE_Main[mpause_psetup].status = IT_STRING | IT_CALL;
 
+		if (M_SecretUnlocked(SECRET_ADDONS, true))
+		{
+			PAUSE_Main[mpause_addons].status = IT_STRING | IT_ARROWS;
+			if (client && !IsPlayerAdmin(consoleplayer))
+				menuaddonoptions = 0;
+		}
+
 		if (server || IsPlayerAdmin(consoleplayer))
 		{
 			PAUSE_Main[mpause_changegametype].status = IT_STRING | IT_ARROWS;
@@ -165,11 +177,6 @@ void M_OpenPauseMenu(void)
 
 			PAUSE_Main[mpause_switchmap].status = IT_STRING | IT_CALL;
 			PAUSE_Main[mpause_restartmap].status = IT_STRING | IT_CALL;
-
-			if (M_SecretUnlocked(SECRET_ADDONS, true))
-			{
-				PAUSE_Main[mpause_addons].status = IT_STRING | IT_ARROWS;
-			}
 
 			if (netgame)
 			{
@@ -332,6 +339,10 @@ void M_HandlePauseMenuAddons(INT32 choice)
 	}
 
 	menuaddonoptions = menuaddonoptions ? 0 : 1;
+
+	if (client && !IsPlayerAdmin(consoleplayer))
+		menuaddonoptions = 0;
+
 	S_StartSound(NULL, sfx_s3k5b);
 }
 
@@ -352,7 +363,7 @@ void M_HandlePauseMenuGametype(INT32 choice)
 				}
 				else // ideally for "random" only, but no sane fallback for "same" and "next"
 				{
-					COM_ImmedExecute(va("randommap -gt %s", gametypes[menugametype]->name));
+					COM_ImmedExecute(va("map -random -gt %s", gametypes[menugametype]->name));
 				}
 			}
 			return;
@@ -469,7 +480,7 @@ void M_GiveUp(INT32 choice)
 
 // Pause spectate / join functions
 void M_HandleSpectateToggle(INT32 choice)
-{	
+{
 	if (choice == 2)
 	{
 		if (!(G_GametypeHasSpectators() && pausemenu.splitscreenfocusid <= splitscreen))
@@ -478,50 +489,33 @@ void M_HandleSpectateToggle(INT32 choice)
 			return;
 		}
 
-		boolean tospectator = false;
+		// Identify relevant spectator state of pausemenu.splitscreenfocusid.
+		// See also M_DrawPause.
+
+		const UINT8 splitspecid =
+			g_localplayers[pausemenu.splitscreenfocusid];
+
+		const UINT8 joingame = (
+			players[splitspecid].spectator == true
+			&& ((players[splitspecid].pflags & PF_WANTSTOJOIN) == 0)
+		) ? 1 : 0;
+
+		if (joingame && !cv_allowteamchange.value)
 		{
-			// Identify relevant spectator state of pausemenu.splitscreenfocusid.
-			// See also M_DrawPause.
-
-			const UINT8 splitspecid =
-				g_localplayers[pausemenu.splitscreenfocusid];
-
-			tospectator = (
-				players[splitspecid].spectator == false
-				|| (players[splitspecid].pflags & PF_WANTSTOJOIN)
-			);
-		}
-
-		if (!tospectator && !cv_allowteamchange.value)
-		{
-			M_StartMessage("Team Change", M_GetText("The server is not allowing\nteam changes at this time.\n"), NULL, MM_NOTHING, NULL, NULL);
+			M_StartMessage("Joining Play", M_GetText("The server is not allowing\njoining play at this time.\n"), NULL, MM_NOTHING, NULL, NULL);
 			return;
 		}
 
 		M_QuitPauseMenu(-1);
 
-		const char *destinationstate = tospectator ? "spectator" : "playing";
+		// Send spectate
+		UINT8 buf[2];
+		UINT8 *p = buf;
 
-		// These console command names...
-		if (pausemenu.splitscreenfocusid == 0)
-		{
-			COM_ImmedExecute(
-				va(
-					"changeteam %s",
-					destinationstate
-				)
-			);
-		}
-		else
-		{
-			COM_ImmedExecute(
-				va(
-					"changeteam%u %s",
-					pausemenu.splitscreenfocusid + 1,
-					destinationstate
-				)
-			);
-		}
+		WRITEUINT8(p, splitspecid);
+		WRITEUINT8(p, joingame);
+
+		SendNetXCmd(XD_SPECTATE, &buf, p - buf);
 
 		return;
 	}
@@ -577,7 +571,8 @@ void M_EndGame(INT32 choice)
 	if (!Playing())
 		return;
 
-	if (M_GameTrulyStarted() == false)
+	if (M_GameTrulyStarted() == false
+	|| M_GameAboutToStart() == true) // Playground Hack
 	{
 		// No returning to the title screen.
 		M_QuitSRB2(-1);

@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -14,13 +14,12 @@
 #include <array>
 #include <cstddef>
 #include <exception>
-#include <stdexcept>
 #include <utility>
-#include <vector>
 
 #include <tcb/span.hpp>
 #include <xmp.h>
 
+#include "../core/vector.hpp"
 #include "../io/streams.hpp"
 
 namespace srb2::audio
@@ -38,7 +37,7 @@ public:
 template <size_t C>
 class Xmp final
 {
-	std::vector<std::byte> data_;
+	Vector<std::byte> data_;
 	xmp_context instance_;
 	bool module_loaded_;
 	bool looping_;
@@ -46,7 +45,7 @@ class Xmp final
 public:
 	Xmp();
 
-	explicit Xmp(std::vector<std::byte> data);
+	explicit Xmp(Vector<std::byte> data);
 	explicit Xmp(tcb::span<std::byte> data);
 
 	Xmp(const Xmp<C>&) = delete;
@@ -75,7 +74,7 @@ extern template class Xmp<2>;
 template <size_t C, typename I, typename std::enable_if_t<srb2::io::IsInputStreamV<I>, int> = 0>
 inline Xmp<C> load_xmp(I& stream)
 {
-	std::vector<std::byte> data = srb2::io::read_to_vec(stream);
+	Vector<std::byte> data = srb2::io::read_to_vec(stream);
 	return Xmp<C> {std::move(data)};
 }
 

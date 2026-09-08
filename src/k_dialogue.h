@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 // Copyright (C) 2020 by Sonic Team Junior
 //
 // This program is free software distributed under the
@@ -27,6 +27,7 @@ void K_TickDialogue(void);
 
 boolean K_DialogueFreeze(void);
 INT32 K_GetDialogueSlide(fixed_t multiplier);
+INT32 K_GetDialogueFade(void);
 
 #ifdef __cplusplus
 } // extern "C"

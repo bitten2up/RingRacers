@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -28,7 +28,7 @@
 #include <dirent.h>
 #endif
 #if defined (_WIN32) && !defined (_XBOX)
-//#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 #define RPC_NO_WINDOWS_H
 #include <windows.h>
 #endif
@@ -147,7 +147,7 @@ opendir (const CHAR *szPath)
 
   /* Allocate enough space to store DIR structure and the complete
    * directory path given. */
-  nd = (DIR *) malloc (sizeof (DIR) + (strlen(szFullPath) + strlen (SLASH) +
+  nd = (DIR *) malloc (sizeof (DIR) + (strlen(szFullPath) +
 			 strlen(PATHSEP) + 1) * sizeof (CHAR));
 
   if (!nd)
@@ -333,7 +333,8 @@ char *refreshdirname = NULL;
 
 
 #if defined (_XBOX) && defined (_MSC_VER)
-filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *wantedmd5sum,
+filestatus_t filesearch(char *filename, const char *startpath,
+	const char *priorityfolder, const UINT8 *wantedmd5sum,
 	boolean completepath, int maxsearchdepth)
 {
 //NONE?
@@ -364,7 +365,8 @@ boolean preparefilemenu(boolean samedepth, boolean replayhut)
 }
 
 #elif defined (_WIN32_WCE)
-filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *wantedmd5sum,
+filestatus_t filesearch(char *filename, const char *startpath,
+	const char *priorityfolder, const UINT8 *wantedmd5sum,
 	boolean completepath, int maxsearchdepth)
 {
 #ifdef __GNUC__
@@ -377,6 +379,8 @@ filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *want
 	WIN32_FIND_DATA dta;
 	HANDLE searchhandle = INVALID_HANDLE_VALUE;
 	const wchar_t wm[4] = L"*.*";
+
+	(void)priorityfolder;
 
 	//if (startpath) SetCurrentDirectory(startpath);
 	if (FIL_ReadFileOK(filename))
@@ -396,7 +400,7 @@ filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *want
 				//if (SetCurrentDirectory(dta.cFileName))
 				{ // can fail if we haven't the right
 					filestatus_t found;
-					found = filesearch(filename,NULL,wantedmd5sum,completepath,maxsearchdepth-1);
+					found = filesearch(filename,NULL,NULL,wantedmd5sum,completepath,maxsearchdepth-1);
 					//SetCurrentDirectory("..");
 					if (found == FS_FOUND || found == FS_MD5SUMBAD)
 					{
@@ -435,14 +439,23 @@ boolean preparefilemenu(boolean samedepth, boolean replayhut)
 
 #else
 
-filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *wantedmd5sum, boolean completepath, int maxsearchdepth)
+static const char *filesearch_exclude[] = {
+	"media",
+	"logs",
+	"luafiles",
+	NULL
+};
+
+filestatus_t filesearch(char *filename, const char *startpath,
+	const char *priorityfolder, const UINT8 *wantedmd5sum,
+	boolean completepath, int maxsearchdepth)
 {
 	filestatus_t retval = FS_NOTFOUND;
 	DIR **dirhandle;
 	struct dirent *dent;
 	struct stat fsstat = {0};
 	int found = 0;
-	char *searchname = strdup(filename);
+	char *searchname;
 	int depthleft = maxsearchdepth;
 	char searchpath[1024];
 	size_t *searchpathindex;
@@ -457,11 +470,12 @@ filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *want
 
 	if (dirhandle[depthleft] == NULL)
 	{
-		free(searchname);
 		free(dirhandle);
 		free(searchpathindex);
 		return FS_NOTFOUND;
 	}
+
+	searchname = strdup(filename);
 
 	if (searchpath[searchpathindex[depthleft]-2] != PATHSEP[0])
 	{
@@ -470,6 +484,27 @@ filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *want
 	}
 	else
 		searchpathindex[depthleft]--;
+
+	if (priorityfolder != NULL)
+	{
+		// Start the search at [startpath]/priorityfolder
+
+		strcpy(&searchpath[searchpathindex[depthleft]], priorityfolder);
+
+		if (stat(searchpath,&fsstat) < 0) // do we want to follow symlinks? if not: change it to lstat
+			; // was the file (re)moved? can't stat it
+		else if (S_ISDIR(fsstat.st_mode) && depthleft)
+		{
+			if ((dirhandle[depthleft-1] = opendir(searchpath)) != NULL)
+			{
+				// Got read permissions!
+				searchpathindex[--depthleft] = strlen(searchpath) + 1;
+
+				searchpath[searchpathindex[depthleft]-1] = PATHSEP[0];
+				searchpath[searchpathindex[depthleft]] = 0;
+			}
+		}
+	}
 
 	while ((!found) && (depthleft < maxsearchdepth))
 	{
@@ -492,42 +527,75 @@ filestatus_t filesearch(char *filename, const char *startpath, const UINT8 *want
 		}
 
 		// okay, now we actually want searchpath to incorporate d_name
-		strcpy(&searchpath[searchpathindex[depthleft]],dent->d_name);
+		strcpy(&searchpath[searchpathindex[depthleft]], dent->d_name);
 
 		if (stat(searchpath,&fsstat) < 0) // do we want to follow symlinks? if not: change it to lstat
-			; // was the file (re)moved? can't stat it
-		else if (S_ISDIR(fsstat.st_mode) && depthleft)
+			continue; // was the file (re)moved? can't stat it
+
+		if (S_ISDIR(fsstat.st_mode))
 		{
-			searchpathindex[--depthleft] = strlen(searchpath) + 1;
-			dirhandle[depthleft] = opendir(searchpath);
-			if (!dirhandle[depthleft])
+			// I am a folder!
+
+			if (!depthleft)
+				continue; // No additional folder delving permitted...
+
+			const char **path = filesearch_exclude;
+
+			if (depthleft == maxsearchdepth-1)
 			{
-					// can't open it... maybe no read-permissions
-					// go back to previous dir
-					depthleft++;
+				// When we're at the root of the search, we exclude certain folders.
+
+				if (priorityfolder != NULL
+					&& !strcasecmp(priorityfolder, dent->d_name))
+				{
+					// We skip revisiting the priority by pretending
+					// it matched the first exclude directory instead
+				}
+				else for (; *path; path++)
+				{
+					if (strcasecmp(*path, dent->d_name))
+						continue;
+
+					break;
+				}
+
+				if (*path)
+					continue; // This folder is excluded
 			}
 
-			searchpath[searchpathindex[depthleft]-1] = PATHSEP[0];
-			searchpath[searchpathindex[depthleft]] = 0;
-		}
-		else if (!strcasecmp(searchname, dent->d_name))
-		{
-			switch (checkfilemd5(searchpath, wantedmd5sum))
+			if (strcasecmp(".git", dent->d_name) // sanity if you're weird like me
+				&& (dirhandle[depthleft-1] = opendir(searchpath)) != NULL)
 			{
-				case FS_FOUND:
-					if (completepath)
-						strcpy(filename,searchpath);
-					else
-						strcpy(filename,dent->d_name);
-					retval = FS_FOUND;
-					found = 1;
-					break;
-				case FS_MD5SUMBAD:
-					retval = FS_MD5SUMBAD;
-					break;
-				default: // prevent some compiler warnings
-					break;
+				// Got read permissions!
+				searchpathindex[--depthleft] = strlen(searchpath) + 1;
+
+				searchpath[searchpathindex[depthleft]-1] = PATHSEP[0];
+				searchpath[searchpathindex[depthleft]] = 0;
 			}
+
+			continue;
+		}
+
+		// I am a file!
+
+		if (strcasecmp(searchname, dent->d_name))
+			continue; // Not what we're looking for!
+
+		switch (checkfilemd5(searchpath, wantedmd5sum))
+		{
+			case FS_FOUND:
+				if (completepath)
+					strcpy(filename,searchpath);
+				else
+					strcpy(filename,dent->d_name);
+				retval = FS_FOUND;
+				found = 1;
+				break;
+			case FS_MD5SUMBAD:
+				retval = FS_MD5SUMBAD;
+				break;
+			default: // prevent some compiler warnings
+				break;
 		}
 	}
 

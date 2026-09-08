@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -51,6 +51,7 @@ static const char *const hud_disable_options[] = {
 	"minimap",
 	"item",
 	"position",
+	"names",
 	"check",		// "CHECK" f-zero indicator
 	"minirankings",	// Gametype rankings to the left
 	"battlerankingsbumpers",	// bumper drawer for battle. Useful if you want to make a custom battle gamemode without bumpers being involved.
@@ -58,6 +59,7 @@ static const char *const hud_disable_options[] = {
 	"speedometer",
 	"freeplay",
 	"rankings",
+	"rings",
 
 	"intermissiontally",
 	"intermissionmessages",
@@ -430,9 +432,9 @@ static int libd_getSprite2Patch(lua_State *L)
 	if (super)
 		j |= FF_SPR2SUPER;
 
-	j = P_GetSkinSprite2(&skins[i], j, NULL); // feed skin and current sprite2 through to change sprite2 used if necessary
+	j = P_GetSkinSprite2(skins[i], j, NULL); // feed skin and current sprite2 through to change sprite2 used if necessary
 
-	sprdef = &skins[i].sprites[j];
+	sprdef = &skins[i]->sprites[j];
 
 	// set frame number
 	frame = luaL_optinteger(L, 2, 0);
@@ -460,7 +462,7 @@ static int libd_getSprite2Patch(lua_State *L)
 		INT32 rot = R_GetRollAngle(rollangle);
 
 		if (rot) {
-			patch_t *rotsprite = Patch_GetRotatedSprite(sprframe, frame, angle, sprframe->flip & (1<<angle), true, &skins[i].sprinfo[j], rot);
+			patch_t *rotsprite = Patch_GetRotatedSprite(sprframe, frame, angle, sprframe->flip & (1<<angle), true, &skins[i]->sprinfo[j], rot);
 			LUA_PushUserdata(L, rotsprite, META_PATCH);
 			lua_pushboolean(L, false);
 			lua_pushboolean(L, true);
@@ -603,7 +605,7 @@ static int libd_drawOnMinimap(lua_State *L)
 	if (!lua_isnoneornil(L, 5))
 		colormap = *((UINT8 **)luaL_checkudata(L, 5, META_COLORMAP));
 	centered = lua_optboolean(L, 6);
-	
+
 	// Draw the HUD only when playing in a level.
 	// hu_stuff needs this, unlike st_stuff.
 	if (gamestate != GS_LEVEL)
@@ -611,17 +613,17 @@ static int libd_drawOnMinimap(lua_State *L)
 
 	if (R_GetViewNumber() != 0)
 		return 0;
-	
+
 	AutomapPic = minimapinfo.minimap_pic;
 	if (!AutomapPic)
 	{
 		return 0; // no pic, just get outta here
 	}
-	
+
 	// Handle offsets and stuff.
 	mm_x = MINI_X;
 	mm_y = MINI_Y - SHORT(AutomapPic->topoffset);
-	
+
 	if (encoremode)
 	{
 		mm_x += SHORT(AutomapPic->leftoffset);
@@ -964,6 +966,21 @@ static int libd_stringWidth(lua_State *L)
 	return 1;
 }
 
+static int libd_parseText(lua_State *L)
+{
+	HUDONLY
+
+	const char *rawText = luaL_checkstring(L, 1);
+
+	if (!rawText)
+		return luaL_error(L, "no string provided to v.parseText");
+
+	char *newText = V_ParseText(rawText);
+	lua_pushstring(gL, newText);
+	Z_Free(newText);
+	return 1;
+}
+
 static int libd_getColormap(lua_State *L)
 {
 	INT32 skinnum = TC_DEFAULT;
@@ -1162,6 +1179,7 @@ static luaL_Reg lib_draw[] = {
 	// misc
 	{"stringWidth", libd_stringWidth},
 	{"titleCardStringWidth", libd_titleCardStringWidth},
+	{"parseText", libd_parseText},
 	// m_random
 	{"RandomFixed",libd_RandomFixed},
 	{"RandomByte",libd_RandomByte},

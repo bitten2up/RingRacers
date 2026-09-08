@@ -3,7 +3,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 //
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -29,6 +29,7 @@
 #include <signal.h>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #define RPC_NO_WINDOWS_H
 #include <windows.h>
 #include "../doomtype.h"
@@ -38,6 +39,12 @@ typedef DWORD (WINAPI *p_timeGetTime) (void);
 typedef UINT (WINAPI *p_timeEndPeriod) (UINT);
 typedef HANDLE (WINAPI *p_OpenFileMappingA) (DWORD, BOOL, LPCSTR);
 typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
+
+#if defined(_WIN32) && !defined(__GNUC__)
+#define USE_DBGHELP
+#include <DbgHelp.h>
+#endif
+
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -138,6 +145,10 @@ typedef LPVOID (WINAPI *p_MapViewOfFile) (HANDLE, DWORD, DWORD, DWORD, SIZE_T);
 #include <execinfo.h>
 #include <time.h>
 #define UNIXBACKTRACE
+#endif
+
+#ifdef HAVE_CPPTRACE
+#include <cpptrace/cpptrace.hpp>
 #endif
 
 // Locations for searching for bios.pk3
@@ -301,8 +312,10 @@ static void I_ShowErrorMessageBox(const char *messagefordevelopers, boolean dump
 		dumpmade ?
 #if defined (UNIXBACKTRACE)
 			"crash-log.txt"
-#elif defined (_WIN32)
+#elif defined (_WIN32) && defined(__GNUC__)
 			".rpt crash dump"
+#elif defined (USE_DBGHELP)
+			".dmp crash dump"
 #endif
 			" (very important!) and " : "",
 #ifdef LOGMESSAGES
@@ -368,12 +381,83 @@ static void I_ShowErrorMessageBox(const char *messagefordevelopers, boolean dump
 	// in case the fullscreen window blocks it for some absurd reason.
 }
 
-static void I_ReportSignal(int num, int coredumped)
+static void I_ReportSignal(int num, int coredumped, void* tracefromcpptrace)
 {
 	//static char msg[] = "oh no! back to reality!\r\n";
 	const char *      sigmsg;
-	char msg[128];
+	char msg[8192];
 
+#ifdef USE_DBGHELP
+	// The signal code is a WIN32 exception code, not a libc signal
+	// https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_record
+	switch (num)
+	{
+	case EXCEPTION_ACCESS_VIOLATION:
+		sigmsg = "EXCEPTION_ACCESS_VIOLATION";
+		break;
+	case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+		sigmsg = "EXCEPTION_ARRAY_BOUNDS_EXCEEDED";
+		break;
+	case EXCEPTION_BREAKPOINT:
+		sigmsg = "EXCEPTION_BREAKPOINT";
+		break;
+	case EXCEPTION_DATATYPE_MISALIGNMENT:
+		sigmsg = "EXCEPTION_DATATYPE_MISALIGNMENT";
+		break;
+	case EXCEPTION_FLT_DENORMAL_OPERAND:
+		sigmsg = "EXCEPTION_FLT_DENORMAL_OPERAND";
+		break;
+	case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+		sigmsg = "EXCEPTION_FLT_DENORMAL_OPERAND";
+		break;
+	case EXCEPTION_FLT_INEXACT_RESULT:
+		sigmsg = "EXCEPTION_FLT_INEXACT_RESULT";
+		break;
+	case EXCEPTION_FLT_INVALID_OPERATION:
+		sigmsg = "EXCEPTION_FLT_INVALID_OPERATION";
+		break;
+	case EXCEPTION_FLT_OVERFLOW:
+		sigmsg = "EXCEPTION_FLT_OVERFLOW";
+		break;
+	case EXCEPTION_FLT_STACK_CHECK:
+		sigmsg = "EXCEPTION_FLT_STACK_CHECK";
+		break;
+	case EXCEPTION_FLT_UNDERFLOW:
+		sigmsg = "EXCEPTION_FLT_UNDERFLOW";
+		break;
+	case EXCEPTION_ILLEGAL_INSTRUCTION:
+		sigmsg = "EXCEPTION_ILLEGAL_INSTRUCTION";
+		break;
+	case EXCEPTION_IN_PAGE_ERROR:
+		sigmsg = "EXCEPTION_IN_PAGE_ERROR";
+		break;
+	case EXCEPTION_INT_DIVIDE_BY_ZERO:
+		sigmsg = "EXCEPTION_INT_DIVIDE_BY_ZERO";
+		break;
+	case EXCEPTION_INT_OVERFLOW:
+		sigmsg = "EXCEPTION_INT_OVERFLOW";
+		break;
+	case EXCEPTION_INVALID_DISPOSITION:
+		sigmsg = "EXCEPTION_INVALID_DISPOSITION";
+		break;
+	case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+		sigmsg = "EXCEPTION_NONCONTINUABLE_EXCEPTION";
+		break;
+	case EXCEPTION_PRIV_INSTRUCTION:
+		sigmsg = "EXCEPTION_PRIV_INSTRUCTION";
+		break;
+	case EXCEPTION_SINGLE_STEP:
+		sigmsg = "EXCEPTION_SINGLE_STEP";
+		break;
+	case EXCEPTION_STACK_OVERFLOW:
+		sigmsg = "EXCEPTION_STACK_OVERFLOW";
+		break;
+	default:
+		sigmsg = "";
+		sprintf(msg, "unknown exception %d", num);
+		break;
+	}
+#else
 	switch (num)
 	{
 //	case SIGINT:
@@ -404,30 +488,132 @@ static void I_ReportSignal(int num, int coredumped)
 		else
 			sigmsg = msg;
 	}
+#endif
+	if (sigmsg)
+	{
+		strcpy(msg, sigmsg);
+	}
 
 	if (coredumped)
 	{
-		if (sigmsg)
-			strcpy(msg, sigmsg);
 		strcat(msg, " (core dumped)");
-
-		sigmsg = msg;
 	}
+
+#ifdef HAVE_CPPTRACE
+	strncat(msg, "\n", sizeof(msg) - strlen(msg) - 1);
+
+	cpptrace::stacktrace const& trace = *(cpptrace::stacktrace*)tracefromcpptrace;
+	bool firstfound = false;
+#ifndef _WIN32
+	firstfound = true;
+#endif
+	for (const auto& frame : trace)
+	{
+#ifdef _WIN32
+		// dumb hack, unsure if it works on anything other than windows 10-11
+		if (!firstfound && frame.symbol == "KiUserExceptionDispatcher")
+		{
+			firstfound = true;
+			continue;
+		}
+		if (!firstfound)
+		{
+			continue;
+		}
+#endif
+
+		srb2::String frame_str;
+		if (!frame.filename.empty() && frame.line.has_value())
+		{
+			frame_str = srb2::format("{} at {}:{}\n", frame.symbol, frame.filename, frame.line.value_or(0));
+		}
+		else if (!frame.filename.empty() && !frame.line.has_value())
+		{
+			frame_str = srb2::format("{} at {}\n", frame.symbol, frame.filename);
+		}
+		else
+		{
+			frame_str = srb2::format("{}\n", frame.symbol);
+		}
+
+		strncat(msg, frame_str.c_str(), sizeof(msg) - strlen(msg) - 1);
+	}
+#endif
+
+	sigmsg = msg;
 
 	I_OutputMsg("\nProcess killed by signal: %s\n\n", sigmsg);
 
 	I_ShowErrorMessageBox(sigmsg,
 #if defined (UNIXBACKTRACE)
 		true
-#elif defined (_WIN32)
+#elif defined (_WIN32) && defined (__GNUC__)
 		!M_CheckParm("-noexchndl")
+#elif defined (USE_DBGHELP)
+		true
 #else
 		false
 #endif
 	);
 }
 
-#ifndef NEWSIGNALHANDLER
+#if !defined(NEWSIGNALHANDLER) || defined(USE_DBGHELP)
+static void CommonSignalHandleCleanup(void)
+{
+	D_QuitNetGame(); // Fix server freezes
+	CL_AbortDownloadResume();
+	G_DirtyGameData();
+}
+#endif
+
+#ifdef USE_DBGHELP
+LPTOP_LEVEL_EXCEPTION_FILTER g_previous_toplevelexceptionfilter;
+
+static LONG WriteMinidumpExceptionFilter(PEXCEPTION_POINTERS ExceptionInfo)
+{
+#ifdef HAVE_CPPTRACE
+	// Fully aware this is completely signal unsafe. We don't ever try to recover from signals, so who cares.
+	// If it breaks it breaks. We're not mission critical software.
+	cpptrace::stacktrace trace = cpptrace::generate_trace(0, 30);
+#else
+	int trace = 0;
+#endif
+
+	MINIDUMP_EXCEPTION_INFORMATION mei {};
+	mei.ExceptionPointers = ExceptionInfo;
+	mei.ClientPointers = TRUE;
+	mei.ThreadId = GetCurrentThreadId();
+	HANDLE outfile;
+
+	char outfilename[1024];
+	GetModuleFileNameA(NULL, outfilename, sizeof(outfilename));
+	strncat(outfilename, ".dmp", sizeof(outfilename) - strlen(outfilename) - 1);
+
+	outfile = CreateFileA(outfilename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+	if (outfile == NULL)
+	{
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	BOOL result;
+	result = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), outfile, MiniDumpNormal, &mei, NULL, NULL);
+	if (result == FALSE)
+	{
+		CloseHandle(outfile);
+		DeleteFileA("ringracers_minidump.dmp");
+		goto exit;
+	}
+
+	CloseHandle(outfile);
+
+exit:
+	CommonSignalHandleCleanup();
+	I_ReportSignal(ExceptionInfo->ExceptionRecord->ExceptionCode, 0, (void*)&trace);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
+#if !defined(NEWSIGNALHANDLER) && !defined(USE_DBGHELP)
 static ATTRNORETURN void signal_handler(INT32 num)
 {
 	g_in_exiting_signal_handler = true;
@@ -440,16 +626,18 @@ static ATTRNORETURN void signal_handler(INT32 num)
 		exit(-2);
 	}
 
-	D_QuitNetGame(); // Fix server freezes
-	CL_AbortDownloadResume();
-	G_DirtyGameData();
+	CommonSignalHandleCleanup();
 #ifdef UNIXBACKTRACE
 	write_backtrace(num);
 #endif
-	I_ReportSignal(num, 0);
+	I_ReportSignal(num, 0, NULL);
 	signal(num, SIG_DFL);               //default signal action
 	raise(num);
 }
+#endif
+
+#ifdef USE_DBGHELP
+LPTOP_LEVEL_EXCEPTION_FILTER g_prevtoplevelexceptionfilter;
 #endif
 
 FUNCNORETURN static ATTRNORETURN void quit_handler(int num)
@@ -828,11 +1016,16 @@ static void I_RegisterSignals (void)
 
 	// If these defines don't exist,
 	// then compilation would have failed above us...
-#ifndef NEWSIGNALHANDLER
+#if !defined(NEWSIGNALHANDLER) && !defined(USE_DBGHELP)
 	signal(SIGILL , signal_handler);
 	signal(SIGSEGV , signal_handler);
 	signal(SIGABRT , signal_handler);
 	signal(SIGFPE , signal_handler);
+#endif
+
+#ifdef USE_DBGHELP
+	// Initialize Windows SDK-specific crashdump handler (DbgHelp)
+	g_previous_toplevelexceptionfilter = SetUnhandledExceptionFilter(WriteMinidumpExceptionFilter);
 #endif
 }
 
@@ -1350,7 +1543,7 @@ static void I_SetupMumble(void)
 	if(shmfd < 0)
 		return;
 
-	mumble = mmap(NULL, sizeof(*mumble), PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0);
+	mumble = static_cast<mumble_s*>(mmap(NULL, sizeof(*mumble), PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0));
 	if (mumble == MAP_FAILED)
 		mumble = NULL;
 #endif
@@ -1366,7 +1559,7 @@ void I_UpdateMumble(const mobj_t *mobj, const listener_t listener)
 		return;
 
 	if(mumble->uiVersion != 2) {
-		wcsncpy(mumble->name, L"Dr. Robotnik's Ring Racers "VERSIONSTRINGW, 256);
+		wcsncpy(mumble->name, L"Dr. Robotnik's Ring Racers " VERSIONSTRINGW, 256);
 		wcsncpy(mumble->description, L"Dr. Robotnik's Ring Racers with integrated Mumble Link support.", 2048);
 		mumble->uiVersion = 2;
 	}
@@ -1597,9 +1790,9 @@ static void I_Fork(void)
 				{
 					signum = WTERMSIG (status);
 #ifdef WCOREDUMP
-					I_ReportSignal(signum, WCOREDUMP (status));
+					I_ReportSignal(signum, WCOREDUMP (status), NULL);
 #else
-					I_ReportSignal(signum, 0);
+					I_ReportSignal(signum, 0, NULL);
 #endif
 					status = 128 + signum;
 				}
@@ -1639,6 +1832,11 @@ INT32 I_StartupSystem(void)
 	 SDLcompiled.major, SDLcompiled.minor, SDLcompiled.patch);
 	I_OutputMsg("Linked with SDL version: %d.%d.%d\n",
 	 SDLlinked.major, SDLlinked.minor, SDLlinked.patch);
+
+#if (SDL_VERSION_ATLEAST(2, 0, 18))
+	SDL_SetHint(SDL_HINT_APP_NAME, "Dr. Robotnik's Ring Racers");
+#endif
+
 	if (SDL_Init(0) < 0)
 		I_Error("Dr. Robotnik's Ring Racers: SDL System Error: %s", SDL_GetError()); //Alam: Oh no....
 #ifndef NOMUMBLE
@@ -1650,13 +1848,13 @@ INT32 I_StartupSystem(void)
 //
 // I_Quit
 //
-void I_Quit(void)
+FUNCNORETURN void ATTRNORETURN I_Quit(void)
 {
 	static SDL_bool quiting = SDL_FALSE;
 
 	/* prevent recursive I_Quit() */
 	if (quiting) goto death;
-	SDLforceUngrabMouse();
+	SDL_ShowCursor(SDL_TRUE);
 	quiting = SDL_FALSE;
 	M_SaveConfig(NULL); //save game config, cvars..
 	M_SaveJoinedIPs();
@@ -1724,7 +1922,9 @@ static INT32 errorcount = 0;
 */
 static boolean shutdowning = false;
 
-void I_Error(const char *error, ...)
+extern "C" consvar_t cv_fuzz;
+
+FUNCIERROR void ATTRNORETURN I_Error(const char *error, ...)
 {
 	va_list argptr;
 	char buffer[8192];
@@ -1739,8 +1939,6 @@ void I_Error(const char *error, ...)
 	if (shutdowning)
 	{
 		errorcount++;
-		if (errorcount == 1)
-			SDLforceUngrabMouse();
 		// try to shutdown each subsystem separately
 		if (errorcount == 2)
 			I_ShutdownMusic();
@@ -1764,7 +1962,8 @@ void I_Error(const char *error, ...)
 			// Implement message box with SDL_ShowSimpleMessageBox,
 			// which should fail gracefully if it can't put a message box up
 			// on the target system
-			if (!M_CheckParm("-dedicated"))
+			extern consvar_t cv_fuzz;
+			if (!M_CheckParm("-dedicated") && !(cv_fuzz.value))
 				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
 					"Dr. Robotnik's Ring Racers " VERSIONSTRING " Recursive Error",
 					buffer, NULL);
@@ -1809,7 +2008,8 @@ void I_Error(const char *error, ...)
 	I_ShutdownGraphics();
 	I_ShutdownInput();
 
-	I_ShowErrorMessageBox(buffer, false);
+	if (!cv_fuzz.value)
+		I_ShowErrorMessageBox(buffer, false);
 
 	// We wait until now to do this so the funny sound can be heard
 	I_ShutdownSound();
@@ -1968,7 +2168,7 @@ void I_GetDiskFreeSpace(INT64 *freespace)
 
 	if (!testwin95)
 	{
-		*(void**)&pfnGetDiskFreeSpaceEx = FUNCPTRCAST(GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetDiskFreeSpaceExA"));
+		pfnGetDiskFreeSpaceEx = reinterpret_cast<decltype(pfnGetDiskFreeSpaceEx)>(GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetDiskFreeSpaceExA"));
 		testwin95 = true;
 	}
 	if (pfnGetDiskFreeSpaceEx)
@@ -2154,7 +2354,7 @@ static const char *searchWad(const char *searchDir)
 	filestatus_t fstemp;
 
 	strcpy(tempsw, WADKEYWORD);
-	fstemp = filesearch(tempsw,searchDir,NULL,true,20);
+	fstemp = filesearch(tempsw, searchDir, NULL, NULL, true, 20);
 	if (fstemp == FS_FOUND)
 	{
 		pathonly(tempsw);

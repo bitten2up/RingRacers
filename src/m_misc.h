@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -21,6 +21,7 @@
 
 #include "d_event.h" // Screenshot responder
 #include "command.h"
+#include "w_wad.h"
 
 #ifdef __cplusplus
 
@@ -30,6 +31,8 @@
 
 void M_DoScreenShot(uint32_t width, uint32_t height, tcb::span<const std::byte> data);
 void M_SaveFrame(uint32_t width, uint32_t height, tcb::span<const std::byte> data);
+
+void M_SaveMapThumbnail(uint32_t width, uint32_t height, tcb::span<const std::byte> data);
 
 extern "C" {
 #endif
@@ -42,6 +45,13 @@ typedef enum {
 	MM_AVRECORDER,
 } moviemode_t;
 extern moviemode_t moviemode;
+
+typedef enum {
+	TMT_NO = 0,
+	TMT_PICTURE,
+	TMT_RICHPRES,
+} g_takemapthumbnail_t;
+extern g_takemapthumbnail_t g_takemapthumbnail;
 
 extern consvar_t cv_screenshot_colorprofile;
 extern consvar_t cv_lossless_recorder;
@@ -80,6 +90,8 @@ size_t FIL_ReadFileTag(char const *name, UINT8 **buffer, INT32 tag);
 #define FIL_ReadFile(n, b) FIL_ReadFileTag(n, b, PU_STATIC)
 
 boolean FIL_ConvertTextFileToBinary(const char *textfilename, const char *binfilename);
+
+boolean FIL_RenameFile(const char *old_name, const char *new_name);
 
 boolean FIL_FileExists(const char *name);
 boolean FIL_WriteFileOK(char const *name);
@@ -153,8 +165,14 @@ const char * M_Ftrim (double);
 // counting bits, for weapon ammo code, usually
 FUNCMATH UINT8 M_CountBits(UINT32 num, UINT8 size);
 
-#include "w_wad.h"
 extern char configfile[MAX_WADPATH];
+
+typedef INT32 floatdenormalstate_t;
+
+/** Enable floating point denormal-to-zero section, if necessary */
+floatdenormalstate_t M_EnterFloatDenormalToZero(void);
+/** Exit floating point denormal-to-zero section, if necessary, restoring previous state */
+void M_ExitFloatDenormalToZero(floatdenormalstate_t previous);
 
 #ifdef __cplusplus
 } // extern "C"

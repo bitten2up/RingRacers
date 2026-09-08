@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -14,6 +14,8 @@
 
 #ifndef __D_PLAYER__
 #define __D_PLAYER__
+
+#include <stdint.h>
 
 // The player data structure depends on a number
 // of other structs: items (internal inventory),
@@ -44,12 +46,15 @@ extern "C" {
 // (done here as p_local.h, the previous host, has this as a dependency - but we must use it here)
 #define MAX_LAPS 99
 
+#define MAXRACESPLITS 32
+
 // Extra abilities/settings for skins (combinable stuff)
 typedef enum
 {
 	SF_MACHINE          = 1, // Beep boop. Are you a robot?
 	SF_IRONMAN			= 1<<1, // Pick a new skin during POSITION. I main Random!
 	SF_BADNIK			= 1<<2, // Explodes on death
+	SF_HIVOLT           = 1<<3, // High power TA ringboxes, like 2.0-2.3!
 	// free up to and including 1<<31
 } skinflags_t;
 
@@ -134,6 +139,27 @@ typedef enum
 
 typedef enum
 {
+	PF2_SELFMUTE 			= 1<<1,
+	PF2_SELFDEAFEN 			= 1<<2,
+	PF2_SERVERMUTE 			= 1<<3,
+	PF2_SERVERDEAFEN 		= 1<<4,
+
+	PF2_STRICTFASTFALL 		= 1<<5, // Fastfall only with C, never with A+X. Profile preference.
+
+	PF2_ALWAYSDAMAGED		= 1<<6, // Ignore invulnerability or clash conditions when evaulating damage (P_DamageMobj). Unset after use!
+	PF2_BUBBLECONTACT		= 1<<7, // ACHTUNG VERY BAD HACK - Don't allow Bubble Shield to contact certain objects unless this is a fresh blowup.
+	PF2_SUPERTRANSFERVFX	= 1<<8, // Don't respawn the "super transfer available" VFX.
+	PF2_FASTTUMBLEBOUNCE	= 1<<9, // Don't lose speed when tumblebouncing.
+
+	PF2_SERVERTEMPMUTE		= 1<<10, // Haven't met gamestochat requirement
+	PF2_SAMEFRAMESTUNG		= 1<<11, // Goofy bullshit for tracking mutual ring sting
+	PF2_UNSTINGABLE			= 1<<12, // Was bumped out of spindash
+	PF2_GIMMESTARTAWARDS	= 1<<13, // Need to apply non-first start awards on a 1 tic delay to prevent port priority
+	PF2_GIMMEFIRSTBLOOD		= 1<<14, // And need to differentiate between First Blood and everything else!
+} pflags2_t;
+
+typedef enum
+{
 	// Are animation frames playing?
 	PA_ETC=0,
 	PA_STILL,
@@ -150,6 +176,8 @@ typedef enum
 	CR_SLIDING,
 	CR_ZOOMTUBE,
 	CR_DASHRING,
+	CR_TRAPBUBBLE,
+	CR_MUSHROOMHILLPOLE,
 } carrytype_t; // carry
 
 /*
@@ -182,7 +210,9 @@ Run this macro, then #undef FOREACH afterward
 	FOREACH (KITCHENSINK,   20),\
 	FOREACH (DROPTARGET,    21),\
 	FOREACH (GARDENTOP,     22),\
-	FOREACH (GACHABOM,      23)
+	FOREACH (GACHABOM,      23),\
+	FOREACH (STONESHOE,     24),\
+	FOREACH (TOXOMISTER,    25)
 
 typedef enum
 {
@@ -202,6 +232,9 @@ typedef enum
 	KRITEM_TRIPLEGACHABOM,
 
 	NUMKARTRESULTS,
+
+	KDROP_STONESHOETRAP,
+	KCAPSULE_RING,
 
 	// Power-ups exist in the same enum as items so it's easy
 	// for paper items to be reused for them.
@@ -325,6 +358,19 @@ typedef enum
 	// Tricks
 	khud_trickcool,
 
+	// Exp
+	khud_oldexp,
+	khud_exp,
+	khud_exptimer,
+
+	// Splits
+	khud_splittime, // Delta between you and highest split
+	khud_splitwin, // How to color/flag the split based on gaining/losing | ahead/behind
+	khud_splittimer, // How long to show splits HUD
+	khud_splitskin, // Skin index of the leading player
+	khud_splitcolor, // Skincolor of the leading player
+	khud_splitposition, // Who are we comparing to?
+
 	NUMKARTHUD
 } karthudtype_t;
 
@@ -339,7 +385,7 @@ typedef enum
 #define TUMBLEBOUNCES 3
 #define TUMBLEGRAVITY (4*FRACUNIT)
 
-#define TRIPWIRETIME (15)
+#define TRIPWIRETIME (50)
 
 #define BALLHOGINCREMENT (7)
 
@@ -391,12 +437,14 @@ struct botvars_t
 	botStyle_e style; // Training mode-style CPU mode
 
 	UINT8 difficulty; // Bot's difficulty setting
-	UINT8 diffincrease; // In GP: bot difficulty will increase this much next round
+	INT16 diffincrease; // In GP: bot difficulty will increase this much next round
 	boolean rival; // If true, they're the GP rival
+	boolean foe; // If true, in contention for top X
 
 	// All entries above persist between rounds and must be recorded in demos
 
 	fixed_t rubberband; // Bot rubberband value
+	UINT8 bumpslow;
 
 	tic_t itemdelay; // Delay before using item at all
 	tic_t itemconfirm; // When high enough, they will use their item
@@ -408,6 +456,10 @@ struct botvars_t
 
 	UINT8 roulettePriority; // What items to go for on the roulette
 	tic_t rouletteTimeout; // If it takes too long to decide, try lowering priority until we find something valid.
+
+	angle_t predictionError; // How bad is our momentum angle relative to where we're trying to go?
+	angle_t recentDeflection; // How long have we been going straight? (See k_bot.h)
+	angle_t lastAngle;
 };
 
 // player_t struct for round-specific condition tracking
@@ -478,26 +530,27 @@ struct skybox_t {
 
 // player_t struct for item roulette variables
 
-// Doing this the right way is causing problems.
-// so FINE, it's a static length now.
-#define ITEM_LIST_SIZE (NUMKARTRESULTS << 3)
+// In case of dynamic alloc failure, break glass:
+// #define ITEM_LIST_SIZE (NUMKARTRESULTS << 3)
+
+typedef struct itemlist_t
+{
+	size_t len;
+#ifdef ITEM_LIST_SIZE
+	SINT8 items[ITEM_LIST_SIZE];
+#else
+	SINT8 *items;
+	size_t cap;
+#endif
+} itemlist_t;
 
 struct itemroulette_t
 {
 	boolean active;
+	itemlist_t itemList;
 
-#ifdef ITEM_LIST_SIZE
-	size_t itemListLen;
-	SINT8 itemList[ITEM_LIST_SIZE];
-#else
-	size_t itemListCap;
-	size_t itemListLen;
-	SINT8 *itemList;
-#endif
-
-	UINT8 useOdds;
 	UINT8 playing, exiting;
-	UINT32 dist, baseDist;
+	UINT32 preexpdist, dist, baseDist;
 	UINT32 firstDist, secondDist;
 	UINT32 secondToFirst;
 
@@ -512,6 +565,8 @@ struct itemroulette_t
 	boolean ringbox;
 	boolean autoroulette;
 	UINT8 reserved;
+
+	UINT8 popcorn;
 };
 
 // enum for bot item priorities
@@ -633,6 +688,7 @@ struct player_t
 	// Bit flags.
 	// See pflags_t, above.
 	UINT32 pflags;
+	UINT32 pflags2;
 
 	// playing animation.
 	panim_t panim;
@@ -647,8 +703,8 @@ struct player_t
 	INT32 skin;
 	UINT8 availabilities[MAXAVAILABILITY];
 
-	UINT8 fakeskin; // ironman
-	UINT8 lastfakeskin;
+	UINT16 fakeskin; // ironman
+	UINT16 lastfakeskin;
 
 	UINT8 kartspeed; // Kart speed stat between 1 and 9
 	UINT8 kartweight; // Kart weight stat between 1 and 9
@@ -670,6 +726,11 @@ struct player_t
 	UINT8 carry;
 	UINT16 dye;
 
+	INT32 prefskin; // Queued skin change
+	UINT16 prefcolor; // Queued color change
+	INT32 preffollower; // Queued follower change
+	UINT16 preffollowercolor; // Queued follower color change
+
 	// SRB2kart stuff
 	INT32 karthud[NUMKARTHUD];
 
@@ -677,19 +738,29 @@ struct player_t
 	UINT8 position;			// Used for Kart positions, mostly for deterministic stuff
 	UINT8 oldposition;		// Used for taunting when you pass someone
 	UINT8 positiondelay;	// Used for position number, so it can grow when passing
+	UINT8 leaderpenalty;	// Used for penalising 1st in a positiondelay-friendly way
+
+	UINT8 teamposition;		// Position, but only against other teams -- not your own.
+	UINT8 teamimportance;	// Opposite of team position x2, with +1 for being in 1st.
+
 	UINT32 distancetofinish;
 	UINT32 distancetofinishprev;
+
 	UINT32 lastpickupdistance; // Anti item set farming
 	UINT8 lastpickuptype;
+
 	waypoint_t *currentwaypoint;
 	waypoint_t *nextwaypoint;
+
 	respawnvars_t respawn;	// Respawn info
 	mobj_t *ringShooter;	// DEZ respawner object
 	tic_t airtime; 			// Used to track just air time, but has evolved over time into a general "karted" timer. Rename this variable?
 	tic_t lastairtime;
 	UINT16 bigwaypointgap;	// timer counts down if finish line distance gap is too big to update waypoint
 	UINT8 startboost;		// (0 to 125) - Boost you get from start of race
+	UINT8 neostartboost;	// Weaker partial startboost
 	UINT8 dropdashboost;	// Boost you get when holding A while respawning
+	UINT8 aciddropdashboost;	// acid dropdash
 
 	UINT16 flashing;
 	UINT16 spinouttimer;	// Spin-out from a banana peel or oil slick (was "pw_bananacam")
@@ -699,10 +770,15 @@ struct player_t
 	UINT8 wipeoutslow;		// Timer before you slowdown when getting wiped out
 	UINT8 justbumped;		// Prevent players from endlessly bumping into each other
 	UINT8 noEbrakeMagnet;	// Briefly disable 2.2 responsive ebrake if you're bumped by another player.
+	UINT8 wallSpikeDampen;	// 2.4 wallspikes can softlock in closed quarters... attenuate their violence
 	UINT8 tumbleBounces;
 	UINT16 tumbleHeight;	// In *mobjscaled* fracunits, or mfu, not raw fu
+	UINT16 stunned;			// Number of tics during which rings cannot be picked up
+	mobj_t *flybot;			// One Flybot767 circling the player while stunned
 	UINT8 justDI;			// Turn-lockout timer to briefly prevent unintended turning after DI, resets when actionable or no input
 	boolean flipDI;			// Bananas flip the DI direction. Was a bug, but it made bananas much more interesting.
+
+	UINT8 cangrabitems;
 
 	SINT8 drift;			// (-5 to 5) - Drifting Left or Right, plus a bigger counter = sharper turn
 	fixed_t driftcharge;	// Charge your drift so you can release a burst of speed
@@ -730,6 +806,8 @@ struct player_t
 	fixed_t spindashspeed;	// Spindash release speed
 	UINT8 spindashboost;	// Spindash release boost timer
 
+	UINT8 ringboostinprogress; // Ring overhead, don't sting!
+
 	fixed_t fastfall;		// Fast fall momentum
 	fixed_t fastfallBase;	// Fast fall base speed multiplier
 
@@ -739,6 +817,7 @@ struct player_t
 	fixed_t accelboost;		// Boost value smoothing for acceleration
 	fixed_t handleboost;	// Boost value smoothing for handling
 	angle_t boostangle;		// angle set when not spun out OR boosted to determine what direction you should keep going at if you're spun out and boosted.
+	fixed_t stonedrag;
 
 	fixed_t draftpower;		// (0 to FRACUNIT) - Drafting power, doubles your top speed & acceleration at max
 	UINT16 draftleeway;		// Leniency timer before removing draft power
@@ -747,13 +826,17 @@ struct player_t
 	UINT8 tripwireState; // see tripwirestate_t
 	UINT8 tripwirePass; // see tripwirepass_t
 	UINT16 tripwireLeniency;	// When reaching a state that lets you go thru tripwire, you get an extra second leniency after it ends to still go through it.
+	UINT8 tripwireAirLeniency;	// Timer that elongates tripwire leniency when in midair.
 	UINT8 fakeBoost;	// Some items need to grant tripwire pass briefly, even when their effect is thrust/instathrust. This is a fake boost type to control that.
+	UINT16 subsonicleniency; // Keep the subsonic visual for just a little bit when your sonic boom is visible
 
 	itemroulette_t itemRoulette;	// Item roulette data
 
 	// Item held stuff
 	SINT8 itemtype;		// KITEM_ constant for item number
 	UINT8 itemamount;	// Amount of said item
+	SINT8 backupitemtype;
+	UINT8 backupitemamount;
 	SINT8 throwdir; 	// Held dir of controls; 1 = forward, 0 = none, -1 = backward (was "player->heldDir")
 	UINT8 itemscale;	// Item scale value, from when an item was taken out. (0 for normal, 1 for grow, 2 for shrink.)
 
@@ -765,8 +848,12 @@ struct player_t
 	UINT8 pickuprings;	// Number of rings being picked up before added to the counter (prevents rings from being deleted forever over 20)
 	UINT8 ringdelay;	// (0 to 3) - 3 tic delay between every ring usage
 	UINT16 ringboost;	// Ring boost timer
+	UINT16 momentboost; // Sigh
 	UINT8 sparkleanim;	// (0 to 19) - Angle offset for ring sparkle animation
 	UINT16 superring;	// You were awarded rings, and have this many of them left to spawn on yourself.
+	UINT16 superringdisplay; // For HUD countup when awarded superring
+	UINT16 superringpeak; // Display award when getting awarded
+	UINT8 superringalert; // Timer for displaying award instead of countdown
 	UINT8 nextringaward;	// When should we spawn our next superring ring?
 	UINT8 ringvolume;		// When consuming lots of rings, lower the sound a little.
 	UINT8 ringtransparency; 	// When consuming lots of rings, fade out the rings again.
@@ -778,11 +865,14 @@ struct player_t
 	UINT16 flamedash;	// Flame Shield dash power
 	UINT16 flamemeter;	// Flame Shield dash meter left
 	UINT8 flamelength;	// Flame Shield dash meter, number of segments
+	UINT8 lightningcharge; // Lightning Shield attack timer
 
 	UINT16 counterdash;	// Flame Shield boost without the flame, largely. Used in places where awarding thrust would affect player control.
 
 	UINT16 ballhogcharge;	// Ballhog charge up -- the higher this value, the more projectiles
+	UINT8 ballhogburst;
 	boolean ballhogtap;		// Ballhog released during charge: used to allow semirapid tapfire
+	mobj_t *ballhogreticule;	// First ballhog reticule estimation object
 
 	UINT16 hyudorotimer;	// Duration of the Hyudoro offroad effect itself
 	SINT8 stealingtimer;	// if >0 you are stealing, if <0 you are being stolen from
@@ -790,12 +880,18 @@ struct player_t
 
 	UINT16 sneakertimer;	// Duration of a Sneaker Boost (from Sneakers or level boosters)
 	UINT8 numsneakers;		// Number of stacked sneaker effects
+	UINT16 panelsneakertimer;
+	UINT8 numpanelsneakers;
+	UINT16 weaksneakertimer;
+	UINT8 numweaksneakers;
 	UINT8 floorboost;		// (0 to 3) - Prevents Sneaker sounds for a brief duration when triggered by a floor panel
 
 	INT16 growshrinktimer;		// > 0 = Big, < 0 = small
 	UINT16 rocketsneakertimer;	// Rocket Sneaker duration timer
 	UINT16 invincibilitytimer;	// Invincibility timer
 	UINT16 invincibilityextensions;	// Used to control invinc time gains when it's already been extended.
+
+	fixed_t loneliness;		// How long has a player been too far to interact? Do they need speed assist?
 
 	UINT8 eggmanexplode;	// Fake item recieved, explode in a few seconds
 	SINT8 eggmanblame;		// (-1 to 15) - Fake item recieved, who set this fake
@@ -819,6 +915,8 @@ struct player_t
 	UINT8 dashRingPushTics; // Timer during which the player displays effects and has no gravity after being thrust by a dash ring
 
 	boolean pullup; // True if the player is attached to a pullup hook
+
+	boolean finalized; // Did PWR finalize already, don't repeat it even if exit conditions are weird.
 
 	tic_t ebrakefor;	// Ebrake timer, used for visuals.
 
@@ -913,11 +1011,15 @@ struct player_t
 	tic_t laptime[LAP__MAX];
 	UINT8 laps; // Number of laps (optional)
 	UINT8 latestlap;
-	UINT32 lapPoints; // Points given from laps
+	UINT32 exp; // Points given from laps and checkpoints
+	fixed_t gradingfactor;
+	UINT16 gradingpointnum; // how many grading points, checkpoint and finishline, you've passed
 	INT32 cheatchecknum; // The number of the last cheatcheck you hit
 	INT32 checkpointId; // Players respawn here, objects/checkpoint.cpp
 
-	UINT8 ctfteam; // 0 == Spectator, 1 == Red, 2 == Blue
+	INT16 duelscore;
+
+	UINT8 team; // 0 == Spectator, 1 == Red, 2 == Blue
 
 	UINT8 checkskip; // Skipping checkpoints? Oh no no no
 
@@ -972,11 +1074,11 @@ struct player_t
 	UINT8 tripwireReboundDelay; // When failing Tripwire, brieftly lock out speed-based tripwire pass (anti-cheese)
 
 	UINT16 wavedash; // How long is our chained sliptide? Grant a proportional boost when it's over.
+	UINT16 wavedashleft;
+	UINT16 wavedashright;
 	UINT8 wavedashdelay; // How long since the last sliptide? Only boost once you've been straightened out for a bit.
 	UINT16 wavedashboost; // The actual boost granted from wavedash.
 	fixed_t wavedashpower; // Is this a bullshit "tap" wavedash? Weaken lower-charge wavedashes while keeping long sliptides fully rewarding.
-
-	UINT16 speedpunt;
 
 	UINT16 trickcharge; // Landed normally from a trick panel? Get the benefits package!
 
@@ -989,8 +1091,10 @@ struct player_t
 	UINT8 lastsafecheatcheck;
 
 	UINT8 ignoreAirtimeLeniency; // We bubblebounced or otherwise did an airtime thing with control, powerup timers should still count down
+	boolean bubbledrag; // Just bubblebounced, slow down!
 
 	fixed_t topAccel; // Reduced on straight wall collisions to give players extra recovery time
+	fixed_t vortexBoost;
 
 	mobj_t *stumbleIndicator;
 	mobj_t *wavedashIndicator;
@@ -998,6 +1102,8 @@ struct player_t
 	mobj_t *whip;
 	mobj_t *hand;
 	mobj_t *flickyAttacker;
+	mobj_t *stoneShoe;
+	mobj_t *toxomisterCloud;
 
 	SINT8 pitblame; // Index of last player that hit you, resets after being in control for a bit. If you deathpit, credit the old attacker!
 
@@ -1019,6 +1125,10 @@ struct player_t
 	UINT16 progressivethrust; // When getting beat up in GTR_BUMPERS, speed up the longer you've been out of control.
 	UINT8 ringvisualwarning; // Check with > 1, not >= 1! Set when put in debt, counts down and holds at 1 when still in debt.
 
+	UINT32 bailcharge;
+	UINT32 baildrop;
+	boolean bailhitlag;
+
 	boolean analoginput; // Has an input been recorded that requires analog usage? For input display.
 
 	boolean markedfordeath;
@@ -1026,12 +1136,31 @@ struct player_t
 	boolean stingfx;
 	UINT8 bumperinflate;
 
+	boolean mfdfinish; // Did you cross the finish line while just about to explode?
+
 	UINT8 ringboxdelay; // Delay until Ring Box auto-activates
 	UINT8 ringboxaward; // Where did we stop?
+	UINT32 lastringboost; // What was our accumulated boost when locking the award?
+
+	UINT8 amps;
+	UINT8 recentamps;
+	UINT8 amppickup;
+	UINT8 ampspending;
+
+	UINT16 overdrive;
+	UINT16 overshield;
+	fixed_t overdrivepower;
+	UINT8 overdriveready;
+	boolean overdrivelenient;
 
 	UINT8 itemflags; 	// holds IF_ flags (see itemflags_t)
 
 	fixed_t outrun; // Milky Way road effect
+
+	fixed_t transfer; // Tired of Ramp Park fastfalls
+
+	tic_t splits[MAXRACESPLITS]; // Times we crossed checkpoint
+	INT32 pace; // Last split delta, used for checking whether gaining or losing time
 
 	uint8_t public_key[PUBKEYLENGTH];
 

@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -3432,7 +3432,7 @@ static const char *searchWad(const char *searchDir)
 	filestatus_t fstemp;
 
 	strcpy(tempsw, WADKEYWORD);
-	fstemp = filesearch(tempsw,searchDir,NULL,true,20);
+	fstemp = filesearch(tempsw, searchDir, NULL, NULL, true, 20);
 	if (fstemp == FS_FOUND)
 	{
 		pathonly(tempsw);

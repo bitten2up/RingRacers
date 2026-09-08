@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by "Lat'"
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by "Lat'"
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -17,6 +17,7 @@
 #include "../s_sound.h"
 #include "../r_main.h"
 #include "../m_random.h"
+#include "../k_hitlag.h"
 
 
 #define BULB_ZTHRUST 96*FRACUNIT
@@ -137,13 +138,20 @@ void Obj_PlayerCloudThink(player_t *player)
 		player->cloudlaunch--;
 
 		if (leveltime % 6 == 0)
-			P_SpawnMobj(mo->x + P_RandomRange(PR_DECORATION, -8, 8)*mapobjectscale, mo->y + P_RandomRange(PR_DECORATION, -8, 8)*mapobjectscale, mo->z, MT_DRIFTDUST);
+		{
+			fixed_t rand_x;
+			fixed_t rand_y;
+
+			// note: determinate random argument eval order
+			rand_y = P_RandomRange(PR_DECORATION, -8, 8);
+			rand_x = P_RandomRange(PR_DECORATION, -8, 8);
+			P_SpawnMobj(mo->x + rand_x*mapobjectscale, mo->y + rand_y*mapobjectscale, mo->z, MT_DRIFTDUST);
+		}
 	}
 
 	if (player->cloud)
 	{
 		player->cloud--;
-		P_InstaThrust(mo, 0, 0);
 		mo->momz = 0;
 		player->fastfall = 0;
 
@@ -157,6 +165,7 @@ void Obj_PlayerCloudThink(player_t *player)
 			player->cloudlaunch = TICRATE;
 
 			P_InstaThrust(mo, mo->cusval, mo->cvmem);
+			K_AddHitLag(mo, 6, false);
 		}
 	}
 }
@@ -170,7 +179,15 @@ void Obj_PlayerBulbThink(player_t *player)
 		player->tuliplaunch--;
 
 		if (leveltime % 2 == 0)
-			P_SpawnMobj(mo->x + P_RandomRange(PR_DECORATION, -8, 8)*mapobjectscale, mo->y + P_RandomRange(PR_DECORATION, -8, 8)*mapobjectscale, mo->z, MT_DRIFTDUST);
+		{
+			fixed_t rand_x;
+			fixed_t rand_y;
+
+			// note: determinate random argument eval order
+			rand_y = P_RandomRange(PR_DECORATION, -8, 8);
+			rand_x = P_RandomRange(PR_DECORATION, -8, 8);
+			P_SpawnMobj(mo->x + rand_x*mapobjectscale, mo->y + rand_y*mapobjectscale, mo->z, MT_DRIFTDUST);
+		}
 	}
 
 	if (player->tulipbuf)
@@ -201,7 +218,7 @@ void Obj_PlayerBulbThink(player_t *player)
 		mo->player->nocontrol = 0;
 		P_InstaThrust(mo, mo->tracer->extravalue2, mo->tracer->extravalue1);
 		mo->momz = FixedMul(mapobjectscale, BULB_ZTHRUST)*P_MobjFlip(mo->tracer);
-		
+
 		mo->flags |= MF_SHOOTABLE;
 		player->tuliplaunch = TICRATE;
 		player->tulipbuf = 8;
@@ -223,7 +240,13 @@ void Obj_CloudTouched(mobj_t *special, mobj_t *toucher)
 
 	for (UINT8 i = 1; i < 6; i++)
 	{
-		mobj_t *spawn = P_SpawnMobj(toucher->x + P_RandomRange(PR_DECORATION, -32, 32)*mapobjectscale, toucher->y + P_RandomRange(PR_DECORATION, -32, 32)*mapobjectscale, toucher->z, MT_DRIFTDUST);
+		fixed_t rand_x;
+		fixed_t rand_y;
+
+		// note: determinate argument eval order
+		rand_y = P_RandomRange(PR_DECORATION, -32, 32);
+		rand_x = P_RandomRange(PR_DECORATION, -32, 32);
+		mobj_t *spawn = P_SpawnMobj(toucher->x + rand_x*mapobjectscale, toucher->y + rand_y*mapobjectscale, toucher->z, MT_DRIFTDUST);
 		spawn->angle = R_PointToAngle2(toucher->x, toucher->y, spawn->x, spawn->y);
 		P_InstaThrust(spawn, spawn->angle, P_RandomRange(PR_DECORATION, 1, 8)*mapobjectscale);
 		P_SetObjectMomZ(spawn, P_RandomRange(PR_DECORATION, 4, 10)<<FRACBITS, false);
@@ -248,7 +271,7 @@ void Obj_BulbTouched(mobj_t *special, mobj_t *toucher)
 	if (toucher->player->tulip || toucher->player->tulipbuf)
 		return;
 
-	if (special && special->target) 
+	if (special && special->target)
 		return; // player already using it
 
 	if (toucher->player->respawn.timer)
@@ -269,7 +292,7 @@ void Obj_BulbTouched(mobj_t *special, mobj_t *toucher)
 	P_MoveOrigin(toucher, special->x, special->y, special->z);
 	toucher->player->nocontrol = 1;
 	P_SetTarget(&toucher->tracer, special);
-	toucher->flags &= ~MF_SHOOTABLE;
+	toucher->flags &= ~(MF_SHOOTABLE|MF_NOGRAVITY);
 	toucher->renderflags |= RF_DONTDRAW;
 	P_SetTarget(&special->target, toucher);
 	special->extravalue1 = spd;

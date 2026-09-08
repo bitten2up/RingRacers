@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -13,13 +13,10 @@
 
 #include <cmath>
 #include <memory>
-#include <optional>
-#include <variant>
 #include <vector>
 
 #include <tcb/span.hpp>
 
-#include "sound_chunk.hpp"
 #include "source.hpp"
 
 namespace srb2::audio

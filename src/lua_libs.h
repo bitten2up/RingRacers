@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2022 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -103,6 +103,30 @@ extern lua_State *gL;
 #define META_ACTIVATOR "ACTIVATOR_T*"
 
 #define META_FOLLOWER "FOLLOWER_T*"
+#define META_ITEMROULETTE "ITEMROULETTE_T"
+#define META_ITEMROULETTE_ITEMLIST "ITEMROULETTE_T.ITEMLIST"
+#define META_WAYPOINT "WAYPOINT_T*"
+
+#define META_SONICLOOPVARS "SONICLOOPVARS_T*"
+#define META_SONICLOOPCAMVARS "SONICLOOPCAMVARS_T*"
+
+#define META_BOTVARS "BOTVARS_T*"
+#define META_BOTCONTROLLER "BOTCONTROLLER_T*"
+
+#define META_SPLASH "T_SPLASH_T*"
+#define META_FOOTSTEP "T_FOOTSTEP_T*"
+#define META_OVERLAY "T_OVERLAY_T*"
+#define META_TERRAIN "TERRAIN_T*"
+
+#define META_POWERUPVARS "POWERUPVARS_T*"
+#define META_ICECUBEVARS "ICECUBEVARS_T*"
+#define META_SKYBOX "SKYBOX_T*"
+
+#define META_CUP "CUPHEADER_T*"
+#define META_GPRANK "GPRANK_T*"
+#define META_GPRANKLEVEL "GPRANK_LEVEL_T*"
+#define META_GPRANKLEVELPERPLAYER "GPRANK_LEVEL_PERPLAYER_T*"
+#define META_ROUNDENTRY "ROUNDENTRY_T*"
 
 boolean luaL_checkboolean(lua_State *L, int narg);
 
@@ -123,6 +147,12 @@ int LUA_PolyObjLib(lua_State *L);
 int LUA_BlockmapLib(lua_State *L);
 int LUA_HudLib(lua_State *L);
 int LUA_FollowerLib(lua_State *L);
+int LUA_ItemRouletteLib(lua_State *L);
+int LUA_BotVarsLib(lua_State *L);
+int LUA_TerrainLib(lua_State *L);
+int LUA_RespawnVarsLib(lua_State *L);
+int LUA_WaypointLib(lua_State *L);
+int LUA_GrandPrixLib(lua_State *L);
 
 #ifdef __cplusplus
 } // extern "C"

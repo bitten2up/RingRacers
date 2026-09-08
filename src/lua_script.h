@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2022 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -116,6 +116,9 @@ void COM_Lua_f(void);
 
 // Music: "No tune" error.
 #define LUA_ErrNoTune(L, tune) luaL_error(L, "tune \"%s\" does not exist", tune)
+
+// Music: "Stereo Mode" error.
+#define LUA_ErrStereo(L, tune) luaL_error(L, "tune \"%s\" cannot be remapped (stereo mode)", tune)
 
 // Deprecation warnings
 // Shows once upon use. Then doesn't show again.

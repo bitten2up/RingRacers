@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,6 +21,26 @@
 #include "r_main.h"
 #include "s_sound.h"
 #include "m_easing.h"
+
+// Use for adding hitlag that should be mostly ignored by impervious players.
+// (Currently only called in power clash, but in the future...?)
+void K_AddHitLagFromCollision(mobj_t *mo, INT32 tics)
+{
+	boolean doAnything = true;
+
+	if (mo->player == NULL || mo->type != MT_PLAYER)
+		doAnything = false;
+	else if (!K_PlayerCanPunt(mo->player))
+		doAnything = false;
+
+	if (!doAnything)
+	{
+		K_AddHitLag(mo, tics, false);
+		return;
+	}
+
+	K_AddHitLag(mo, min(tics, 2), false);
+}
 
 /*--------------------------------------------------
 	void K_AddHitLag(mobj_t *mo, INT32 tics, boolean fromDamage)

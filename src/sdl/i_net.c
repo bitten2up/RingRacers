@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -358,6 +358,7 @@ boolean I_InitNetwork(void)
 	if (M_CheckParm("-server") || dedicated)
 	{
 		server = true;
+		connectedtodedicated = dedicated;
 
 		// If a number of clients (i.e. nodes) is specified, the server will wait for the clients
 		// to connect before starting.

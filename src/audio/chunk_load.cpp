@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -12,13 +12,11 @@
 
 #include <stb_vorbis.h>
 
-#include "../cxxutil.hpp"
 #include "../io/streams.hpp"
 #include "ogg.hpp"
 #include "ogg_player.hpp"
 #include "resample.hpp"
 #include "sound_chunk.hpp"
-#include "sound_effect_player.hpp"
 #include "wav.hpp"
 #include "wav_player.hpp"
 

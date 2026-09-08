@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 //
@@ -157,7 +157,7 @@ void Command_Downloads_f(void);
 boolean fileexist(char *filename, time_t ptime);
 
 // Search a file in the wadpath, return FS_FOUND when found
-filestatus_t findfile(char *filename, const UINT8 *wantedmd5sum,
+filestatus_t findfile(char *filename, const char *suggestedfolder, const UINT8 *wantedmd5sum,
 	boolean completepath);
 filestatus_t checkfilemd5(char *filename, const UINT8 *wantedmd5sum);
 
@@ -166,6 +166,7 @@ size_t nameonlylength(const char *s);
 
 #ifdef HAVE_CURL
 void CURLPrepareFile(const char* url, int dfilenum);
+void CURLAbortFile(void);
 void CURLGetFile(void);
 HTTP_login * CURLGetLogin (const char *url, HTTP_login ***return_prev_next);
 #endif

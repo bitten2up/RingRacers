@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
 // Copyright (C) 1996 by id Software, Inc.
@@ -696,7 +696,7 @@ void R_RenderMaskedSegRange(drawseg_t *drawseg, INT32 x1, INT32 x2)
 	// are not stored per-column with post info in SRB2
 	if (textures[texnum]->holes)
 	{
-		if (textures[texnum]->flip & 2) // vertically flipped?
+		if ((textures[texnum]->flip & 2) || R_ShouldFlipTripWire(ldef)) // vertically flipped?
 		{
 			colfunc_2s = R_DrawFlippedMaskedColumn;
 			lengthcol = textures[texnum]->height;
@@ -706,8 +706,16 @@ void R_RenderMaskedSegRange(drawseg_t *drawseg, INT32 x1, INT32 x2)
 	}
 	else
 	{
-		colfunc_2s = R_Render2sidedMultiPatchColumn; // render multipatch with no holes (no post_t info)
-		lengthcol = textures[texnum]->height;
+		if (R_ShouldFlipTripWire(ldef)) // Check for tripwire flip even for non-holey textures
+		{
+			colfunc_2s = R_DrawFlippedMaskedColumn;
+			lengthcol = textures[texnum]->height;
+		}
+		else
+		{
+			colfunc_2s = R_Render2sidedMultiPatchColumn; // render multipatch with no holes (no post_t info)
+			lengthcol = textures[texnum]->height;
+		}
 	}
 
 	maskedtexturecol = drawseg->maskedtexturecol;
@@ -732,8 +740,7 @@ void R_RenderMaskedSegRange(drawseg_t *drawseg, INT32 x1, INT32 x2)
 template <typename T>
 static constexpr T saturating_add(T x, T y) noexcept
 {
-	INT64 z;
-	z = static_cast<INT64>(x) + static_cast<INT64>(y);
+	INT64 z = static_cast<INT64>(x) + static_cast<INT64>(y);
 	if (z > static_cast<INT64>(std::numeric_limits<T>::max()))
 	{
 		z = static_cast<INT64>(std::numeric_limits<T>::max());
@@ -748,8 +755,7 @@ static constexpr T saturating_add(T x, T y) noexcept
 template <typename T>
 static constexpr T saturating_mul(T x, T y) noexcept
 {
-	INT64 z;
-	z = static_cast<INT64>(x) * static_cast<INT64>(y);
+	INT64 z = static_cast<INT64>(x) * static_cast<INT64>(y);
 	if (z > static_cast<INT64>(std::numeric_limits<T>::max()))
 	{
 		z = static_cast<INT64>(std::numeric_limits<T>::max());

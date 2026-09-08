@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -47,7 +47,7 @@
 --------------------------------------------------*/
 static inline boolean K_ItemButtonWasDown(const player_t *player)
 {
-	return (player->oldcmd.buttons & BT_ATTACK);
+	return !!(player->oldcmd.buttons & BT_ATTACK);
 }
 
 /*--------------------------------------------------
@@ -89,6 +89,7 @@ static boolean K_BotUseItemNearPlayer(const player_t *player, ticcmd_t *cmd, fix
 
 		if (target->mo == NULL || P_MobjWasRemoved(target->mo)
 			|| player == target || target->spectator
+			|| G_SameTeam(player, target)
 			|| target->flashing)
 		{
 			continue;
@@ -144,6 +145,7 @@ static player_t *K_PlayerNearSpot(const player_t *player, fixed_t x, fixed_t y, 
 
 		if (target->mo == NULL || P_MobjWasRemoved(target->mo)
 			|| player == target || target->spectator
+			|| G_SameTeam(player, target)
 			|| target->flashing)
 		{
 			continue;
@@ -222,6 +224,7 @@ static player_t *K_PlayerInCone(const player_t *player, fixed_t radius, UINT16 c
 
 		if (target->mo == NULL || P_MobjWasRemoved(target->mo)
 			|| player == target || target->spectator
+			|| G_SameTeam(player, target)
 			|| target->flashing
 			|| !P_CheckSight(player->mo, target->mo))
 		{
@@ -296,7 +299,7 @@ static boolean K_RivalBotAggression(const player_t *bot, const player_t *target)
 		return false;
 	}
 
-	if (bot->botvars.rival == false && !cv_levelskull.value)
+	if (!(bot->botvars.rival || bot->botvars.foe) && !cv_levelskull.value)
 	{
 		// Not the rival, we aren't self-aware.
 		return false;
@@ -528,7 +531,7 @@ static void K_BotItemSneaker(const player_t *player, ticcmd_t *cmd)
 		|| player->speedboost > (FRACUNIT/8) // Have another type of boost (tethering)
 		|| player->botvars.itemconfirm > 4*TICRATE) // Held onto it for too long
 	{
-		if (player->sneakertimer == 0 && K_ItemButtonWasDown(player) == false)
+		if (player->sneakertimer == 0 && player->weaksneakertimer == 0 && K_ItemButtonWasDown(player) == false)
 		{
 			cmd->buttons |= BT_ATTACK;
 			//player->botvars.itemconfirm = 2*TICRATE;
@@ -564,7 +567,7 @@ static void K_BotItemRocketSneaker(const player_t *player, ticcmd_t *cmd)
 
 	if (player->botvars.itemconfirm > TICRATE)
 	{
-		if (player->sneakertimer == 0 && K_ItemButtonWasDown(player) == false)
+		if (player->sneakertimer == 0 && player->weaksneakertimer == 0 && K_ItemButtonWasDown(player) == false)
 		{
 			cmd->buttons |= BT_ATTACK;
 			//player->botvars.itemconfirm = 0;
@@ -947,7 +950,7 @@ static void K_BotItemOrbinaut(const player_t *player, ticcmd_t *cmd)
 		cmd->buttons |= BT_LOOKBACK;
 	}
 
-	if (player->botvars.itemconfirm > 25*TICRATE)
+	if (player->botvars.itemconfirm > 10*TICRATE)
 	{
 		K_BotGenericPressItem(player, cmd, throwdir);
 	}
@@ -1142,28 +1145,31 @@ static void K_BotItemJawz(const player_t *player, ticcmd_t *cmd)
 		&& players[lastTarg].mo != NULL
 		&& P_MobjWasRemoved(players[lastTarg].mo) == false)
 	{
-		mobj_t *targMo = players[lastTarg].mo;
-		mobj_t *mobj = NULL, *next = NULL;
-		boolean targettedAlready = false;
-
 		target = &players[lastTarg];
 
-		// Make sure no other Jawz are targetting this player.
-		for (mobj = trackercap; mobj; mobj = next)
+		if (G_SameTeam(player, target) == false)
 		{
-			next = mobj->itnext;
+			mobj_t *targMo = players[lastTarg].mo;
+			mobj_t *mobj = NULL, *next = NULL;
+			boolean targettedAlready = false;
 
-			if (mobj->type == MT_JAWZ && mobj->target == targMo)
+			// Make sure no other Jawz are targetting this player.
+			for (mobj = trackercap; mobj; mobj = next)
 			{
-				targettedAlready = true;
-				break;
-			}
-		}
+				next = mobj->itnext;
 
-		if (targettedAlready == false)
-		{
-			K_ItemConfirmForTarget(player, cmd, target, player->botvars.difficulty * snipeMul);
-			throwdir = 1;
+				if (mobj->type == MT_JAWZ && mobj->target == targMo)
+				{
+					targettedAlready = true;
+					break;
+				}
+			}
+
+			if (targettedAlready == false)
+			{
+				K_ItemConfirmForTarget(player, cmd, target, player->botvars.difficulty * snipeMul);
+				throwdir = 1;
+			}
 		}
 	}
 
@@ -1172,7 +1178,7 @@ static void K_BotItemJawz(const player_t *player, ticcmd_t *cmd)
 		cmd->buttons |= BT_LOOKBACK;
 	}
 
-	if (player->botvars.itemconfirm > 25*TICRATE)
+	if (player->botvars.itemconfirm > 10*TICRATE)
 	{
 		K_BotGenericPressItem(player, cmd, throwdir);
 	}
@@ -1195,7 +1201,7 @@ static void K_BotItemLightning(const player_t *player, ticcmd_t *cmd)
 	ZoneScoped;
 
 	fixed_t radius = 192 * player->mo->scale;
-	radius = Easing_Linear(FRACUNIT * player->botvars.difficulty / MAXBOTDIFFICULTY, 2*radius, radius);
+	radius = Easing_Linear(FRACUNIT * player->botvars.difficulty / MAXBOTDIFFICULTY, 2*radius, 4*radius/3);
 
 	if (K_BotUseItemNearPlayer(player, cmd, radius) == false)
 	{
@@ -1228,6 +1234,9 @@ static void K_BotItemBubble(const player_t *player, ticcmd_t *cmd)
 
 	boolean hold = false;
 
+	if (player->botvars.itemconfirm > 10*TICRATE)
+		hold = true;
+
 	if (player->bubbleblowup <= 0)
 	{
 		UINT8 i;
@@ -1237,7 +1246,7 @@ static void K_BotItemBubble(const player_t *player, ticcmd_t *cmd)
 		if (player->bubblecool <= 0)
 		{
 			fixed_t radius = 192 * player->mo->scale;
-			radius = Easing_Linear(FRACUNIT * player->botvars.difficulty / MAXBOTDIFFICULTY, 2*radius, radius);
+			radius = Easing_Linear(FRACUNIT * player->botvars.difficulty / MAXBOTDIFFICULTY, 2*radius, 4*radius/3);
 
 			for (i = 0; i < MAXPLAYERS; i++)
 			{
@@ -1253,6 +1262,7 @@ static void K_BotItemBubble(const player_t *player, ticcmd_t *cmd)
 
 				if (target->mo == NULL || P_MobjWasRemoved(target->mo)
 					|| player == target || target->spectator
+					|| G_SameTeam(player, target)
 					|| target->flashing)
 				{
 					continue;
@@ -1433,7 +1443,11 @@ static void K_BotItemRings(const player_t *player, ticcmd_t *cmd)
 {
 	ZoneScoped;
 
-	INT32 saferingsval = 16 - K_GetKartRingPower(player, false);
+	INT32 overdrivepreference = player->amps/3;
+	if (player->position <= 1)
+		overdrivepreference = 0;
+
+	INT32 saferingsval = 16 - K_GetKartRingPower(player, false) - overdrivepreference;
 
 	if (leveltime < starttime)
 	{
@@ -1524,6 +1538,7 @@ static void K_BotItemInstashield(const player_t *player, ticcmd_t *cmd)
 		if (P_MobjWasRemoved(target->mo) == true
 			|| player == target
 			|| target->spectator == true
+			|| G_SameTeam(player, target) == true
 			|| target->flashing != 0)
 		{
 			continue;
@@ -1593,7 +1608,7 @@ static void K_BotItemIceCube(const player_t *player, ticcmd_t *cmd)
 		return;
 	}
 
-	if (player->sneakertimer)
+	if (player->sneakertimer || player->weaksneakertimer)
 	{
 		return;
 	}
@@ -1851,7 +1866,7 @@ static void K_UpdateBotGameplayVarsItemUsageMash(player_t *player)
 	else
 	{
 		botItemPriority_e currentPriority = K_GetBotItemPriority(
-			static_cast<kartitems_t>( player->itemRoulette.itemList[ player->itemRoulette.index ] )
+			static_cast<kartitems_t>( player->itemRoulette.itemList.items[ player->itemRoulette.index ] )
 		);
 
 		if (player->botvars.roulettePriority == currentPriority)
@@ -1865,7 +1880,7 @@ static void K_UpdateBotGameplayVarsItemUsageMash(player_t *player)
 			// reduce priority until we get to a valid one.
 			player->botvars.rouletteTimeout++;
 
-			if (player->botvars.rouletteTimeout > player->itemRoulette.itemListLen * player->itemRoulette.speed)
+			if (player->botvars.rouletteTimeout > player->itemRoulette.itemList.len * player->itemRoulette.speed)
 			{
 				player->botvars.roulettePriority--;
 				player->botvars.rouletteTimeout = 0;
@@ -1983,9 +1998,9 @@ void K_BotPickItemPriority(player_t *player)
 	player->botvars.rouletteTimeout = 0;
 
 	// Check for items that are extremely high priority.
-	for (i = 0; i < player->itemRoulette.itemListLen; i++)
+	for (i = 0; i < player->itemRoulette.itemList.len; i++)
 	{
-		botItemPriority_e priority = K_GetBotItemPriority( static_cast<kartitems_t>( player->itemRoulette.itemList[i] ) );
+		botItemPriority_e priority = K_GetBotItemPriority( static_cast<kartitems_t>( player->itemRoulette.itemList.items[i] ) );
 
 		if (priority < BOT_ITEM_PR__OVERRIDES)
 		{

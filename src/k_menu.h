@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2000 by DooM Legacy Team.
@@ -140,6 +140,7 @@ typedef enum
 	MBF_SOUNDLESS		 	= 1<<1, // do not play base menu sounds
 	MBF_NOLOOPENTRIES		= 1<<2, // do not loop M_NextOpt/M_PrevOpt
 	MBF_DRAWBGWHILEPLAYING	= 1<<3, // run backroutine() outside of GS_MENU
+	MBF_CANTRESTORE			= 1<<4, // Do not use in restoreMenu
 } menubehaviourflags_t;
 
 struct menuitem_t
@@ -221,7 +222,7 @@ typedef enum
 	quitkart
 } main_e;
 
-extern menuitem_t MAIN_Goner[];
+extern menu_t MAIN_GonerAccessibilityDef;
 extern menu_t MAIN_GonerDef;
 
 void M_GonerTick(void);
@@ -229,9 +230,12 @@ void M_GonerBGTick(void);
 void M_GonerBGImplyPassageOfTime(void);
 void M_DrawGonerBack(void);
 void M_GonerProfile(INT32 choice);
+void M_GonerChoice(INT32 choice);
 void M_GonerTutorial(INT32 choice);
+void M_GonerPlayground(INT32 choice);
 void M_GonerResetLooking(int type);
 void M_GonerCheckLooking(void);
+void M_GonerResetText(boolean completely);
 void M_GonerGDQ(boolean opinion);
 boolean M_GonerMusicPlayable(void);
 
@@ -346,6 +350,7 @@ typedef enum
 	mopt_profiles = 0,
 	mopt_video,
 	mopt_sound,
+	mopt_voice,
 	mopt_hud,
 	mopt_gameplay,
 	mopt_server,
@@ -385,6 +390,7 @@ typedef enum
 	sopt_volume,
 	sopt_sfxvolume,
 	sopt_musicvolume,
+	sopt_voicevolume,
 	sopt_spacer1,
 	sopt_preferences,
 	sopt_chatnotifs,
@@ -462,11 +468,17 @@ extern menu_t OPTIONS_VideoDef;
 extern menuitem_t OPTIONS_VideoModes[];
 extern menu_t OPTIONS_VideoModesDef;
 
+extern menuitem_t OPTIONS_VideoColorProfile[];
+extern menu_t OPTIONS_VideoColorProfileDef;
+
 extern menuitem_t OPTIONS_VideoAdvanced[];
 extern menu_t OPTIONS_VideoAdvancedDef;
 
 extern menuitem_t OPTIONS_Sound[];
 extern menu_t OPTIONS_SoundDef;
+
+extern menuitem_t OPTIONS_Voice[];
+extern menu_t OPTIONS_VoiceDef;
 
 extern menuitem_t OPTIONS_HUD[];
 extern menu_t OPTIONS_HUDDef;
@@ -477,15 +489,17 @@ extern menu_t OPTIONS_HUDOnlineDef;
 typedef enum
 {
 	gopt_spacer0 = 0,
-	gopt_gamespeed,
+	gopt_teamplay,
 	gopt_frantic,
+	gopt_spacer1,
+	gopt_gamespeed,
 	gopt_encore,
 	gopt_exitcountdown,
-	gopt_spacer1,
+	gopt_spacer2,
 	gopt_timelimit,
 	gopt_pointlimit,
 	gopt_startingbumpers,
-	gopt_spacer2,
+	gopt_spacer3,
 	gopt_itemtoggles
 } gopt_e;
 
@@ -587,10 +601,10 @@ extern menu_t PAUSE_PlaybackMenuDef;
 typedef enum
 {
 	playback_hide,
+	playback_restart,
 	playback_rewind,
 	playback_pause,
 	playback_fastforward,
-	playback_backframe,
 	playback_resume,
 	playback_advanceframe,
 	playback_viewcount,
@@ -647,7 +661,7 @@ typedef enum
 	MA_NO
 } manswer_e;
 
-#define MAXMENUMESSAGE 256
+#define MAXMENUMESSAGE 448
 #define MENUMESSAGECLOSE 2
 extern struct menumessage_s
 {
@@ -728,11 +742,13 @@ extern consvar_t cv_showfocuslost;
 extern consvar_t cv_chooseskin, cv_serversort, cv_menujam_update, cv_menujam;
 extern consvar_t cv_autorecord;
 
+extern consvar_t cv_racesplits, cv_attacksplits;
+
 void M_SetMenuDelay(UINT8 i);
 
 void M_SortServerList(void);
 
-void M_UpdateMenuCMD(UINT8 i, boolean bailrequired);
+void M_UpdateMenuCMD(UINT8 i, boolean bailrequired, boolean chat_open);
 boolean M_Responder(event_t *ev);
 boolean M_MenuButtonPressed(UINT8 pid, UINT32 bt);
 boolean M_MenuButtonHeld(UINT8 pid, UINT32 bt);
@@ -753,6 +769,7 @@ void M_StartControlPanel(void);
 void M_ValidateRestoreMenu(void);
 menu_t *M_SpecificMenuRestore(menu_t *torestore);
 void M_ClearMenus(boolean callexitmenufunc);
+void M_ClearMenusNoTitle(boolean callexitmenufunc);
 void M_SelectableClearMenus(INT32 choice);
 void M_SetupNextMenu(menu_t *menudef, boolean nofade);
 void M_GoBack(INT32 choice);
@@ -781,7 +798,7 @@ UINT16 M_GetColorAfter(setup_player_colors_t *colors, UINT16 value, INT32 amount
 
 extern struct setup_chargrid_s {
 	INT16 skinlist[MAXCLONES];
-	UINT8 numskins;
+	UINT16 numskins;
 } setup_chargrid[9][9];
 
 extern UINT8 setup_followercategories[MAXFOLLOWERCATEGORIES][2];
@@ -917,6 +934,7 @@ typedef struct levellist_s {
 	UINT8 guessgt;
 	levelsearch_t levelsearch;
 	boolean netgame;	// Start the game in an actual server
+	boolean canqueue;
 	menu_t *backMenu;
 } levellist_t;
 
@@ -938,8 +956,14 @@ void M_CupSelectTick(void);
 void M_LevelSelectHandler(INT32 choice);
 void M_LevelSelectTick(void);
 
+INT16 M_LevelFromScrolledList(INT16 add);
+void M_MenuToLevelPreamble(UINT8 ssplayers, boolean nowipe);
 void M_LevelSelected(INT16 add, boolean menuupdate);
 boolean M_LevelSelectCupSwitch(boolean next, boolean skipones);
+
+void M_LevelConfirmHandler(void);
+void M_ClearQueueHandler(void);
+void M_CupQueueHandler(cupheader_t *cup);
 
 // dummy consvars for GP & match race setup
 extern consvar_t cv_dummygpdifficulty;
@@ -1124,6 +1148,8 @@ extern consvar_t cv_dummyprofileplayername;
 extern consvar_t cv_dummyprofilekickstart;
 extern consvar_t cv_dummyprofileautoroulette;
 extern consvar_t cv_dummyprofilelitesteer;
+extern consvar_t cv_dummyprofilestrictfastfall;
+extern consvar_t cv_dummyprofiledescriptiveinput;
 extern consvar_t cv_dummyprofileautoring;
 extern consvar_t cv_dummyprofilerumble;
 extern consvar_t cv_dummyprofilefov;
@@ -1145,6 +1171,7 @@ void M_RefreshAdvancedVideoOptions(void);
 void M_HandleItemToggles(INT32 choice);	// For item toggling
 void M_EraseData(INT32 choice);	// For data erasing
 void M_CheckProfileData(INT32 choice);	// check if we have profiles.
+void M_ColorProfileDefault(INT32 choice); // For the reset button in the color profile menu.
 
 // profile selection menu
 void M_ProfileSelectInit(INT32 choice);
@@ -1356,6 +1383,7 @@ void M_DrawPlaybackMenu(void);
 
 // Options menus:
 void M_DrawOptionsCogs(void);
+void M_DrawOptionsColorProfile(void);
 void M_DrawOptionsMovingButton(void);	// for sick transitions...
 void M_DrawOptions(void);
 void M_DrawGenericOptions(void);
@@ -1413,6 +1441,8 @@ typedef enum
 #define CHAOHOLD_END (3)
 #define CHAOHOLD_PADDING (CHAOHOLD_BEGIN + CHAOHOLD_END)
 
+#define EASEOFFHORN 50
+
 extern struct timeattackmenu_s {
 
 	tic_t ticker;		// How long the menu's been open for
@@ -1443,11 +1473,16 @@ extern struct challengesmenu_s {
 	boolean chaokeyadd, keywasadded;
 	UINT8 chaokeyhold;
 
+	UINT16 tutorialfound;
+
 	boolean requestflip;
+	UINT16 nowplayingtile;
 
 	UINT16 unlockcount[CMC_MAX];
 
 	UINT8 fade;
+
+	UINT8 hornposting;
 
 	boolean cache_secondrowlocked;
 
@@ -1478,6 +1513,7 @@ extern struct statisticsmenu_s {
 	INT32 gotmedals;
 	INT32 nummedals;
 	INT32 numextramedals;
+	INT32 numcanbonus;
 	UINT32 statgridplayed[9][9];
 	INT32 maxscroll;
 	UINT16 *maplist;
@@ -1487,7 +1523,7 @@ void M_Statistics(INT32 choice);
 void M_DrawStatistics(void);
 boolean M_StatisticsInputs(INT32 ch);
 
-void M_DrawCharacterIconAndEngine(INT32 x, INT32 y, UINT8 skin, UINT8 *colormap, UINT8 baseskin);
+void M_DrawCharacterIconAndEngine(INT32 x, INT32 y, UINT16 skin, UINT8 *colormap, UINT16 baseskin);
 fixed_t M_DrawCupWinData(INT32 rankx, INT32 ranky, cupheader_t *cup, UINT8 difficulty, boolean flash, boolean statsmode);
 
 #define MAXWRONGPLAYER MAXSPLITSCREENPLAYERS
@@ -1498,7 +1534,7 @@ extern struct wrongwarp_s {
 	tic_t delaytowrongplayer;
 	struct wrongplayer_s
 	{
-		UINT8 skin;
+		UINT16 skin;
 		INT16 across;
 		boolean spinout;
 	} wrongplayers[MAXWRONGPLAYER];
@@ -1598,6 +1634,30 @@ const char *M_GetDiscordName(discordRequest_t *r);
 
 #ifdef __cplusplus
 } // extern "C"
+#endif
+
+#ifdef __cplusplus
+namespace srb2
+{
+constexpr inline itemaction_t itemaction(menu_t* menu)
+{
+	itemaction_t ret {};
+	ret.submenu = menu;
+	return ret;
+}
+constexpr inline itemaction_t itemaction(consvar_t* consvar)
+{
+	itemaction_t ret {};
+	ret.cvar = consvar;
+	return ret;
+}
+constexpr inline itemaction_t itemaction(void (*routine)(INT32 choice))
+{
+	itemaction_t ret {};
+	ret.routine = routine;
+	return ret;
+}
+}
 #endif
 
 #endif //__K_MENU__

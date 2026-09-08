@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by James Robert Roman
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by James Robert Roman
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -60,7 +60,10 @@ extern endcam_t g_endcam;
 void K_CommitEndCamera(void);
 
 // Automatically set up a cool camera in one-shot.
-void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadius, tic_t panDuration, fixed_t panSpeed);
+void K_StartRoundWinCamera(mobj_t *origin, angle_t focusAngle, fixed_t finalRadius, tic_t panDuration, fixed_t panSpeed, tic_t swirlDuration);
+
+// Stop the end camera
+void K_StopRoundWinCamera(void);
 
 /// ...
 

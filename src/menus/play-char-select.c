@@ -1,9 +1,9 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by "Lat'".
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by "Lat'".
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Kart Krew.
 
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -235,12 +235,12 @@ static void M_SetupProfileGridPos(setup_player_t *p)
 
 	if (!R_SkinUsable(g_localplayers[0], i, false))
 	{
-		i = GetSkinNumClosestToStats(skins[i].kartspeed, skins[i].kartweight, skins[i].flags, false);
+		i = GetSkinNumClosestToStats(skins[i]->kartspeed, skins[i]->kartweight, skins[i]->flags, false);
 	}
 
 	// Now position the grid for skin
-	p->gridx = skins[i].kartspeed-1;
-	p->gridy = skins[i].kartweight-1;
+	p->gridx = skins[i]->kartspeed-1;
+	p->gridy = skins[i]->kartweight-1;
 
 	// Now this put our cursor on the good alt
 	while (alt < setup_chargrid[p->gridx][p->gridy].numskins && setup_chargrid[p->gridx][p->gridy].skinlist[alt] != i)
@@ -253,7 +253,7 @@ static void M_SetupProfileGridPos(setup_player_t *p)
 	{
 		p->color = SKINCOLOR_NONE;
 	}
-		
+
 }
 
 static void M_SetupMidGameGridPos(setup_player_t *p, UINT8 num)
@@ -273,8 +273,8 @@ static void M_SetupMidGameGridPos(setup_player_t *p, UINT8 num)
 		p->followern = -1;
 
 	// Now position the grid for skin
-	p->gridx = skins[i].kartspeed-1;
-	p->gridy = skins[i].kartweight-1;
+	p->gridx = skins[i]->kartspeed-1;
+	p->gridy = skins[i]->kartweight-1;
 
 	// Now this put our cursor on the good alt
 	while (alt < setup_chargrid[p->gridx][p->gridy].numskins && setup_chargrid[p->gridx][p->gridy].skinlist[alt] != i)
@@ -288,7 +288,7 @@ static void M_SetupMidGameGridPos(setup_player_t *p, UINT8 num)
 
 void M_CharacterSelectInit(void)
 {
-	UINT8 i, j;
+	UINT16 i, j;
 	setup_maxpage = 0;
 
 	memset(setup_chargrid, -1, sizeof(setup_chargrid));
@@ -304,51 +304,10 @@ void M_CharacterSelectInit(void)
 	memset(setup_explosions, 0, sizeof(setup_explosions));
 	setup_animcounter = 0;
 
-	for (i = 0; i < MAXSPLITSCREENPLAYERS; i++)
-	{
-		// Default to no follower / match colour.
-		setup_player[i].followern = -1;
-		setup_player[i].followercategory = -1;
-		setup_player[i].followercolor = SKINCOLOR_NONE;
-
-		setup_player[i].profilen_slide.start = 0;
-		setup_player[i].profilen_slide.dist = 0;
-
-		// If we're on prpfile select, skip straight to CSSTEP_CHARS
-		// do the same if we're midgame, but make sure to consider splitscreen properly.
-		if (optionsmenu.profile && i == 0)
-		{
-			setup_player[i].profilen = optionsmenu.profilen;
-			//PR_ApplyProfileLight(setup_player[i].profilen, 0);
-			M_SetupProfileGridPos(&setup_player[i]);
-			setup_player[i].mdepth = CSSTEP_CHARS;
-		}
-		else
-		{
-			// Set default selected profile to the last used profile for each player:
-			// (Make sure we don't overshoot it somehow if we deleted profiles or whatnot)
-			setup_player[i].profilen = min(cv_lastprofile[i].value, PR_GetNumProfiles());
-
-			if (gamestate != GS_MENU && i <= splitscreen)
-			{
-				M_SetupMidGameGridPos(&setup_player[i], i);
-				setup_player[i].mdepth = CSSTEP_CHARS;
-			}
-			else
-			{
-				// Un-set devices
-				G_SetDeviceForPlayer(i, -1);
-#ifdef CHARSELECT_DEVICEDEBUG
-				CONS_Printf("M_CharacterSelectInit: Device for %d set to %d\n", i, -1);
-#endif
-			}
-		}
-	}
-
 	for (i = 0; i < numskins; i++)
 	{
-		UINT8 x = skins[i].kartspeed-1;
-		UINT8 y = skins[i].kartweight-1;
+		UINT8 x = skins[i]->kartspeed-1;
+		UINT8 y = skins[i]->kartweight-1;
 
 		if (!R_SkinUsable(g_localplayers[0], i, false))
 			continue;
@@ -391,6 +350,47 @@ void M_CharacterSelectInit(void)
 	}
 
 	setup_page = 0;
+
+	for (i = 0; i < MAXSPLITSCREENPLAYERS; i++)
+	{
+		// Default to no follower / match colour.
+		setup_player[i].followern = -1;
+		setup_player[i].followercategory = -1;
+		setup_player[i].followercolor = SKINCOLOR_NONE;
+
+		setup_player[i].profilen_slide.start = 0;
+		setup_player[i].profilen_slide.dist = 0;
+
+		// If we're on prpfile select, skip straight to CSSTEP_CHARS
+		// do the same if we're midgame, but make sure to consider splitscreen properly.
+		if (optionsmenu.profile && i == 0)
+		{
+			setup_player[i].profilen = optionsmenu.profilen;
+			//PR_ApplyProfileLight(setup_player[i].profilen, 0);
+			M_SetupProfileGridPos(&setup_player[i]);
+			setup_player[i].mdepth = CSSTEP_CHARS;
+		}
+		else
+		{
+			// Set default selected profile to the last used profile for each player:
+			// (Make sure we don't overshoot it somehow if we deleted profiles or whatnot)
+			setup_player[i].profilen = min(cv_lastprofile[i].value, PR_GetNumProfiles());
+
+			if (gamestate != GS_MENU && i <= splitscreen)
+			{
+				M_SetupMidGameGridPos(&setup_player[i], i);
+				setup_player[i].mdepth = CSSTEP_CHARS;
+			}
+			else
+			{
+				// Un-set devices
+				G_SetDeviceForPlayer(i, -1);
+#ifdef CHARSELECT_DEVICEDEBUG
+				CONS_Printf("M_CharacterSelectInit: Device for %d set to %d\n", i, -1);
+#endif
+			}
+		}
+	}
 }
 
 
@@ -406,6 +406,8 @@ void M_CharacterSelect(INT32 choice)
 // Gets the selected follower's state for a given setup player.
 static void M_GetFollowerState(setup_player_t *p)
 {
+	if (p->followern < 0 || p->followern >= numfollowers)
+		return;
 
 	p->follower_state = &states[followers[p->followern].followstate];
 
@@ -753,6 +755,20 @@ static void M_HandleBackToChars(setup_player_t *p)
 static boolean M_HandleBeginningColors(setup_player_t *p)
 {
 	p->mdepth = CSSTEP_COLORS;
+
+	if (Playing() && G_GametypeHasTeams())
+	{
+		size_t pnum = (p - setup_player);
+		if (pnum <= splitscreen)
+		{
+			if (players[g_localplayers[pnum]].team != TEAM_UNASSIGNED)
+			{
+				p->color = g_teaminfo[players[g_localplayers[pnum]].team].color;
+				return false;
+			}
+		}
+	}
+
 	M_NewPlayerColors(p);
 	if (p->colors.listLen != 1)
 		return true;
@@ -763,7 +779,7 @@ static boolean M_HandleBeginningColors(setup_player_t *p)
 
 static void M_HandleBeginningFollowers(setup_player_t *p)
 {
-	if (setup_numfollowercategories == 0)
+	if (horngoner || setup_numfollowercategories == 0)
 	{
 		p->followern = -1;
 		M_HandlePlayerFinalise(p);
@@ -778,7 +794,7 @@ static void M_HandleBeginningFollowers(setup_player_t *p)
 static void M_HandleBeginningColorsOrFollowers(setup_player_t *p)
 {
 	if (p->skin != -1)
-		S_StartSound(NULL, skins[p->skin].soundsid[S_sfx[sfx_kattk1].skinsound]);
+		S_StartSound(NULL, skins[p->skin]->soundsid[S_sfx[sfx_kattk1].skinsound]);
 	if (M_HandleBeginningColors(p))
 		S_StartSound(NULL, sfx_s3k63);
 	else
@@ -851,8 +867,8 @@ static boolean M_HandleCharacterGrid(setup_player_t *p, UINT8 num)
 	{
 		if (forceskin)
 		{
-			if ((p->gridx != skins[cv_forceskin.value].kartspeed-1)
-				|| (p->gridy != skins[cv_forceskin.value].kartweight-1))
+			if ((p->gridx != skins[cv_forceskin.value]->kartspeed-1)
+				|| (p->gridy != skins[cv_forceskin.value]->kartweight-1))
 			{
 				S_StartSound(NULL, sfx_s3k7b); //sfx_s3kb2
 			}
@@ -1003,7 +1019,10 @@ static void M_HandleColorRotate(setup_player_t *p, UINT8 num)
 	{
 		if (p->skin >= 0)
 		{
-			p->color = SKINCOLOR_NONE;
+			if (p->color == SKINCOLOR_NONE)
+				p->color = PR_GetProfile(p->profilen)->color;
+			else
+				p->color = SKINCOLOR_NONE;
 			p->rotate = CSROTATETICS;
 			p->hitlag = true;
 			S_StartSound(NULL, sfx_s3k7b); //sfx_s3kc3s
@@ -1236,8 +1255,11 @@ static void M_HandleFollowerColorRotate(setup_player_t *p, UINT8 num)
 	}
 	else if (M_MenuExtraPressed(num))
 	{
+		UINT16 profile_followercolor = PR_GetProfile(p->profilen)->followercolor;
 		if (p->followercolor == FOLLOWERCOLOR_MATCH)
 			p->followercolor = FOLLOWERCOLOR_OPPOSITE;
+		else if (p->followercolor == FOLLOWERCOLOR_OPPOSITE && profile_followercolor != FOLLOWERCOLOR_OPPOSITE && profile_followercolor != FOLLOWERCOLOR_MATCH)
+			p->followercolor = profile_followercolor;
 		else if (p->followercolor == SKINCOLOR_NONE)
 			p->followercolor = FOLLOWERCOLOR_MATCH;
 		else
@@ -1332,8 +1354,8 @@ boolean M_CharacterSelectHandler(INT32 choice)
 		// Just makes it easier to access later
 		if (forceskin)
 		{
-			if (p->gridx != skins[cv_forceskin.value].kartspeed-1
-				|| p->gridy != skins[cv_forceskin.value].kartweight-1)
+			if (p->gridx != skins[cv_forceskin.value]->kartspeed-1
+				|| p->gridy != skins[cv_forceskin.value]->kartweight-1)
 				p->skin = -1;
 			else
 				p->skin = cv_forceskin.value;
@@ -1378,7 +1400,9 @@ static void M_MPConfirmCharacterSelection(void)
 		CV_StealthSetValue(&cv_playercolor[i], col);
 
 		// follower
-		if (setup_player[i].followern < 0)
+		if (horngoner)
+			;
+		else if (setup_player[i].followern < 0)
 			CV_StealthSet(&cv_follower[i], "None");
 		else
 			CV_StealthSet(&cv_follower[i], followers[setup_player[i].followern].name);
@@ -1386,7 +1410,7 @@ static void M_MPConfirmCharacterSelection(void)
 		// finally, call the skin[x] console command.
 		// This will call SendNameAndColor which will synch everything we sent here and apply the changes!
 
-		CV_StealthSet(&cv_skin[i], skins[setup_player[i].skin].name);
+		CV_StealthSet(&cv_skin[i], skins[setup_player[i].skin]->name);
 
 		// ...actually, let's do this last - Skin_OnChange has some return-early occasions
 		// follower color
@@ -1440,12 +1464,15 @@ void M_CharacterSelectTick(void)
 			if (optionsmenu.profile)
 			{
 				// save player
-				strcpy(optionsmenu.profile->skinname, skins[setup_player[0].skin].name);
+				strcpy(optionsmenu.profile->skinname, skins[setup_player[0].skin]->name);
 				optionsmenu.profile->color = setup_player[0].color;
 
-				// save follower
-				strcpy(optionsmenu.profile->follower, followers[setup_player[0].followern].name);
-				optionsmenu.profile->followercolor = setup_player[0].followercolor;
+				if (!horngoner) // so you don't lose your choice after annoying the game
+				{
+					// save follower
+					strcpy(optionsmenu.profile->follower, followers[setup_player[0].followern].name);
+					optionsmenu.profile->followercolor = setup_player[0].followercolor;
+				}
 
 				// reset setup_player
 				memset(setup_player, 0, sizeof(setup_player));
@@ -1458,10 +1485,12 @@ void M_CharacterSelectTick(void)
 			{
 				for (i = 0; i < setup_numplayers; i++)
 				{
-					CV_StealthSet(&cv_skin[i], skins[setup_player[i].skin].name);
+					CV_StealthSet(&cv_skin[i], skins[setup_player[i].skin]->name);
 					CV_StealthSetValue(&cv_playercolor[i], setup_player[i].color);
 
-					if (setup_player[i].followern < 0)
+					if (horngoner)
+						;
+					else if (setup_player[i].followern < 0)
 						CV_StealthSet(&cv_follower[i], "None");
 					else
 						CV_StealthSet(&cv_follower[i], followers[setup_player[i].followern].name);

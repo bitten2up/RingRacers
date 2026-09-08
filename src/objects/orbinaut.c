@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -190,6 +190,9 @@ boolean Obj_OrbinautJawzCollide(mobj_t *t1, mobj_t *t2)
 		return true;
 	}
 
+	if (K_TryPickMeUp(t1, t2, false))
+		return true;
+
 	if (t1->type == MT_GARDENTOP)
 	{
 		tumbleitem = true;
@@ -212,22 +215,13 @@ boolean Obj_OrbinautJawzCollide(mobj_t *t1, mobj_t *t2)
 		else
 		{
 			// Player Damage
-			if ((t1->type == MT_ORBINAUT_SHIELD || t1->type == MT_JAWZ_SHIELD)
-				&& !t2->player->invincibilitytimer && !K_IsBigger(t2, t1)) // UGH. Stumble ignores invinc. Fix this damage type someday.
-			{
-				// Same hack as Instawhip!
-				// If you do this a third time, please make it a part of the damage system.
-				//                                    ^ remove all of P_DamageMobj and start over
-				P_PlayRinglossSound(t2);
-				P_PlayerRingBurst(t2->player, 5);
-				P_DamageMobj(t2, t1, t1->target, 1, DMG_WOMBO | DMG_WHUMBLE);
-			}
-			else
-			{
-				P_DamageMobj(t2, t1, t1->target, 1, DMG_WOMBO |
-					(tumbleitem ? DMG_TUMBLE : DMG_WIPEOUT));
-			}
-			K_KartBouncing(t2, t1);
+			P_DamageMobj(t2, t1, t1->target, 1, DMG_WOMBO |
+				(tumbleitem ? DMG_TUMBLE : DMG_WIPEOUT));
+
+			if (tumbleitem || !t2->player->tripwireLeniency)
+				if ((gametyperules & GTR_SPHERES) || (t1->type != MT_ORBINAUT_SHIELD && t1->type != MT_JAWZ_SHIELD))
+					K_KartBouncing(t2, t1);
+
 			S_StartSound(t2, sfx_s3k7b);
 		}
 
@@ -322,7 +316,7 @@ boolean Obj_OrbinautJawzCollide(mobj_t *t1, mobj_t *t2)
 	return true;
 }
 
-void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
+void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir)
 {
 	orbinaut_flags(th) = 0;
 
@@ -331,10 +325,9 @@ void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
 	{
 		th->color = orbinaut_owner(th)->player->skincolor;
 
-		const mobj_t *owner = orbinaut_owner(th);
-		const ffloor_t *rover = P_IsObjectFlipped(owner) ? owner->ceilingrover : owner->floorrover;
+		const boolean ownerwaterrun = K_WaterRun(orbinaut_owner(th));
 
-		if (dir != -1 && rover && (rover->fofflags & FOF_SWIMMABLE))
+		if (dir >= 0 && ownerwaterrun)
 		{
 			// The owner can run on water, so we should too!
 			orbinaut_flags(th) |= ORBI_WATERSKI;
@@ -350,7 +343,7 @@ void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
 
 	orbinaut_flags(th) |= ORBI_TRAIL;
 
-	if (dir == -1)
+	if (dir < 0)
 	{
 		// Thrown backwards, init orbiting in place
 		orbinaut_turn(th) = ORBINAUT_MAXTURN / ORBINAUT_TURNLERP;
@@ -361,21 +354,19 @@ void Obj_OrbinautThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
 	}
 }
 
-void Obj_GachaBomThrown(mobj_t *th, fixed_t finalSpeed, SINT8 dir)
+void Obj_GachaBomThrown(mobj_t *th, fixed_t finalSpeed, fixed_t dir)
 {
 	Obj_OrbinautThrown(th, finalSpeed, dir);
 
 	orbinaut_flags(th) &= ~(ORBI_TRAIL);
 
-	switch (dir)
+	if (dir < 0)
 	{
-		case -1:
-			orbinaut_flags(th) |= ORBI_SPIN;
-			break;
-
-		case 1:
-			orbinaut_flags(th) |= ORBI_TOSSED;
-			break;
+		orbinaut_flags(th) |= ORBI_SPIN;
+	}
+	else if (dir > 0)
+	{
+		orbinaut_flags(th) |= ORBI_TOSSED;
 	}
 }
 

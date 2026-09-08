@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -93,7 +93,7 @@ static int skin_get(lua_State *L)
 	case skin_kartweight:
 		lua_pushinteger(L, skin->kartweight);
 		break;
-	// 
+	//
 	case skin_followitem:
 		lua_pushinteger(L, skin->followitem);
 		break;
@@ -113,8 +113,13 @@ static int skin_get(lua_State *L)
 		lua_pushinteger(L, skin->highresscale);
 		break;
 	case skin_rivals:
-		// This would be pretty cool to push
-		return UNIMPLEMENTED;
+		lua_createtable(L, SKINRIVALS, 0);
+		for (size_t i = 0; i < SKINRIVALS; i++)
+		{
+			lua_pushstring(L, skin->rivals[i]);
+			lua_rawseti(L, -2, 1 + i);
+		}
+		break;
 	case skin_soundsid:
 		LUA_PushUserdata(L, skin->soundsid, META_SOUNDSID);
 		break;
@@ -137,7 +142,7 @@ static int skin_num(lua_State *L)
 	// skins are always valid, only added, never removed
 	I_Assert(skin != NULL);
 
-	lua_pushinteger(L, skin-skins);
+	lua_pushinteger(L, skin->skinnum);
 	return 1;
 }
 
@@ -156,14 +161,14 @@ static int lib_iterateSkins(lua_State *L)
 	lua_remove(L, 1); // state is unused.
 
 	if (!lua_isnil(L, 1))
-		i = (INT32)(*((skin_t **)luaL_checkudata(L, 1, META_SKIN)) - skins) + 1;
+		i = (INT32)((*((skin_t **)luaL_checkudata(L, 1, META_SKIN)))->skinnum) + 1;
 	else
 		i = 0;
 
 	// skins are always valid, only added, never removed
 	if (i < numskins)
 	{
-		LUA_PushUserdata(L, &skins[i], META_SKIN);
+		LUA_PushUserdata(L, skins[i], META_SKIN);
 		return 1;
 	}
 
@@ -183,7 +188,7 @@ static int lib_getSkin(lua_State *L)
 			return luaL_error(L, "skins[] index %d out of range (0 - %d)", i, MAXSKINS-1);
 		if (i >= numskins)
 			return 0;
-		LUA_PushUserdata(L, &skins[i], META_SKIN);
+		LUA_PushUserdata(L, skins[i], META_SKIN);
 		return 1;
 	}
 
@@ -200,7 +205,7 @@ static int lib_getSkin(lua_State *L)
 	i = R_SkinAvailableEx(field, false);
 	if (i != -1)
 	{
-		LUA_PushUserdata(L, &skins[i], META_SKIN);
+		LUA_PushUserdata(L, skins[i], META_SKIN);
 		return 1;
 	}
 

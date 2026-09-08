@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
 // Copyright (C) 2016 by James Haley, David Hill, et al. (Team Eternity)
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -16,7 +16,6 @@
 
 #include "acsvm.hpp"
 
-extern "C" {
 #include "../doomtype.h"
 #include "../doomdef.h"
 #include "../doomstat.h"
@@ -24,7 +23,6 @@ extern "C" {
 #include "../r_defs.h"
 #include "../r_state.h"
 #include "../p_spec.h"
-}
 
 namespace srb2::acs {
 

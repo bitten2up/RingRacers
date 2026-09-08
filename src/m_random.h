@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by Kay "Kaito" Sinclaire.
 // Copyright (C) 2000 by DooM Legacy Team.
@@ -60,10 +60,10 @@ typedef enum
 	PR_RANDOMAUDIENCE, // Audience randomisation
 
 	PR_RULESCRAMBLE, // Rule scrambing events
-	
+
 	PR_MUSICSELECT, // Randomized music selection
 
-	PR_ITEM_ROULETTE, // Item results
+	PR_ITEM_ROULETTE, // Item results. Overwritten constantly by K_FillItemRouletteData, not meant for typical use.
 	PR_ITEM_RINGS, // Flung ring/bumper/player (on death)
 	PR_ITEM_SHRINK, // Shrink gun offsets
 	PR_ITEM_BUBBLE, // Item bubbles
@@ -87,13 +87,23 @@ typedef enum
 
 	PR_FROSTTHROWERS,
 
+	PROLDDEMO, // The number of RNG classes in versions that didn't write down how many RNG classes they had in their replays.
+
+	PR_ITEM_SPAWNER = PROLDDEMO, // Battle mode item spawners
+	PR_TEAMS, // Teamplay shuffling
+
+	PR__PLACEHOLDER_DUMMY, // Whoops, screwed up PR_NUISANCE before, guess this lives here forever now
+
 	PRNUMSYNCED,
+
+	PR_NUISANCE, // Margin Boost HUD
 
 	PR_INTERPHUDRANDOM = PRNUMSYNCED, // Interpolation-accomodating HUD randomisation
 
 	PRNUMCLASS
 } pr_class_t;
 
+extern char rng_class_names[34][30];
 // M_Random functions pull random numbers of various types that aren't network synced.
 // P_Random functions pulls random bytes from a PRNG that is network synced.
 

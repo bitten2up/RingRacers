@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -28,7 +28,7 @@
 #define SPB_SLIPTIDEDELTA (ANG1 * 3)
 #define SPB_STEERDELTA (ANGLE_90 - ANG10)
 #define SPB_DEFAULTSPEED (FixedMul(mapobjectscale, K_GetKartSpeedFromStat(9) * 2))
-#define SPB_ACTIVEDIST (1024 * FRACUNIT)
+#define SPB_ACTIVEDIST (2048 * FRACUNIT)
 
 #define SPB_HOTPOTATO (2*TICRATE)
 #define SPB_MAXSWAPS (2)
@@ -37,7 +37,7 @@
 #define SPB_CHASETIMESCALE (60*TICRATE)
 #define SPB_CHASETIMEMUL (3*FRACUNIT)
 
-#define SPB_SEEKTURN (FRACUNIT/8)
+#define SPB_SEEKTURN (FRACUNIT/4)
 #define SPB_CHASETURN (FRACUNIT/4)
 
 #define SPB_MANTA_SPACING (2750 * FRACUNIT)
@@ -182,7 +182,7 @@ static void SpawnSPBDust(mobj_t *spb)
 			dust->angle = spb->angle - FixedAngle(FRACUNIT*90 - FRACUNIT*180*i); // The first one will spawn to the right of the spb, the second one to the left.
 			P_Thrust(dust, dust->angle, 6*dust->scale);
 
-			K_MatchGenericExtraFlags(dust, spb);
+			K_MatchGenericExtraFlagsNoZAdjust(dust, spb);
 
 			sa += ANG1*120;	// Add 120 degrees to get to mo->angle + ANG1*60
 		}
@@ -202,44 +202,48 @@ static void SpawnSPBSliptide(mobj_t *spb, SINT8 dir)
 	angle_t travelangle;
 	fixed_t sz = spb->floorz;
 
-	if (spb->eflags & MFE_VERTICALFLIP)
-	{
-		sz = spb->ceilingz;
+		if (spb->eflags & MFE_VERTICALFLIP)
+		{
+			sz = spb->ceilingz;
+		}
+
+		travelangle = K_MomentumAngle(spb);
+
+		if ((leveltime & 1) && abs(spb->z - sz) < FRACUNIT*64)
+		{
+			newx = P_ReturnThrustX(spb, travelangle - (dir*ANGLE_45), 24*FRACUNIT);
+			newy = P_ReturnThrustY(spb, travelangle - (dir*ANGLE_45), 24*FRACUNIT);
+
+			spark = P_SpawnMobjFromMobj(spb, newx, newy, 0, MT_SPBDUST);
+			spark->z = sz;
+
+			P_SetMobjState(spark, S_KARTAIZDRIFTSTRAT);
+			P_SetTarget(&spark->target, spb);
+
+			spark->colorized = true;
+			spark->color = SKINCOLOR_RED;
+
+			spark->angle = travelangle + (dir * ANGLE_90);
+			P_SetScale(spark, (spark->destscale = spb->scale*3/2));
+
+			spark->momx = (6*spb->momx)/5;
+			spark->momy = (6*spb->momy)/5;
+
+			K_MatchGenericExtraFlagsNoZAdjust(spark, spb);
+		}
 	}
-
-	travelangle = K_MomentumAngle(spb);
-
-	if ((leveltime & 1) && abs(spb->z - sz) < FRACUNIT*64)
-	{
-		newx = P_ReturnThrustX(spb, travelangle - (dir*ANGLE_45), 24*FRACUNIT);
-		newy = P_ReturnThrustY(spb, travelangle - (dir*ANGLE_45), 24*FRACUNIT);
-
-		spark = P_SpawnMobjFromMobj(spb, newx, newy, 0, MT_SPBDUST);
-		spark->z = sz;
-
-		P_SetMobjState(spark, S_KARTAIZDRIFTSTRAT);
-		P_SetTarget(&spark->target, spb);
-
-		spark->colorized = true;
-		spark->color = SKINCOLOR_RED;
-
-		spark->angle = travelangle + (dir * ANGLE_90);
-		P_SetScale(spark, (spark->destscale = spb->scale*3/2));
-
-		spark->momx = (6*spb->momx)/5;
-		spark->momy = (6*spb->momy)/5;
-
-		K_MatchGenericExtraFlags(spark, spb);
-	}
-}
 
 // Used for seeking and when SPB is trailing its target from way too close!
 static void SpawnSPBSpeedLines(mobj_t *spb)
 {
+	// note: determinate random argument eval order
+	fixed_t rand_z = P_RandomRange(PR_DECORATION, -24, 24);
+	fixed_t rand_y = P_RandomRange(PR_DECORATION, -24, 24);
+	fixed_t rand_x = P_RandomRange(PR_DECORATION, -24, 24);
 	mobj_t *fast = P_SpawnMobjFromMobj(spb,
-		P_RandomRange(PR_DECORATION, -24, 24) * FRACUNIT,
-		P_RandomRange(PR_DECORATION, -24, 24) * FRACUNIT,
-		(spb->info->height / 2) + (P_RandomRange(PR_DECORATION, -24, 24) * FRACUNIT),
+		rand_x * FRACUNIT,
+		rand_y * FRACUNIT,
+		(spb->info->height / 2) + (rand_z * FRACUNIT),
 		MT_FASTLINE
 	);
 
@@ -249,7 +253,7 @@ static void SpawnSPBSpeedLines(mobj_t *spb)
 	fast->color = SKINCOLOR_RED;
 	fast->colorized = true;
 
-	K_MatchGenericExtraFlags(fast, spb);
+	K_MatchGenericExtraFlagsNoZAdjust(fast, spb);
 }
 
 static fixed_t SPBDist(mobj_t *a, mobj_t *b)
@@ -328,7 +332,7 @@ static boolean SPBSeekSoundPlaying(mobj_t *spb)
 
 static void SPBSeek(mobj_t *spb, mobj_t *bestMobj)
 {
-	const fixed_t desiredSpeed = SPB_DEFAULTSPEED;
+	const fixed_t desiredSpeed = SPB_DEFAULTSPEED*(2); // Seeks the player out 2x faster than its usual speed when locked in
 
 	waypoint_t *curWaypoint = NULL;
 	waypoint_t *destWaypoint = NULL;
@@ -392,6 +396,7 @@ static void SPBSeek(mobj_t *spb, mobj_t *bestMobj)
 		// Go past our target and explode instead.
 		if (spb->fuse == 0)
 		{
+			spb_intangible(spb) = SPB_FLASHING;
 			spb->fuse = 2*TICRATE;
 		}
 	}
@@ -595,7 +600,7 @@ static void SPBSeek(mobj_t *spb, mobj_t *bestMobj)
 			if (playeringame[i] == false || players[i].spectator == true)
 			{
 				// Not in-game
-				continue; 
+				continue;
 			}
 
 			if (players[i].mo == NULL || P_MobjWasRemoved(players[i].mo) == true)
@@ -626,16 +631,24 @@ static void SPBSeek(mobj_t *spb, mobj_t *bestMobj)
 		}
 	}
 
-	if (sliptide != 0)
-	{
-		// 1 if turning left, -1 if turning right.
-		// Angles work counterclockwise, remember!
-		SpawnSPBSliptide(spb, sliptide);
-	}
-	else
-	{
-		// if we're mostly going straight, then spawn the V dust cone!
-		SpawnSPBDust(spb);
+	//CONS_Printf("%d: leveltime %d: SPB intangibility %d: SPBModeTimer\n", leveltime, spb_intangible(spb), spb_modetimer(spb));
+
+	// Tired of this thing whacking people when switching targets.
+	// I'm pretty sure checking mode timer doesn't work but, idk insurance!!
+
+	if (spb_intangible(spb) <= 0 || (spb_modetimer(spb) > 0))
+	 {
+		if (sliptide != 0)
+		{
+			// 1 if turning left, -1 if turning right.
+			// Angles work counterclockwise, remember!
+			SpawnSPBSliptide(spb, sliptide);
+		}
+		else
+		{
+			// if we're mostly going straight, then spawn the V dust cone!
+			SpawnSPBDust(spb);
+		}
 	}
 
 	// Always spawn speed lines while seeking
@@ -1038,6 +1051,7 @@ void Obj_SPBThink(mobj_t *spb)
 			spb->color = SKINCOLOR_NONE;
 			spb->colorized = false;
 		}
+		spb_intangible(spb) = SPB_FLASHING; // This is supposed to make it intangible when it's about to quit
 	}
 
 	// Clamp within level boundaries.

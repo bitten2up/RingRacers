@@ -1,6 +1,6 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Kart Krew.
 // Copyright (C) 2020 by Sonic Team Junior.
 // Copyright (C) 2016 by John "JTE" Muniz.
 //
@@ -101,6 +101,13 @@ enum mobj_e {
 	mobj_sprxoff,
 	mobj_spryoff,
 	mobj_sprzoff,
+	mobj_bakexoff,
+	mobj_bakeyoff,
+	mobj_bakezoff,
+	mobj_bakexpiv,
+	mobj_bakeypiv,
+	mobj_bakezpiv,
+	mobj_terrain,
 	mobj_hitlag,
 	mobj_waterskip,
 	mobj_dispoffset,
@@ -191,6 +198,13 @@ static const char *const mobj_opt[] = {
 	"sprxoff",
 	"spryoff",
 	"sprzoff",
+	"bakexoff",
+	"bakeyoff",
+	"bakezoff",
+	"bakexpiv",
+	"bakeypiv",
+	"bakezpiv",
+	"terrain",
 	"hitlag",
 	"waterskip",
 	"dispoffset",
@@ -479,6 +493,27 @@ static int mobj_get(lua_State *L)
 	case mobj_sprzoff:
 		lua_pushfixed(L, mo->sprzoff);
 		break;
+	case mobj_bakexoff:
+		lua_pushfixed(L, mo->bakexoff);
+		break;
+	case mobj_bakeyoff:
+		lua_pushfixed(L, mo->bakeyoff);
+		break;
+	case mobj_bakezoff:
+		lua_pushfixed(L, mo->bakezoff);
+		break;
+	case mobj_bakexpiv:
+		lua_pushfixed(L, mo->bakexpiv);
+		break;
+	case mobj_bakeypiv:
+		lua_pushfixed(L, mo->bakeypiv);
+		break;
+	case mobj_bakezpiv:
+		lua_pushfixed(L, mo->bakezpiv);
+		break;
+	case mobj_terrain:
+		LUA_PushUserdata(L, mo->terrain, META_TERRAIN);
+		break;
 	case mobj_hitlag:
 		lua_pushinteger(L, mo->hitlag);
 		break;
@@ -709,7 +744,7 @@ static int mobj_set(lua_State *L)
 		mo->flags2 = (UINT32)luaL_checkinteger(L, 3);
 		break;
 	case mobj_eflags:
-		mo->eflags = (UINT16)luaL_checkinteger(L, 3);
+		mo->eflags = (UINT32)luaL_checkinteger(L, 3);
 		break;
 	case mobj_renderflags:
 		mo->renderflags = (UINT32)luaL_checkinteger(L, 3);
@@ -725,7 +760,7 @@ static int mobj_set(lua_State *L)
 			{
 				if (demo.playback)
 					skin = demo.skinlist[skin].mapping;
-				mo->skin = &skins[skin];
+				mo->skin = skins[skin];
 			}
 
 			return 0;
@@ -893,6 +928,27 @@ static int mobj_set(lua_State *L)
 		break;
 	case mobj_sprzoff:
 		mo->sprzoff = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakexoff:
+		mo->bakexoff = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakeyoff:
+		mo->bakeyoff = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakezoff:
+		mo->bakezoff = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakexpiv:
+		mo->bakexpiv = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakeypiv:
+		mo->bakeypiv = luaL_checkfixed(L, 3);
+		break;
+	case mobj_bakezpiv:
+		mo->bakezpiv = luaL_checkfixed(L, 3);
+		break;
+	case mobj_terrain:
+		mo->terrain = *((terrain_t **)luaL_checkudata(L, 3, META_TERRAIN));
 		break;
 	case mobj_hitlag:
 		mo->hitlag = luaL_checkinteger(L, 3);

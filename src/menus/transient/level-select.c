@@ -1,8 +1,8 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Vivian "toastergrl" Grannell.
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour.
-// Copyright (C) 2024 by Kart Krew.
+// Copyright (C) 2025 by Vivian "toastergrl" Grannell.
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour.
+// Copyright (C) 2025 by Kart Krew.
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -21,6 +21,7 @@
 #include "../../v_video.h"
 #include "../../g_game.h" // G_GetBackupCupData
 #include "../../p_saveg.h" // cupsavedata
+#include "../../d_netcmd.h" // Handle_MapQueueSend
 
 cupheader_t dummy_lostandfound;
 
@@ -657,14 +658,30 @@ void M_LevelSelectInit(INT32 choice)
 		case 0:
 			levellist.levelsearch.grandprix = false;
 			levellist.levelsearch.timeattack = false;
+			levellist.canqueue = true;
+
+			if (gamestate == GS_MENU)
+			{
+				CV_StealthSet(&cv_kartbot, cv_dummymatchbots.string);
+				CV_StealthSet(&cv_kartencore, (cv_dummygpencore.value == 1) ? "On" : "Auto");
+				CV_StealthSet(&cv_kartspeed, cv_dummykartspeed.string);
+			}
+
 			break;
 		case 1:
 			levellist.levelsearch.grandprix = false;
 			levellist.levelsearch.timeattack = true;
+			levellist.canqueue = false;
 			break;
 		case 2:
 			levellist.levelsearch.grandprix = true;
 			levellist.levelsearch.timeattack = false;
+			levellist.canqueue = false;
+			break;
+		case 3:
+			levellist.levelsearch.grandprix = false;
+			levellist.levelsearch.timeattack = false;
+			levellist.canqueue = false;
 			break;
 		default:
 			CONS_Alert(CONS_WARNING, "Bad level select init\n");
@@ -676,6 +693,16 @@ void M_LevelSelectInit(INT32 choice)
 		gt = menugametype;
 	}
 
+	if (levellist.levelsearch.timeattack && gt == GT_RACE)
+	{
+		const INT32 skinid = R_SkinAvailableEx(cv_skin[0].string, false);
+		if (skinid >= 0 && (skins[skinid]->flags & SF_HIVOLT))
+		{
+			M_StartMessage("A long-forgotten power...", "You are using a \x82prototype engine\x80.\nRecords will not be saved.", NULL, MM_NOTHING, NULL, NULL);
+			S_StartSound(NULL, sfx_s3k81);
+		}
+	}
+
 	if (!M_LevelListFromGametype(gt))
 	{
 		S_StartSound(NULL, sfx_s3kb2);
@@ -683,7 +710,41 @@ void M_LevelSelectInit(INT32 choice)
 	}
 }
 
-void M_LevelSelected(INT16 add, boolean menuupdate)
+void M_MenuToLevelPreamble(UINT8 ssplayers, boolean nowipe)
+{
+	cht_debug = 0;
+
+	if (demo.playback)
+		G_StopDemo();
+
+	if (cv_maxconnections.value < ssplayers+1)
+		CV_SetValue(&cv_maxconnections, ssplayers+1);
+
+	if (splitscreen != ssplayers)
+	{
+		splitscreen = ssplayers;
+		SplitScreen_OnChange();
+	}
+
+	paused = false;
+
+	S_StopMusicCredit();
+
+	if (!nowipe)
+	{
+		S_StartSound(NULL, sfx_s3k63);
+
+		// Early fadeout to let the sound finish playing
+		F_WipeStartScreen();
+		V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
+		F_WipeEndScreen();
+		F_RunWipe(wipe_level_toblack, wipedefs[wipe_level_toblack], false, "FADEMAP0", false, false);
+	}
+
+	SV_StartSinglePlayerServer(levellist.newgametype, levellist.netgame);
+}
+
+INT16 M_LevelFromScrolledList(INT16 add)
 {
 	UINT8 i = 0;
 	INT16 map = M_GetFirstLevelInList(&i, &levellist.levelsearch);
@@ -699,6 +760,13 @@ void M_LevelSelected(INT16 add, boolean menuupdate)
 
 		add--;
 	}
+
+	return map;
+}
+
+void M_LevelSelected(INT16 add, boolean menuupdate)
+{
+	INT16 map = M_LevelFromScrolledList(add);
 
 	if (map >= nummapheaders)
 	{
@@ -727,72 +795,201 @@ void M_LevelSelected(INT16 add, boolean menuupdate)
 	{
 		if (gamestate == GS_MENU)
 		{
-			UINT8 ssplayers = levellist.levelsearch.tutorial ? 0 : cv_splitplayers.value-1;
-
-			netgame = false;
 			multiplayer = true;
 
-			strlcpy(connectedservername, cv_servername.string, MAXSERVERNAME);
+			M_MenuToLevelPreamble(
+				(levellist.levelsearch.tutorial
+					? 0
+					: cv_splitplayers.value-1
+				),
+				(
+					(cv_kartencore.value == 1)
+					&& (gametypes[levellist.newgametype]->rules & GTR_ENCORE)
+				)
+			);
 
-			// Still need to reset devmode
-			cht_debug = 0;
-
-			if (demo.playback)
-				G_StopDemo();
-
-				/*if (levellist.choosemap == 0)
-					levellist.choosemap = G_RandMap(G_TOLFlag(levellist.newgametype), -1, 0, 0, false, NULL);*/
-
-			if (cv_maxconnections.value < ssplayers+1)
-				CV_SetValue(&cv_maxconnections, ssplayers+1);
-
-			if (splitscreen != ssplayers)
-			{
-				splitscreen = ssplayers;
-				SplitScreen_OnChange();
-			}
-
-			S_StartSound(NULL, sfx_s3k63);
-
-			paused = false;
-
-			S_StopMusicCredit();
-
-			// Early fadeout to let the sound finish playing
-			F_WipeStartScreen();
-			V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
-			F_WipeEndScreen();
-			F_RunWipe(wipe_level_toblack, wipedefs[wipe_level_toblack], false, "FADEMAP0", false, false);
-
-			SV_StartSinglePlayerServer(levellist.newgametype, levellist.netgame);
-
-			if (!levellist.netgame)
-				CV_StealthSet(&cv_kartbot, cv_dummymatchbots.string);
-
-			CV_StealthSet(&cv_kartencore, (cv_dummygpencore.value == 1) ? "On" : "Auto");
-			CV_StealthSet(&cv_kartspeed, (cv_dummykartspeed.value == KARTSPEED_NORMAL) ? "Auto Gear" : cv_dummykartspeed.string);
-
-			D_MapChange(levellist.choosemap+1, levellist.newgametype, (cv_kartencore.value == 1), 1, 1, false, false);
-
-			if (levellist.netgame == true)
-			{
-				restoreMenu = &PLAY_MP_OptSelectDef;
-			}
-			else /*if (!M_GameTrulyStarted() ||
-				levellist.levelsearch.tutorial)*/
-			{
-				restoreMenu = currentMenu;
-			}
+			restoreMenu = (levellist.netgame)
+				? &PLAY_MP_OptSelectDef
+				: currentMenu;
 
 			restorelevellist = levellist;
 		}
-		else
-		{
-			// directly do the map change
-			D_MapChange(levellist.choosemap+1, levellist.newgametype, (cv_kartencore.value == 1), 1, 1, false, false);
-		}
+
+		D_MapChange(
+			levellist.choosemap+1,
+			levellist.newgametype,
+			(cv_kartencore.value == 1),
+			true,
+			1,
+			false,
+			false
+		);
 
 		M_ClearMenus(true);
+	}
+}
+
+static void M_MenuQueueStopSend(INT32 ch)
+{
+	(void)ch;
+
+	memset(&menuqueue, 0, sizeof(struct menuqueue));
+
+	menuqueue.clearing = false;
+}
+
+static void M_MenuQueueSelectedLocal(void)
+{
+	UINT8 i = 0;
+
+	for (; i < menuqueue.size; i++)
+	{
+		G_MapIntoRoundQueue(
+			menuqueue.entries[i].mapnum,
+			menuqueue.entries[i].gametype,
+			menuqueue.entries[i].encore,
+			false
+		);
+	}
+
+	roundqueue.netcommunicate = true;
+
+	if (gamestate == GS_MENU)
+	{
+		levellist.choosemap = roundqueue.entries[0].mapnum;
+
+		multiplayer = true;
+
+		M_MenuToLevelPreamble(
+			cv_splitplayers.value-1,
+			(
+				roundqueue.entries[0].encore
+				&& (gametypes[roundqueue.entries[0].gametype]->rules & GTR_ENCORE)
+			)
+		);
+
+		restoreMenu = (levellist.netgame)
+			? &PLAY_MP_OptSelectDef
+			: currentMenu;
+
+		restorelevellist = levellist;
+
+		roundqueue.position = roundqueue.roundnum = 1;
+
+		D_MapChange(
+			roundqueue.entries[0].mapnum + 1,
+			roundqueue.entries[0].gametype,
+			roundqueue.entries[0].encore,
+			true,
+			1,
+			false,
+			roundqueue.entries[0].rankrestricted
+		);
+
+		M_MenuQueueStopSend(MA_NONE);
+
+		M_ClearMenus(true);
+	}
+	else
+	{
+		if (gamestate == GS_LEVEL && roundqueue.position == 0)
+		{
+			menuqueue.sending = UINT8_MAX;
+		}
+		else
+		{
+			S_StartSound(NULL, sfx_chchng);
+
+			M_MenuQueueStopSend(MA_NONE);
+
+			M_ClearMenus(true);
+		}
+	}
+}
+
+// Copy-pasted and edited from G_GPCupIntoRoundQueue
+void M_CupQueueHandler(cupheader_t *cup)
+{
+	UINT8 i, levelindex = 0, bonusindex = 0;
+	UINT8 bonusmodulo = max(1, (cup->numlevels+1)/(cup->numbonus+1));
+	UINT16 cupLevelNum;
+	INT32 gtcheck;
+
+	// We shouldn't get to this point while there's rounds queued, but if we do, get outta there.
+	if (roundqueue.size)
+	{
+		return;
+	}
+
+	menuqueue.size = 0;
+
+	// Levels are added to the queue in the following pattern.
+	// For 5 Race rounds and 2 Bonus rounds, the most common case:
+	//    race - race - BONUS - race - race - BONUS - race
+	// The system is flexible enough to permit other arrangements.
+	// However, we just want to keep the pacing even & consistent.
+	while (levelindex < cup->numlevels)
+	{
+		memset(menuqueue.entries+menuqueue.size, 0, sizeof(roundentry_t));
+
+		// Fill like two or three Race maps.
+		for (i = 0; i < bonusmodulo; i++)
+		{
+			cupLevelNum = cup->cachedlevels[levelindex];
+
+			if (cupLevelNum >= nummapheaders)
+			{
+				// Just skip the map if it's invalid.
+				continue;
+			}
+
+			if ((mapheaderinfo[cupLevelNum]->typeoflevel & TOL_RACE) == TOL_RACE)
+			{
+				gtcheck = GT_RACE;
+			}
+			else
+			{
+				gtcheck = mapheaderinfo[cupLevelNum]->typeoflevel;
+			}
+
+			menuqueue.entries[menuqueue.size].mapnum = cupLevelNum;
+			menuqueue.entries[menuqueue.size].gametype = gtcheck;
+			menuqueue.entries[menuqueue.size].encore = (cv_kartencore.value == 1);
+
+			menuqueue.size++;
+
+			levelindex++;
+			if (levelindex >= cup->numlevels)
+				break;
+		}
+
+		// Attempt to add an interstitial Battle round.
+		// If we're in singleplayer Match Race, just skip this.
+		if ((levelindex < cup->numlevels
+			&& bonusindex < cup->numbonus) && (levellist.netgame || (cv_splitplayers.value > 1) || netgame))
+		{
+			cupLevelNum = cup->cachedlevels[CUPCACHE_BONUS + bonusindex];
+
+			if (cupLevelNum < nummapheaders)
+			{
+				if ((mapheaderinfo[cupLevelNum]->typeoflevel & TOL_BATTLE) == TOL_BATTLE)
+				{
+					gtcheck = GT_BATTLE;
+				}
+				else
+				{
+					gtcheck = mapheaderinfo[cupLevelNum]->typeoflevel;
+				}
+				// In the case of Bonus rounds, we simply skip invalid maps.
+				menuqueue.entries[menuqueue.size].mapnum = cupLevelNum;
+				menuqueue.entries[menuqueue.size].gametype = gtcheck;
+				menuqueue.entries[menuqueue.size].encore = (cv_kartencore.value == 1);
+
+				menuqueue.size++;
+			}
+
+			bonusindex++;
+		}
 	}
 }
 
@@ -877,6 +1074,116 @@ boolean M_LevelSelectCupSwitch(boolean next, boolean skipones)
 	}
 }
 
+static void M_MenuQueueResponse(INT32 ch)
+{
+	M_ClearMenus(false);
+
+	if (ch != MA_YES)
+		return;
+
+	if (!(server || (IsPlayerAdmin(consoleplayer))))
+		return;
+
+	if (!(gamestate == GS_LEVEL && roundqueue.position == 0))
+		return;
+
+	SendNetXCmd(XD_EXITLEVEL, NULL, 0);
+}
+
+// Ripped out of LevelSelectHandler for use in cup queueing from cupselect.c
+void M_LevelConfirmHandler(void)
+{
+	// Starting immediately OR importing queue
+
+	while ((menuqueue.size + roundqueue.size) > ROUNDQUEUE_MAX)
+			menuqueue.size--;
+
+	if (!levellist.canqueue || !menuqueue.size)
+	{
+		M_LevelSelected(levellist.cursor, true);
+	}
+	else if (netgame)
+	{
+		menuqueue.anchor = roundqueue.size;
+		menuqueue.sending = 1;
+
+		M_StartMessage("Queueing Rounds",
+			va(M_GetText(
+			"Attempting to send %d Round%s...\n"
+			"\n"
+			"If this is taking longer than you\n"
+			"expect, exit out of this message.\n"
+			), menuqueue.size, (menuqueue.size == 1 ? "" : "s")
+			), &M_MenuQueueStopSend, MM_NOTHING,
+			NULL,
+			"This is taking too long..."
+		);
+	}
+	else
+	{
+		M_MenuQueueSelectedLocal();
+	}
+}
+
+static void M_ClearQueueResponse(INT32 ch)
+{
+	if (ch != MA_YES)
+		return;
+
+	if (!(server || (IsPlayerAdmin(consoleplayer))))
+		return;
+
+	S_StartSound(NULL, sfx_slip);
+
+	if (!netgame)
+		memset(&roundqueue, 0, sizeof(struct roundqueue));
+	if (netgame && (roundqueue.size != 0))
+	{
+		menuqueue.clearing = true;
+		Handle_MapQueueSend(0, ROUNDQUEUE_CMD_CLEAR, false);
+		M_StartMessage("Clearing Rounds",
+			va(M_GetText(
+			"Attempting to clear %d Round%s...\n"
+			"\n"
+			"If this is taking longer than you\n"
+			"expect, exit out of this message.\n"
+			), roundqueue.size, (roundqueue.size == 1 ? "" : "s")
+			), &M_MenuQueueStopSend, MM_NOTHING,
+			NULL,
+			"This is taking too long..."
+		);
+	}
+}
+
+// Ripped out of LevelSelectHandler for use in queue clearing from cupselect.c
+void M_ClearQueueHandler(void)
+{
+	while ((menuqueue.size + roundqueue.size) > ROUNDQUEUE_MAX)
+		menuqueue.size--;
+
+	if (menuqueue.size)
+	{
+		S_StartSound(NULL, sfx_shldls);
+		menuqueue.size--;
+	}
+	else if (roundqueue.size)
+	{
+		M_StartMessage("Queue Clearing",
+			va(M_GetText(
+			"There %s %d Round%s of play queued.\n"
+			"\n"
+			"Do you want to empty the queue?\n"
+			),
+			(roundqueue.size == 1 ? "is" : "are"),
+			roundqueue.size,
+			(roundqueue.size == 1 ? "" : "s")
+			), &M_ClearQueueResponse, MM_YESNO,
+			"Time to start fresh",
+			"Not right now"
+		);
+	}
+}
+
 void M_LevelSelectHandler(INT32 choice)
 {
 	const UINT8 pid = 0;
@@ -884,6 +1191,11 @@ void M_LevelSelectHandler(INT32 choice)
 	(void)choice;
 
 	if (I_GetTime() - levellist.slide.start < M_LEVELLIST_SLIDETIME)
+	{
+		return;
+	}
+
+	if (menuqueue.sending)
 	{
 		return;
 	}
@@ -920,10 +1232,44 @@ void M_LevelSelectHandler(INT32 choice)
 
 	M_LevelSelectScrollDest();
 
-	if (M_MenuConfirmPressed(pid) /*|| M_MenuButtonPressed(pid, MBT_START)*/)
+	if (M_MenuConfirmPressed(pid))
 	{
 		M_SetMenuDelay(pid);
-		M_LevelSelected(levellist.cursor, true);
+
+		M_LevelConfirmHandler();
+	}
+	else if (levellist.canqueue && M_MenuButtonPressed(pid, MBT_Z))
+	{
+		// Adding to queue
+
+		INT16 map = NEXTMAP_INVALID;
+
+		M_SetMenuDelay(pid);
+
+		if ((roundqueue.size + menuqueue.size) < ROUNDQUEUE_MAX)
+		{
+			map = M_LevelFromScrolledList(levellist.cursor);
+		}
+
+		if (map < nummapheaders)
+		{
+			memset(menuqueue.entries+menuqueue.size, 0, sizeof(roundentry_t));
+			menuqueue.entries[menuqueue.size].mapnum = map;
+			menuqueue.entries[menuqueue.size].gametype = levellist.newgametype;
+			menuqueue.entries[menuqueue.size].encore = (cv_kartencore.value == 1);
+
+			menuqueue.size++;
+
+			S_StartSound(NULL, sfx_s3k4a);
+		}
+		else
+		{
+			S_StartSound(NULL, sfx_s3kb2);
+		}
+	}
+	else if (levellist.canqueue && M_MenuExtraPressed(pid))
+	{
+		M_ClearQueueHandler();
 	}
 	else if (M_MenuBackPressed(pid))
 	{
@@ -938,4 +1284,66 @@ void M_LevelSelectHandler(INT32 choice)
 
 void M_LevelSelectTick(void)
 {
+	if (menuqueue.clearing)
+	{
+		if (roundqueue.size != 0)
+			return;
+		menuqueue.clearing = false;
+		if (!menuqueue.cupqueue)
+			M_StopMessage(MA_NONE);
+		else
+			menuqueue.cupqueue = false;
+	}
+
+	if (!menuqueue.sending)
+		return;
+
+	if ((menuqueue.sending <= menuqueue.size) // Sending
+		&& (roundqueue.size >= menuqueue.anchor)) // Didn't get it wiped
+	{
+		if (!netgame)
+			return;
+
+		const UINT8 idcount = (roundqueue.size - menuqueue.anchor);
+
+		if (idcount == menuqueue.sending-1)
+		{
+			Handle_MapQueueSend(
+				menuqueue.entries[idcount].mapnum,
+				menuqueue.entries[idcount].gametype,
+				menuqueue.entries[idcount].encore
+			);
+		}
+		if (idcount >= menuqueue.sending-1)
+		{
+			menuqueue.sending++;
+		}
+		return;
+	}
+
+	if (menuqueue.size)
+	{
+		S_StartSound(NULL, sfx_chchng);
+
+		if (roundqueue.position || gamestate != GS_LEVEL)
+		{
+			M_StopMessage(MA_NONE);
+		}
+		else
+		{
+			M_StartMessage("Round Queue",
+				va(M_GetText(
+				"You just queued %d Round%s of play.\n"
+				"\n"
+				"Do you want to skip the current\n"
+				"course and start them immediately?\n"
+				), menuqueue.size, (menuqueue.size == 1 ? "" : "s")
+				), &M_MenuQueueResponse, MM_YESNO,
+				"Let's get going!",
+				"Not right now"
+			);
+		}
+	}
+
+	M_MenuQueueStopSend(MA_NONE);
 }

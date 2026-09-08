@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -36,6 +36,8 @@
 #include "r_fps.h"
 #include "g_party.h"
 #include "g_input.h"
+#include "k_objects.h"
+#include "k_director.h"
 
 boolean level_tally_t::UseBonuses(void)
 {
@@ -44,6 +46,9 @@ boolean level_tally_t::UseBonuses(void)
 		// Special Stage -- the only bonus for these is completing it or not.
 		return false;
 	}
+
+	if (K_InRaceDuel())
+		return false;
 
 	// No bonuses / ranking in FREE PLAY or Time Attack
 	return (grandprixinfo.gp == true || K_TimeAttackRules() == false);
@@ -91,11 +96,11 @@ void level_tally_t::DetermineBonuses(void)
 			}
 		}
 
-		if (totalLaps > 0)
+		if (totalExp > 0)
 		{
 			// Give circuit gamemodes a consolation bonus
-			// for getting good placements on each lap.
-			temp_bonuses.push_back(TALLY_BONUS_LAP);
+			// for getting good placements on each grading point.
+			temp_bonuses.push_back(TALLY_BONUS_EXP);
 		}
 
 		if (totalPrisons > 0)
@@ -183,9 +188,12 @@ INT32 level_tally_t::CalculateGrade(void)
 		 7*FRACUNIT/20,		// D: 35% or higher
 		10*FRACUNIT/20,		// C: 50% or higher
 		14*FRACUNIT/20,		// B: 70% or higher
-		17*FRACUNIT/20		// A: 85% or higher
+		18*FRACUNIT/20		// A: 90% or higher
 	};
 	INT32 retGrade = GRADE_E; // gp_rank_e
+
+	if (K_InRaceDuel())
+		return GRADE_INVALID;
 
 	INT32 bonusWeights[TALLY_WINDOW_SIZE];
 	for (int i = 0; i < TALLY_WINDOW_SIZE; i++)
@@ -199,14 +207,14 @@ INT32 level_tally_t::CalculateGrade(void)
 			}
 			case TALLY_BONUS_SCORE:
 			{
-				bonusWeights[i] = ((pointLimit != 0) ? 100 : 0);
+				bonusWeights[i] = ((pointLimit != 0) ? 200 : 0);
 				break;
 			}
-			case TALLY_BONUS_LAP:
+			case TALLY_BONUS_EXP:
 			case TALLY_BONUS_PRISON:
 			case TALLY_BONUS_POWERSTONES:
 			{
-				bonusWeights[i] = 150;
+				bonusWeights[i] = 300;
 				break;
 			}
 			default:
@@ -217,7 +225,7 @@ INT32 level_tally_t::CalculateGrade(void)
 		}
 	}
 
-	const INT32 positionWeight = (position > 0 && numPlayers > 2) ? 50 : 0;
+	const INT32 positionWeight =  0; // (position > 0 && numPlayers > 2) ? 50 : 0;
 	const INT32 total = positionWeight + bonusWeights[0] + bonusWeights[1];
 
 	INT32 ours = 0;
@@ -239,13 +247,10 @@ INT32 level_tally_t::CalculateGrade(void)
 				ours += (rings * bonusWeights[i]) / 20;
 				break;
 			}
-			case TALLY_BONUS_LAP:
+			case TALLY_BONUS_EXP:
 			{
-				// Use a special curve for this.
-				// The difference between 0 and 1 lap points is an important difference in skill,
-				// while the difference between 5 and 6 is not very notable.
-				const fixed_t frac = (laps * FRACUNIT) / std::max(1, static_cast<int>(totalLaps));
-				ours += Easing_OutSine(frac, 0, bonusWeights[i]);
+				const fixed_t frac = std::min(FRACUNIT, ((exp) * FRACUNIT) / std::max(1, static_cast<int>(totalExp)));
+				ours += Easing_Linear(frac, 0, bonusWeights[i]);
 				break;
 			}
 			case TALLY_BONUS_PRISON:
@@ -309,7 +314,7 @@ void level_tally_t::Init(player_t *player)
 
 	position = numPlayers = 0;
 	rings = 0;
-	laps = totalLaps = 0;
+	exp = totalExp = 0;
 	points = pointLimit = 0;
 	powerStones = 0;
 	releasedFastForward = false;
@@ -340,15 +345,10 @@ void level_tally_t::Init(player_t *player)
 			}
 		}
 
-		if ((gametypes[gt]->rules & GTR_CIRCUIT) == GTR_CIRCUIT)
+		if ((gametypes[gt]->rules & GTR_CIRCUIT) == GTR_CIRCUIT && K_GetNumGradingPoints() > 0) // EXP should be a rule type, but here we are
 		{
-			laps = player->lapPoints;
-			totalLaps = numlaps;
-
-			if (inDuel == false)
-			{
-				totalLaps *= 2;
-			}
+			exp = static_cast<UINT16>(std::max<fixed_t>(player->exp, 0)); // The scoring calc doesn't subtract anymore, so using 0 is okay and will not wrap
+			totalExp = EXP_TARGET;
 		}
 
 		if (battleprisons)
@@ -426,7 +426,7 @@ void level_tally_t::Init(player_t *player)
 			{
 				snprintf(
 					header, sizeof header,
-					"%s", R_CanShowSkinInDemo(player->skin) ? skins[player->skin].realname : "???"
+					"%s", R_CanShowSkinInDemo(player->skin) ? skins[player->skin]->realname : "???"
 				);
 			}
 
@@ -519,16 +519,16 @@ void level_tally_t::Init(player_t *player)
 		// It'd be neat to add all of the grade sounds,
 		// but not this close to release
 
-		UINT8 skinid = player->skin;
+		UINT16 skinid = player->skin;
 		if (skinid >= numskins || R_CanShowSkinInDemo(skinid) == false)
 			;
 		else if (rank < GRADE_C)
 		{
-			gradeVoice = skins[skinid].soundsid[S_sfx[sfx_klose].skinsound];
+			gradeVoice = skins[skinid]->soundsid[S_sfx[sfx_klose].skinsound];
 		}
 		else
 		{
-			gradeVoice = skins[skinid].soundsid[S_sfx[sfx_kwin].skinsound];
+			gradeVoice = skins[skinid]->soundsid[S_sfx[sfx_kwin].skinsound];
 		}
 	}
 
@@ -615,7 +615,8 @@ boolean level_tally_t::IncrementLine(void)
 
 		value = &displayStat[i];
 		lives_check = (
-			stats[i] == TALLY_STAT_TOTALRINGS // Rings also shows the Lives.
+			G_GametypeUsesLives()
+			&& stats[i] == TALLY_STAT_TOTALRINGS // Rings also shows the Lives.
 			&& livesAdded < owner->xtralife // Don't check if we've maxxed out!
 		);
 
@@ -663,10 +664,10 @@ boolean level_tally_t::IncrementLine(void)
 				amount = 1;
 				freq = 1;
 				break;
-			case TALLY_BONUS_LAP:
-				dest = laps;
-				amount = 1;
-				freq = 4;
+			case TALLY_BONUS_EXP:
+				dest = exp;
+				amount = 20;
+				freq = 1;
 				break;
 			case TALLY_BONUS_PRISON:
 				dest = prisons;
@@ -782,6 +783,24 @@ void level_tally_t::Tick(void)
 		return;
 	}
 
+	if (done == true)
+	{
+		if (directorWait < TALLY_DIRECTOR_TIME)
+		{
+			directorWait++;
+
+			if (directorWait == TALLY_DIRECTOR_TIME && G_IsPartyLocal(owner - players) == true)
+			{
+				// Finished tally, go to director while we wait for others to finish.
+				K_ToggleDirector(G_PartyPosition(owner - players), true);
+			}
+		}
+	}
+	else
+	{
+		directorWait = 0;
+	}
+
 	if (transition < FRACUNIT)
 	{
 		if (transitionTime <= 0)
@@ -828,6 +847,7 @@ void level_tally_t::Tick(void)
 			if (IncrementLine() == true)
 			{
 				if (grandprixinfo.gp == true // In GP
+					&& G_GametypeUsesLives()
 					&& lines >= lineCount // Finished the bonuses
 					&& livesAdded < owner->xtralife // Didn't max out by other causes
 				)
@@ -1189,7 +1209,7 @@ void level_tally_t::Draw(void)
 						case TALLY_BONUS_RING:
 							bonus_code = "RB";
 							break;
-						case TALLY_BONUS_LAP:
+						case TALLY_BONUS_EXP:
 							bonus_code = "LA";
 							break;
 						case TALLY_BONUS_PRISON:
@@ -1244,56 +1264,73 @@ void level_tally_t::Draw(void)
 									work_tics % 10
 								));
 
-							if (modeattacking && !demo.playback && (state == TALLY_ST_DONE || state == TALLY_ST_TEXT_PAUSE)
-								&& !K_IsPlayerLosing(&players[consoleplayer]) && players[consoleplayer].realtime < oldbest)
+							if (K_LegacyRingboost(&players[consoleplayer]))
 							{
 								drawer_text
 									.x(197.0 * frac)
 									.y(13.0 * frac)
 									.align(srb2::Draw::Align::kCenter)
 									.font(srb2::Draw::Font::kMenu)
-									.text((leveltime/2 % 2) ? "NEW RECORD!" : "\x82NEW RECORD!");
+									.flags(V_TRANSLUCENT)
+									.text("\"CLASS R\"");
+							}
+							else
+							{
+								if (modeattacking && !demo.playback && (state == TALLY_ST_DONE || state == TALLY_ST_TEXT_PAUSE)
+									&& !K_IsPlayerLosing(&players[consoleplayer]) && players[consoleplayer].realtime < oldbest)
+								{
+
+									drawer_text
+										.x(197.0 * frac)
+										.y(13.0 * frac)
+										.align(srb2::Draw::Align::kCenter)
+										.font(srb2::Draw::Font::kMenu)
+										.text((leveltime/2 % 2) ? "NEW RECORD!" : "\x82NEW RECORD!");
+								}
 							}
 							break;
 						}
 						case TALLY_STAT_TOTALRINGS:
 						{
 							drawer_text
-								.x(184.0 * frac)
+								.x((G_GametypeUsesLives() ? 184.0 : 200.0) * frac)
 								.align(srb2::Draw::Align::kCenter)
 								.text(va("%d", displayStat[i]));
 
-							srb2::Draw lives_drawer = drawer_text
-								.xy(221.0 * frac, -1.0 * frac);
-
-							const skincolornum_t color = static_cast<skincolornum_t>(owner->skincolor);
-							lives_drawer
-								.x(r_splitscreen ? -7.0 : -2.0)
-								.colormap(owner->skin, color)
-								.patch(faceprefix[owner->skin][r_splitscreen ? FACE_MINIMAP : FACE_RANK]);
-
-							UINT8 lives_num = std::min(owner->lives + livesAdded, 10);
-							if (xtraBlink > 0 && (xtraBlink & 1) == 0 && livesAdded > 0)
+							if (G_GametypeUsesLives())
 							{
-								lives_num = 0;
-							}
+								srb2::Draw lives_drawer = drawer_text
+									.xy(221.0 * frac, -1.0 * frac);
 
-							if (lives_num > 0)
-							{
-								if (r_splitscreen)
+								const skincolornum_t color = static_cast<skincolornum_t>(owner->skincolor);
+								lives_drawer
+									.x(r_splitscreen ? -7.0 : -2.0)
+									.colormap(owner->skin, color)
+									.patch(faceprefix[owner->skin][r_splitscreen ? FACE_MINIMAP : FACE_RANK]);
+
+								UINT8 lives_num = std::min(owner->lives + livesAdded, 10);
+								if (xtraBlink > 0 && (xtraBlink & 1) == 0 && livesAdded > 0)
 								{
-									lives_drawer = lives_drawer
-										.xy(6.0, 2.0)
-										.align(srb2::Draw::Align::kLeft);
-								}
-								else
-								{
-									lives_drawer = lives_drawer
-										.xy(17.0, 1.0)
-										.font(srb2::Draw::Font::kThinTimer);
+									lives_num = 0;
 								}
 
-								lives_drawer.text("{}", lives_num);
+								if (lives_num > 0)
+								{
+									if (r_splitscreen)
+									{
+										lives_drawer = lives_drawer
+											.xy(6.0, 2.0)
+											.align(srb2::Draw::Align::kLeft);
+									}
+									else
+									{
+										lives_drawer = lives_drawer
+											.xy(17.0, 1.0)
+											.font(srb2::Draw::Font::kThinTimer);
+									}
+
+									lives_drawer.text("{}", lives_num);
+								}
 							}
 
 							break;
@@ -1320,12 +1357,12 @@ void level_tally_t::Draw(void)
 								.text(va("%d / 20", displayBonus[i]));
 							break;
 						}
-						case TALLY_BONUS_LAP:
+						case TALLY_BONUS_EXP:
 						{
 							drawer_text
 								.x(197.0 * frac)
 								.align(srb2::Draw::Align::kCenter)
-								.text(va("%d / %d", displayBonus[i], totalLaps));
+								.text(va("%d / %d", displayBonus[i], totalExp));
 							break;
 						}
 						case TALLY_BONUS_PRISON:

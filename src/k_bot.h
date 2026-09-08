@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -24,6 +24,7 @@ extern "C" {
 
 #ifdef DEVELOP
 	extern consvar_t cv_botcontrol;
+	extern consvar_t cv_takeover;
 #endif
 
 // Maximum value of botvars.difficulty
@@ -34,7 +35,7 @@ extern "C" {
 
 // How many tics in a row do you need to turn in this direction before we'll let you turn.
 // Made it as small as possible without making it look like the bots are twitching constantly.
-#define BOTTURNCONFIRM 4
+#define BOTTURNCONFIRM 1
 
 // How many tics with only one spindash-viable condition before we'll let you spindash.
 #define BOTSPINDASHCONFIRM (4*TICRATE)
@@ -44,6 +45,11 @@ extern "C" {
 
 // How long it takes for a Lv.1 bot to decide to pick an item.
 #define BOT_ITEM_DECISION_TIME (2*TICRATE)
+
+#define BOTSTRAIGHTSPEED (80*FRACUNIT/100) // How fast we move when at 0 deflection.
+#define BOTTURNSPEED (100*FRACUNIT/100) // How fast we move when at MAXDEFLECTION deflection.
+#define BOTANGLESAMPLES (TICRATE) // Time period to average over. Higher values produce lower peaks that last longer.
+#define BOTMAXDEFLECTION (ANG1*3) // Measured in "degrees per tic" here, use debugbots.
 
 // Point for bots to aim for
 struct botprediction_t
@@ -87,7 +93,7 @@ boolean K_BotCanTakeCut(const player_t *player);
 
 
 /*--------------------------------------------------
-	const botcontroller_t *K_GetBotController(const mobj_t *mobj);
+	botcontroller_t *K_GetBotController(const mobj_t *mobj);
 
 		Retrieves the current bot controller values from
 		the player's current sector.
@@ -99,7 +105,7 @@ boolean K_BotCanTakeCut(const player_t *player);
 		Pointer to the sector's bot controller struct.
 --------------------------------------------------*/
 
-const botcontroller_t *K_GetBotController(const mobj_t *mobj);
+botcontroller_t *K_GetBotController(const mobj_t *mobj);
 
 
 /*--------------------------------------------------
@@ -176,7 +182,7 @@ fixed_t K_DistanceOfLineFromPoint(fixed_t v1x, fixed_t v1y, fixed_t v2x, fixed_t
 
 
 /*--------------------------------------------------
-	boolean K_AddBot(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
+	boolean K_AddBot(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
 
 		Adds a new bot, using code intended to run on all clients.
 
@@ -191,7 +197,7 @@ fixed_t K_DistanceOfLineFromPoint(fixed_t v1x, fixed_t v1y, fixed_t v2x, fixed_t
 		true if a bot was added, otherwise false.
 --------------------------------------------------*/
 
-boolean K_AddBot(UINT8 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
+boolean K_AddBot(UINT16 skin, UINT8 difficulty, botStyle_e style, UINT8 *p);
 
 
 // NOT AVAILABLE FOR LUA
@@ -216,7 +222,7 @@ void K_SetNameForBot(UINT8 newplayernum, const char *realname);
 
 
 /*--------------------------------------------------
-	void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e style);
+	void K_SetBot(UINT8 newplayernum, UINT16 skinnum, UINT8 difficulty, botStyle_e style);
 
 		Sets a player ID to be a new bot directly. Invoked directly
 		by K_AddBot, and indirectly by K_AddBotFromServer by sending
@@ -232,7 +238,7 @@ void K_SetNameForBot(UINT8 newplayernum, const char *realname);
 		None
 --------------------------------------------------*/
 
-void K_SetBot(UINT8 newplayernum, UINT8 skinnum, UINT8 difficulty, botStyle_e style);
+void K_SetBot(UINT8 newplayernum, UINT16 skinnum, UINT8 difficulty, botStyle_e style);
 
 
 /*--------------------------------------------------
@@ -395,6 +401,7 @@ void K_BotItemUsage(const player_t *player, ticcmd_t *cmd, INT16 turnamt);
 
 void K_BotPickItemPriority(player_t *player);
 
+boolean K_BotUnderstandsItem(kartitems_t item);
 
 #ifdef __cplusplus
 } // extern "C"

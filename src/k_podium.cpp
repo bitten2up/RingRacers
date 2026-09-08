@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -12,6 +12,7 @@
 
 #include "k_podium.h"
 
+#include "core/string.h"
 #include "doomdef.h"
 #include "d_main.h"
 #include "d_netcmd.h"
@@ -51,8 +52,6 @@
 
 #include "k_hud.h"
 
-#include <string>
-
 typedef enum
 {
 	PODIUM_ST_CONGRATS_SLIDEIN,
@@ -88,6 +87,7 @@ static struct podiumData_s
 	boolean fastForward;
 
 	char header[64];
+	char difficulty[64];
 
 	void Init(void);
 	void NextLevel(void);
@@ -139,14 +139,14 @@ void podiumData_s::Init(void)
 		constexpr INT32 numRaces = 5;
 		for (INT32 i = 0; i < rank.numPlayers; i++)
 		{
-			rank.totalPoints += numRaces * K_CalculateGPRankPoints(i + 1, rank.totalPlayers);
+			rank.totalPoints += numRaces * K_CalculateGPRankPoints(EXP_MAX, i+1, rank.totalPlayers);
 		}
 		rank.totalRings = numRaces * rank.numPlayers * 20;
 
 		// Randomized winnings
 		INT32 rgs = 0;
-		INT32 laps = 0;
-		INT32 tlaps = 0;
+		INT32 exp = 0;
+		INT32 texp = 0;
 		INT32 prs = 0;
 		INT32 tprs = 0;
 
@@ -157,7 +157,7 @@ void podiumData_s::Init(void)
 			gpRank_level_t *const lvl = &rank.levels[i];
 			UINT8 specialWinner = 0;
 			UINT16 pprs = 0;
-			UINT16 plaps = 0;
+			UINT16 pexp = 0;
 
 			lvl->id = M_RandomRange(4, nummapheaders);
 
@@ -180,13 +180,17 @@ void podiumData_s::Init(void)
 				}
 				default:
 				{
-					lvl->totalLapPoints = M_RandomRange(2, 5) * 2;
-					tlaps += lvl->totalLapPoints;
+					lvl->totalExp = EXP_TARGET;
+					texp += lvl->totalExp * rank.numPlayers;
 					break;
 				}
 			}
 
 			lvl->time = M_RandomRange(50*TICRATE, 210*TICRATE);
+
+			lvl->continues = 0;
+			if (!M_RandomRange(0, 2))
+				lvl->continues = M_RandomRange(1, 3);
 
 			for (INT32 j = 0; j < rank.numPlayers; j++)
 			{
@@ -199,8 +203,8 @@ void podiumData_s::Init(void)
 					dta->rings = M_RandomRange(0, 20);
 					rgs += dta->rings;
 
-					dta->lapPoints = M_RandomRange(0, lvl->totalLapPoints);
-					plaps = std::max(plaps, dta->lapPoints);
+					dta->exp = M_RandomRange(EXP_MIN, EXP_MAX);
+					pexp += dta->exp;
 				}
 
 				if (lvl->event == GPEVENT_BONUS)
@@ -224,13 +228,13 @@ void podiumData_s::Init(void)
 				}
 			}
 
-			laps += plaps;
+			exp += pexp;
 			prs += pprs;
 		}
 
 		rank.rings = rgs;
-		rank.laps = laps;
-		rank.totalLaps = tlaps;
+		rank.exp = exp;
+		rank.totalExp = texp;
 		rank.prisons = prs;
 		rank.totalPrisons = tprs;
 	}
@@ -259,6 +263,27 @@ void podiumData_s::Init(void)
 		);
 	}
 
+	switch(grandprixinfo.gamespeed)
+	{
+		case KARTSPEED_EASY:
+			snprintf(difficulty, sizeof difficulty, "Relaxed");
+			break;
+		case KARTSPEED_NORMAL:
+			snprintf(difficulty, sizeof difficulty, "Intense");
+			break;
+		case KARTSPEED_HARD:
+			snprintf(difficulty, sizeof difficulty, "Vicious");
+			break;
+		default:
+			snprintf(difficulty, sizeof difficulty, "?");
+	}
+
+	if (grandprixinfo.masterbots)
+		snprintf(difficulty, sizeof difficulty, "Master");
+
+	if (cv_4thgear.value || cv_levelskull.value)
+		snprintf(difficulty, sizeof difficulty, "Extra");
+
 	header[sizeof header - 1] = '\0';
 
 	displayLevels = 0;
@@ -269,11 +294,11 @@ void podiumData_s::Init(void)
 	// but not this close to release
 	if (rank.position > RANK_NEUTRAL_POSITION || grade < GRADE_C)
 	{
-		gradeVoice = skins[rank.skin].soundsid[S_sfx[sfx_klose].skinsound];
+		gradeVoice = skins[rank.skin]->soundsid[S_sfx[sfx_klose].skinsound];
 	}
 	else
 	{
-		gradeVoice = skins[rank.skin].soundsid[S_sfx[sfx_kwin].skinsound];
+		gradeVoice = skins[rank.skin]->soundsid[S_sfx[sfx_kwin].skinsound];
 	}
 }
 
@@ -506,27 +531,33 @@ void podiumData_s::Draw(void)
 			.patch(faceprefix[bestHuman->skin][FACE_WANTED]);
 
 		drawer_winner
+			.xy(16, 28)
+			.align(srb2::Draw::Align::kCenter)
+			.font(srb2::Draw::Font::kMenu)
+			.text(difficulty);
+
+		drawer_winner
 			.xy(44, 31)
 			.align(srb2::Draw::Align::kCenter)
 			.font(srb2::Draw::Font::kZVote)
 			.text(va("%c%d", (rank.scorePosition > 0 ? '+' : ' '), rank.scorePosition));
 
-		drawer_winner
-			.xy(64, 19)
-			.patch("K_POINT4");
+		// drawer_winner
+		// 	.xy(64, 19)
+		// 	.patch("K_POINT4");
 
-		drawer_winner
-			.xy(88, 21)
-			.align(srb2::Draw::Align::kLeft)
-			.font(srb2::Draw::Font::kPing)
-			.colormap(TC_RAINBOW, SKINCOLOR_GOLD)
-			.text(va("%d", rank.winPoints));
+		// drawer_winner
+		// 	.xy(88, 21)
+		// 	.align(srb2::Draw::Align::kLeft)
+		// 	.font(srb2::Draw::Font::kPing)
+		// 	.colormap(TC_RAINBOW, SKINCOLOR_GOLD)
+		// 	.text(va("%d", rank.winPoints));
 
-		drawer_winner
-			.xy(75, 31)
-			.align(srb2::Draw::Align::kCenter)
-			.font(srb2::Draw::Font::kZVote)
-			.text(va("%c%d", (rank.scoreGPPoints > 0 ? '+' : ' '), rank.scoreGPPoints));
+		// drawer_winner
+		// 	.xy(75, 31)
+		// 	.align(srb2::Draw::Align::kCenter)
+		// 	.font(srb2::Draw::Font::kZVote)
+		// 	.text(va("%c%d", (rank.scoreGPPoints > 0 ? '+' : ' '), rank.scoreGPPoints));
 
 
 		srb2::Draw drawer_trophy = drawer.xy(272, 10);
@@ -606,11 +637,14 @@ void podiumData_s::Draw(void)
 
 					if (lvl->event != GPEVENT_SPECIAL && dta->grade != GRADE_INVALID)
 					{
-						drawer_rank
-							.xy(0, -1)
-							.colormap( static_cast<skincolornum_t>(K_GetGradeColor(dta->grade)) )
-							.patch(va("R_CUPRN%c", K_GetGradeChar(dta->grade)));
+							drawer_rank
+								.xy(0, -1).flags(lvl->continues ? V_TRANSLUCENT : 0)
+								.colormap( static_cast<skincolornum_t>(K_GetGradeColor(dta->grade)) )
+								.patch(va("R_CUPRN%c", K_GetGradeChar(dta->grade)));
 					}
+
+					if (lvl->continues)
+						drawer_rank.xy(7, 1).align(srb2::Draw::Align::kCenter).font(srb2::Draw::Font::kPing).colorize(SKINCOLOR_RED).text(va("-%d", lvl->continues));
 
 					// Do not draw any stats for GAME OVERed player
 					if (dta->grade != GRADE_INVALID || lvl->event == GPEVENT_SPECIAL)
@@ -652,7 +686,7 @@ void podiumData_s::Draw(void)
 								}
 
 								{
-									std::string emeraldName;
+									srb2::String emeraldName;
 									if (emeraldNum > 7)
 									{
 										emeraldName = (useWhiteFrame ? "K_SUPER2" : "K_SUPER1");
@@ -684,15 +718,45 @@ void podiumData_s::Draw(void)
 							}
 							default:
 							{
-								drawer_gametype
-									.xy(0, 1)
-									.patch("K_SPTLAP");
 
 								drawer_gametype
-									.xy(22, 1)
+									.xy(0, 1)
+									.colorize(static_cast<skincolornum_t>(SKINCOLOR_MUSTARD))
+									.patch("K_SPTEXP");
+
+								// Colorize the crystal, just like we do for hud
+								skincolornum_t overlaycolor = SKINCOLOR_MUSTARD;
+								fixed_t stablerateinverse = FRACUNIT - EXP_STABLERATE;
+								INT16 exp_range = EXP_MAX-EXP_MIN;
+								INT16 exp_offset = dta->exp-EXP_MIN;
+								fixed_t factor = (exp_offset*FRACUNIT) / exp_range; // 0.0 to 1.0 in fixed
+								// amount of blue is how much factor is above EXP_STABLERATE, and amount of red is how much factor is below
+								// assume that EXP_STABLERATE is within 0.0 to 1.0 in fixed
+								if (factor <= stablerateinverse)
+								{
+									overlaycolor = SKINCOLOR_RUBY;
+									factor = FixedDiv(factor, stablerateinverse);
+								}
+								else
+								{
+									overlaycolor = SKINCOLOR_ULTRAMARINE;
+									fixed_t bluemaxoffset = EXP_STABLERATE;
+									factor = factor - stablerateinverse;
+									factor = FRACUNIT - FixedDiv(factor, bluemaxoffset);
+								}
+
+								auto transflag = K_GetTransFlagFromFixed(factor, false);
+								drawer_gametype
+									.xy(0, 1)
+									.colorize(static_cast<skincolornum_t>(overlaycolor))
+									.flags(transflag)
+									.patch("K_SPTEXP");
+
+								drawer_gametype
+									.xy(23, 1)
 									.align(srb2::Draw::Align::kCenter)
 									.font(srb2::Draw::Font::kPing)
-									.text(va("%d/%d", dta->lapPoints, lvl->totalLapPoints));
+									.text(va("%d", dta->exp));
 								break;
 							}
 						}
@@ -752,7 +816,7 @@ void podiumData_s::Draw(void)
 			.x(-144.0);
 
 		srb2::Draw drawer_totals_right = drawer_totals
-			.x(78.0);
+			.x(72.0);
 
 		if (state == PODIUM_ST_TOTALS_SLIDEIN)
 		{
@@ -808,35 +872,66 @@ void podiumData_s::Draw(void)
 			.text(va("%c%d", (rank.scoreRings > 0 ? '+' : ' '), rank.scoreRings));
 
 		drawer_totals_right
-			.xy(10.0, 46.0)
+			.xy(16.0, 49.0)
 			.patch("CAPS_ZB");
 
 		drawer_totals_right
-			.xy(44.0, 24.0)
+			.xy(50.0, 24.0)
 			.align(srb2::Draw::Align::kCenter)
 			.font(srb2::Draw::Font::kThinTimer)
 			.text(va("%d / %d", rank.prisons, rank.totalPrisons));
 
 		drawer_totals_right
-			.xy(44.0, 38.0)
+			.xy(50.0, 38.0)
 			.align(srb2::Draw::Align::kCenter)
 			.font(srb2::Draw::Font::kZVote)
 			.text(va("%c%d", (rank.scorePrisons > 0 ? '+' : ' '), rank.scorePrisons));
 
 		drawer_totals_right
-			.patch("RANKLAPS");
+			.colorize(static_cast<skincolornum_t>(SKINCOLOR_MUSTARD))
+			.patch("K_STEXP");
+
+		// Colorize the crystal for the totals, just like we do for in race hud
+		fixed_t extraexpfactor = (EXP_MAX*FRACUNIT) / EXP_TARGET;
+		INT16 totalExpMax = FixedMul(rank.totalExp*FRACUNIT, extraexpfactor) / FRACUNIT; // im just going to calculate it from target lol
+		INT16 totalExpMin = rank.numPlayers*EXP_MIN;
+		skincolornum_t overlaycolor = SKINCOLOR_MUSTARD;
+		fixed_t stablerateinverse = FRACUNIT - EXP_STABLERATE;
+		INT16 exp_range = totalExpMax-totalExpMin;
+		INT16 exp_offset = rank.exp-totalExpMin;
+		fixed_t factor = (exp_offset*FRACUNIT) / exp_range; // 0.0 to 1.0 in fixed
+		// amount of blue is how much factor is above EXP_STABLERATE, and amount of red is how much factor is below
+		// assume that EXP_STABLERATE is within 0.0 to 1.0 in fixed
+		if (factor <= stablerateinverse)
+		{
+			overlaycolor = SKINCOLOR_RUBY;
+			factor = FixedDiv(factor, stablerateinverse);
+		}
+		else
+		{
+			overlaycolor = SKINCOLOR_ULTRAMARINE;
+			fixed_t bluemaxoffset = EXP_STABLERATE;
+			factor = factor - stablerateinverse;
+			factor = FRACUNIT - FixedDiv(factor, bluemaxoffset);
+		}
+
+		auto transflag = K_GetTransFlagFromFixed(factor, false);
+		drawer_totals_right
+			.colorize(static_cast<skincolornum_t>(overlaycolor))
+			.flags(transflag)
+			.patch("K_STEXP");
 
 		drawer_totals_right
-			.xy(44.0, 0.0)
+			.xy(50.0, 0.0)
 			.align(srb2::Draw::Align::kCenter)
 			.font(srb2::Draw::Font::kThinTimer)
-			.text(va("%d / %d", rank.laps, rank.totalLaps));
+			.text(va("%d / %d", rank.exp, rank.totalExp));
 
 		drawer_totals_right
-			.xy(44.0, 14.0)
+			.xy(50.0, 14.0)
 			.align(srb2::Draw::Align::kCenter)
 			.font(srb2::Draw::Font::kZVote)
-			.text(va("%c%d", (rank.scoreLaps > 0 ? '+' : ' '), rank.scoreLaps));
+			.text(va("%c%d", (rank.scoreExp > 0 ? '+' : ' '), rank.scoreExp));
 	}
 
 	if ((state == PODIUM_ST_GRADE_APPEAR && delay == 0)

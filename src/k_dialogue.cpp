@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Sally "TehRealSalt" Cochenour
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Sally "TehRealSalt" Cochenour
+// Copyright (C) 2025 by Kart Krew
 // Copyright (C) 2020 by Sonic Team Junior
 //
 // This program is free software distributed under the
@@ -14,9 +14,10 @@
 #include "k_dialogue.hpp"
 #include "k_dialogue.h"
 
-#include <string>
 #include <algorithm>
+#include <string_view>
 
+#include "core/string.h"
 #include "info.h"
 #include "sounds.h"
 #include "g_game.h"
@@ -43,7 +44,7 @@ void Dialogue::Typewriter::ClearText(void)
 	textDest.clear();
 }
 
-void Dialogue::Typewriter::NewText(std::string newText)
+void Dialogue::Typewriter::NewText(const srb2::String& newText)
 {
 	text.clear();
 
@@ -174,7 +175,7 @@ void Dialogue::SetSpeaker(void)
 	typewriter.voiceSfx = sfx_ktalk;
 }
 
-void Dialogue::SetSpeaker(std::string skinName, int portraitID)
+void Dialogue::SetSpeaker(srb2::String skinName, int portraitID)
 {
 	Init();
 
@@ -187,7 +188,7 @@ void Dialogue::SetSpeaker(std::string skinName, int portraitID)
 
 	if (skinID >= 0 && skinID < numskins)
 	{
-		const skin_t *skin = &skins[skinID];
+		const skin_t *skin = skins[skinID];
 		const spritedef_t *sprdef = &skin->sprites[SPR2_TALK];
 
 		if (sprdef->numframes > 0)
@@ -215,7 +216,7 @@ void Dialogue::SetSpeaker(std::string skinName, int portraitID)
 	}
 }
 
-void Dialogue::SetSpeaker(std::string name, patch_t *patch, UINT8 *colormap, sfxenum_t voice)
+void Dialogue::SetSpeaker(srb2::String name, patch_t *patch, UINT8 *colormap, sfxenum_t voice)
 {
 	Init();
 
@@ -241,7 +242,7 @@ void Dialogue::NewText(std::string_view rawText)
 	Init();
 
 	char* newText = V_ScaledWordWrap(
-		290 << FRACBITS,
+		275 << FRACBITS,
 		FRACUNIT, FRACUNIT, FRACUNIT,
 		0, HU_FONT,
 		srb2::Draw::TextElement().parse(rawText).string().c_str() // parse special characters
@@ -293,9 +294,26 @@ void Dialogue::Tick(void)
 		{
 			slide += kSlideSpeed;
 		}
+
+		if (P_LevelIsFrozen() || (gametyperules & GTR_BOSS))
+		{
+			if (fade > 0)
+			{
+				fade--;
+			}
+		}
+		else if (fade < 5)
+		{
+			fade++;
+		}
 	}
 	else
 	{
+		if (fade > 0)
+		{
+			fade--;
+		}
+
 		if (slide > 0)
 		{
 			slide -= kSlideSpeed;
@@ -339,6 +357,11 @@ INT32 Dialogue::SlideAmount(fixed_t multiplier)
 	if (slide == FRACUNIT)
 		return multiplier;
 	return Easing_OutCubic(slide, 0, multiplier);
+}
+
+INT32 Dialogue::FadeAmount(void)
+{
+	return fade;
 }
 
 void Dialogue::Draw(void)
@@ -472,32 +495,25 @@ void Dialogue::Draw(void)
 		.flags(V_VFLIP|V_FLIP)
 		.patch(patchCache["TUTDIAGE"]);
 
+	srb2::String intertext = "<large>";
+
 	drawer
 		.xy(10 - BASEVIDWIDTH, -3-32)
 		.font(srb2::Draw::Font::kConsole)
 		.text( typewriter.text.c_str() );
 
-	if (Dismissable())
+	if (TextDone())
 	{
-		if (TextDone())
-		{
-			drawer
-				.xy(-14, -7-5)
-				.patch(patchCache["TUTDIAG2"]);
-		}
-
-		auto bt_translate_press = [this]() -> std::optional<bool>
-		{
-			if (Held())
-				return true;
-			if (TextDone())
-				return {};
-			return false;
-		};
-
 		drawer
-			.xy(17-14 - BASEVIDWIDTH, -39-16)
-			.button(srb2::Draw::Button::z, bt_translate_press());
+			.xy(-18 - 3, -7-5)
+			.patch(patchCache["TUTDIAG2"]);
+
+		if (Held())
+			intertext += "<z_pressed>";
+		else
+			intertext += "<z_animated>";
+
+		drawer.xy(-18, -7-8 - 14).align(Draw::Align::kCenter).font(Draw::Font::kMenu).text(srb2::Draw::TextElement().parse(intertext).string());
 	}
 }
 
@@ -522,6 +538,7 @@ void Dialogue::Unset(void)
 	Dismiss();
 	SetSpeaker();
 	slide = 0;
+	fade = 0;
 	current_era = 0;
 }
 
@@ -552,4 +569,9 @@ void K_TickDialogue(void)
 INT32 K_GetDialogueSlide(fixed_t multiplier)
 {
 	return g_dialogue.SlideAmount(multiplier);
+}
+
+INT32 K_GetDialogueFade(void)
+{
+	return g_dialogue.FadeAmount();
 }

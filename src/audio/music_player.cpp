@@ -1,7 +1,7 @@
 // DR. ROBOTNIK'S RING RACERS
 //-----------------------------------------------------------------------------
-// Copyright (C) 2024 by Ronald "Eidolon" Kinard
-// Copyright (C) 2024 by Kart Krew
+// Copyright (C) 2025 by Ronald "Eidolon" Kinard
+// Copyright (C) 2025 by Kart Krew
 //
 // This program is free software distributed under the
 // terms of the GNU General Public License, version 2.
@@ -14,11 +14,6 @@
 #include <cmath>
 #include <exception>
 #include <optional>
-#include <stdexcept>
-#include <string>
-#include <string_view>
-#include <variant>
-#include <vector>
 
 #include <stb_vorbis.h>
 
@@ -28,11 +23,8 @@
 #include "resample.hpp"
 #include "xmp_player.hpp"
 
-using std::array;
-using std::byte;
 using std::make_unique;
 using std::size_t;
-using std::vector;
 
 using srb2::audio::MusicPlayer;
 using srb2::audio::Resampler;
