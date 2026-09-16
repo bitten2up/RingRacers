@@ -106,7 +106,7 @@ extern "C" consvar_t cv_lua_profile, cv_menuframeskip;
 
 /* Manually defined asset hashes
  */
- 
+
 #define ASSET_HASH_BIOS_PK3						"36201c4690256d133dff7d3879436dff"
 #define ASSET_HASH_SCRIPTS_PK3					"56be3c47192870c3265f19cf024e860e"
 #define ASSET_HASH_GFX_PK3						"76c824a221bd4745e002a8b7d0520621"
@@ -1550,7 +1550,7 @@ static void D_AndroidSetupHome(const char *userhome)
 		next++;
 
 	ListAdd(srb2home);
-	ListAdd(I_AppStorageLocation());
+	ListAdd(I_SharedStorageLocation());
 
 #define SetupLocation(loc, path) FindUsableStorageLocation(loc, sizeof(loc), path, homelist, srb2home)
 
@@ -1664,7 +1664,7 @@ void D_SRB2Main(void)
 	{
 		const char *userhome = D_Home(); //Alam: path to home
 #if defined(__ANDROID__)
-		strlcpy(srb2path, I_AppStorageLocation(), sizeof(srb2path));
+		strlcpy(srb2path, I_SharedStorageLocation(), sizeof(srb2path));
 #endif
 		if (!userhome)
 		{
@@ -2372,7 +2372,7 @@ const char *D_Home(void)
 {
 	const char *userhome = NULL;
 #if defined(ANDROID)
-		userhome = I_AppStorageLocation();
+		userhome = I_SharedStorageLocation();
 	return userhome;
 #endif
 

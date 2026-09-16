@@ -95,11 +95,11 @@ csprng
 	{
 		rand_s((unsigned int *)&((char *)buffer)[o]);
 	}
-#elif defined (__linux__)
+#elif defined (__linux__) && !defined(__ANDROID__)
 	getrandom(buffer, size, 0U);
 #elif defined (__APPLE__)
 	CCRandomGenerateBytes(buffer, size);
-#elif defined (__FreeBSD__) || defined (__NetBSD__) || defined (__OpenBSD__)
+#elif defined (__FreeBSD__) || defined (__NetBSD__) || defined (__OpenBSD__) || defined(__ANDROID__)
 	arc4random_buf(buffer, size);
 #endif
 }
