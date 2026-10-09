@@ -1178,7 +1178,7 @@ static boolean SOCK_OpenSocket(void)
 }
 
 // https://github.com/jameds/holepunch/blob/master/holepunch.c#L75
-static int SOCK_IsExternalAddress (const void *p)
+static boolean SOCK_IsExternalAddress (const void *p)
 {
 	const int a = ((const unsigned char*)p)[0];
 	const int b = ((const unsigned char*)p)[1];

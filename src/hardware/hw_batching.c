@@ -366,7 +366,7 @@ void HWR_RenderBatches(void)
 		while (finalVertexWritePos + numVerts > finalVertexArrayAllocSize)
 		{
 			FOutVector* new_array;
-			unsigned int* new_index_array;
+			UINT32* new_index_array;
 			finalVertexArrayAllocSize *= 2;
 			new_array = malloc(finalVertexArrayAllocSize * sizeof(FOutVector));
 			memcpy(new_array, finalVertexArray, finalVertexWritePos * sizeof(FOutVector));
