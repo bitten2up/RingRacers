@@ -52,7 +52,7 @@
 using namespace srb2;
 
 // Each screen is [vid.width*vid.height];
-UINT8 *screens[5];
+UINT8 *screens[NUMSCREENS];
 // screens[0] = main display window
 // screens[1] = back screen, alternative blitting
 // screens[2] = screenshot buffer, gif movie buffer
@@ -1452,6 +1452,9 @@ void V_DrawPatchFill(patch_t *pat)
 
 void V_DrawVhsEffect(boolean rewind)
 {
+#if SCREENS < 5
+	return;
+#else
 	static fixed_t upbary = 100, downbary = 150;
 
 	UINT8 *buf = screens[0], *tmp = screens[4];
@@ -1508,6 +1511,7 @@ void V_DrawVhsEffect(boolean rewind)
 	}
 
 	memcpy(buf, tmp, vid.rowbytes*vid.height);
+#endif
 }
 
 //

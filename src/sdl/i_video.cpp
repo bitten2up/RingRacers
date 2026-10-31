@@ -124,10 +124,10 @@ static      INT32          firstEntry = 0;
 static      INT32        mousemovex = 0, mousemovey = 0;
 
 // SDL vars
-static      SDL_Surface *vidSurface = NULL;
-static      SDL_Surface *bufSurface = NULL;
+SDL_Surface *vidSurface = NULL;
+SDL_Surface *bufSurface = NULL;
 static      SDL_Surface *icoSurface = NULL;
-static      SDL_Color    localPalette[256];
+SDL_Color    localPalette[256];
 Uint16      realwidth = BASEVIDWIDTH;
 Uint16      realheight = BASEVIDHEIGHT;
 static       SDL_bool    mousegrabok = SDL_TRUE;
@@ -174,6 +174,12 @@ static void Impl_SetWindowIcon(void);
 static void SDLSetMode(int width, int height, SDL_bool fullscreen, SDL_bool reposition)
 {
 	static SDL_bool wasfullscreen = SDL_FALSE;
+	Uint32 rmask;
+	Uint32 gmask;
+	Uint32 bmask;
+	Uint32 amask;
+	int bpp = 16;
+	int sw_texture_format = SDL_PIXELFORMAT_ABGR8888;
 
 	realwidth = vid.width;
 	realheight = vid.height;
@@ -223,6 +229,45 @@ static void SDLSetMode(int width, int height, SDL_bool fullscreen, SDL_bool repo
 #endif
 	{
 		SDL_GL_SetSwapInterval(cv_vidwait.value ? 1 : 0);
+	}
+	if (rendermode == render_soft)
+	{
+		extern SDL_Renderer *renderer;
+		extern SDL_Texture *texture;
+		SDL_RenderClear(renderer);
+		SDL_RenderSetLogicalSize(renderer, width, height);
+		// Set up Texture
+		realwidth = width;
+		realheight = height;
+		if (texture != NULL)
+		{
+			SDL_DestroyTexture(texture);
+		}
+
+		if (false)
+		{
+			sw_texture_format = SDL_PIXELFORMAT_RGB565;
+		}
+		else
+		{
+			bpp = 32;
+			sw_texture_format = SDL_PIXELFORMAT_RGBA8888;
+		}
+
+		texture = SDL_CreateTexture(renderer, sw_texture_format, SDL_TEXTUREACCESS_STREAMING, width, height);
+
+		// Set up SW surface
+		if (vidSurface != NULL)
+		{
+			SDL_FreeSurface(vidSurface);
+		}
+		if (vid.buffer)
+		{
+			free(vid.buffer);
+			vid.buffer = NULL;
+		}
+		SDL_PixelFormatEnumToMasks(sw_texture_format, &bpp, &rmask, &gmask, &bmask, &amask);
+		vidSurface = SDL_CreateRGBSurface(0, width, height, bpp, rmask, gmask, bmask, amask);
 	}
 
 	SDL_GetWindowSize(window, &width, &height);
@@ -1406,6 +1451,36 @@ static SDL_bool Impl_CreateContext(void)
 	}
 #endif
 
+	goto RHI;
+	if (rendermode == render_soft)
+	{
+		int flags = 0; // Use this to set SDL_RENDERER_* flags now
+		if (cv_vidwait.value)
+		{
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+			// If SDL is new enough, we can turn off vsync later.
+			flags |= SDL_RENDERER_PRESENTVSYNC;
+#else
+			// However, if it isn't, we should just silently turn vid_wait off
+			// This is because the renderer will be created before the config
+			// is read and vid_wait is set from the user's preferences, and thus
+			// vid_wait will have no effect.
+			CV_StealthSetValue(&cv_vidwait, 0);
+#endif
+		}
+
+		extern SDL_Renderer *renderer;
+		if (!renderer)
+			renderer = SDL_CreateRenderer(window, -1, flags);
+		if (renderer == NULL)
+		{
+			CONS_Printf(M_GetText("Couldn't create rendering context: %s\n"), SDL_GetError());
+			return SDL_FALSE;
+		}
+		SDL_RenderSetLogicalSize(renderer, BASEVIDWIDTH, BASEVIDHEIGHT);
+	}
+RHI:
+
 	// RHI always uses OpenGL 2.0 (for now)
 
 	if (!sdlglcontext)
@@ -1430,7 +1505,6 @@ static SDL_bool Impl_CreateContext(void)
 		g_rhi = std::make_unique<rhi::Gl2Rhi>(std::move(platform), reinterpret_cast<rhi::GlLoadFunc>(SDL_GL_GetProcAddress));
 		g_rhi_generation += 1;
 	}
-
 	return SDL_TRUE;
 }
 
@@ -1462,6 +1536,13 @@ boolean VID_CheckRenderer(void)
 				{
 					rendererchanged = false;
 				}
+		extern SDL_Renderer *renderer;
+					// Destroy the current window rendering context, if that also exists.
+					if (renderer)
+					{
+						SDL_DestroyRenderer(renderer);
+						renderer = NULL;
+					}
 			}
 #endif
 		}

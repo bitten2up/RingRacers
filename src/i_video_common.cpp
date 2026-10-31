@@ -49,6 +49,11 @@
 #include "v_video.h"
 
 extern "C" consvar_t cv_scr_scale, cv_scr_x, cv_scr_y;
+extern SDL_Surface *vidSurface;
+extern SDL_Surface *bufSurface;
+extern SDL_Color    localPalette[256];
+SDL_Renderer *renderer;
+SDL_Texture  *texture;
 
 using namespace srb2;
 using namespace srb2::hwr2;
@@ -248,6 +253,34 @@ void I_StartDisplayUpdate(void)
 	preframe_update(*rhi);
 }
 
+static void Impl_VideoSetupSDLBuffer(void)
+{
+	if (bufSurface != NULL)
+	{
+		SDL_FreeSurface(bufSurface);
+		bufSurface = NULL;
+	}
+	// Set up the SDL palletized buffer (copied to vidbuffer before being rendered to texture)
+	if (vid.bpp == 1)
+	{
+		bufSurface = SDL_CreateRGBSurfaceFrom(screens[0],vid.width,vid.height,8,
+			(int)vid.rowbytes,0x00000000,0x00000000,0x00000000,0x00000000); // 256 mode
+	}
+	else if (vid.bpp == 2) // Fury -- don't think this is used at all anymore
+	{
+		bufSurface = SDL_CreateRGBSurfaceFrom(screens[0],vid.width,vid.height,15,
+			(int)vid.rowbytes,0x00007C00,0x000003E0,0x0000001F,0x00000000); // 555 mode
+	}
+	if (bufSurface)
+	{
+		SDL_SetPaletteColors(bufSurface->format->palette, localPalette, 0, 256);
+	}
+	else
+	{
+		I_Error("%s", M_GetText("No system memory for SDL buffer surface\n"));
+	}
+}
+static SDL_Rect src_rect = { 0, 0, 0, 0 };
 void I_FinishUpdate(void)
 {
 	ZoneScoped;
@@ -265,6 +298,29 @@ void I_FinishUpdate(void)
 		return;
 	}
 #endif
+	goto RHI;
+	if (rendermode == render_soft && screens[0])
+	{
+		if (!bufSurface) //Double-Check
+		{
+			Impl_VideoSetupSDLBuffer();
+		}
+
+		if (bufSurface)
+		{
+			SDL_BlitSurface(bufSurface, &src_rect, vidSurface, &src_rect);
+			// Fury -- there's no way around UpdateTexture, the GL backend uses it anyway
+			SDL_LockSurface(vidSurface);
+			SDL_UpdateTexture(texture, &src_rect, vidSurface->pixels, vidSurface->pitch);
+			SDL_UnlockSurface(vidSurface);
+		}
+
+		SDL_RenderClear(renderer);
+		SDL_RenderCopy(renderer, texture, &src_rect, NULL);
+		SDL_RenderPresent(renderer);
+	}
+	return;
+RHI:
 
 	temp_legacy_finishupdate_draws();
 

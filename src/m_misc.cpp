@@ -1304,7 +1304,7 @@ static inline moviemode_t M_StartMovieGIF(const char *pathname)
 
 static inline moviemode_t M_StartMovieAVRecorder(const char *pathname)
 {
-#ifndef SRB2_CONFIG_ENABLE_WEBM_MOVIES
+#if !defined(SRB2_CONFIG_ENABLE_WEBM_MOVIES) || !defined(HAVE_ANIGIF)
 	return MM_OFF;
 #else
 	const char *ext = M_AVRecorder_GetFileExtension();
@@ -1500,7 +1500,9 @@ static void M_SaveFrame_GIF(uint32_t width, uint32_t height, tcb::span<const std
 
 	oldtic = I_GetTime();
 
+#ifdef HAVE_ANIGIF
 	GIF_frame_rgb24(width, height, reinterpret_cast<const uint8_t*>(data.data()));
+#endif
 }
 
 static void M_SaveFrame_AVRecorder(uint32_t width, uint32_t height, tcb::span<const std::byte> data)

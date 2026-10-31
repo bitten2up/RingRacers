@@ -41,7 +41,7 @@ extern "C" {
 // Screen 0 is the screen updated by I_Update screen.
 // Screen 1 is an extra buffer.
 
-extern UINT8 *screens[5];
+extern UINT8 *screens[NUMSCREENS];
 
 extern consvar_t cv_ticrate, cv_constextsize,
 cv_globalgamma, cv_globalsaturation,
@@ -353,7 +353,7 @@ void V_DrawRightAlignedThinStringAtFixed(fixed_t x, fixed_t y, INT32 option, con
 void V_DrawTitleCardStringFixed(fixed_t x, fixed_t y, fixed_t scale, const char *str, INT32 flags, boolean bossmode, INT32 timer, INT32 threshold, boolean p4);
 #define V_DrawTitleCardString( x,y,str,flags,bossmode,timer,threshold,p4 ) \
 	V_DrawTitleCardStringFixed ((x)<<FRACBITS,(y)<<FRACBITS,FRACUNIT,str,flags,bossmode,timer,threshold,p4)
-	
+
 // returns thr width of a string drawn using the above function.
 INT32 V_TitleCardStringWidth(const char *str, boolean p4);
 

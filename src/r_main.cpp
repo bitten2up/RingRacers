@@ -867,7 +867,11 @@ void R_CheckViewMorph(int s)
 
 void R_ApplyViewMorph(int s)
 {
+#if SCREENS > 5
 	UINT8 *tmpscr = screens[4];
+#else
+	UINT8 *tmpscr = screens[1];
+#endif
 	UINT8 *srcscr = screens[0];
 	INT32 width = vid.width;
 	INT32 height = vid.height;

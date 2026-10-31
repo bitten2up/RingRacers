@@ -53,7 +53,7 @@
 #endif
 
 #ifndef __3DS__
-static unsigned char imgbuf[1<<26];
+static unsigned char imgbuf[1<<16];
 #else
 static unsigned char imgbuf[1<<16];
 #endif
